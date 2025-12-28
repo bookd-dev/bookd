@@ -28,7 +28,7 @@ class BookScanService(
             return ScanResult(0, 0, "Book source is disabled")
         }
         
-        return scanDirectory(source.path)
+        return scanDirectory(source.path, source.id)
     }
     
     /**
@@ -42,7 +42,7 @@ class BookScanService(
         var totalImported = 0
         
         sources.forEach { source ->
-            val result = scanDirectory(source.path)
+            val result = scanDirectory(source.path, source.id)
             totalFound += result.found
             totalImported += result.imported
             logger.info("Scanned ${source.name}: found ${result.found}, imported ${result.imported}")
@@ -54,7 +54,7 @@ class BookScanService(
     /**
      * 扫描目录并导入书籍
      */
-    private fun scanDirectory(path: String): ScanResult {
+    private fun scanDirectory(path: String, sourceId: Int? = null): ScanResult {
         val directory = File(path)
         
         if (!directory.exists()) {
@@ -80,7 +80,7 @@ class BookScanService(
                 .forEach { file ->
                     found++
                     try {
-                        val book = importBook(file)
+                        val book = importBook(file, sourceId)
                         if (book != null) {
                             imported++
                             logger.debug("Imported: ${file.name}")
@@ -100,7 +100,7 @@ class BookScanService(
     /**
      * 导入单个书籍文件
      */
-    private fun importBook(file: File): Book? {
+    private fun importBook(file: File, sourceId: Int? = null): Book? {
         val filePath = file.absolutePath
         
         // 检查是否已存在
@@ -119,13 +119,19 @@ class BookScanService(
         val title = fileName
         val author = extractAuthorFromFileName(fileName)
         
-        return bookRepository.create(
-            title = title,
-            author = author,
-            format = format,
-            filePath = filePath,
-            fileSize = fileSize
-        )
+        return try {
+            bookRepository.create(
+                title = title,
+                author = author,
+                format = format,
+                filePath = filePath,
+                fileSize = fileSize,
+                sourceId = sourceId
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to create book: $fileName", e)
+            null
+        }
     }
     
     /**

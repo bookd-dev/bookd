@@ -6,6 +6,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 
 class BookRepository {
@@ -32,7 +33,8 @@ class BookRepository {
         author: String?,
         format: String,
         filePath: String,
-        fileSize: Long
+        fileSize: Long,
+        sourceId: Int? = null
     ): Book = transaction {
         val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
         val id = Books.insert {
@@ -41,6 +43,7 @@ class BookRepository {
             it[Books.format] = format
             it[Books.filePath] = filePath
             it[Books.fileSize] = fileSize
+            it[Books.sourceId] = sourceId
             it[createdAt] = now
             it[updatedAt] = now
         }[Books.id]
@@ -51,7 +54,8 @@ class BookRepository {
             author = author,
             format = format,
             filePath = filePath,
-            fileSize = fileSize
+            fileSize = fileSize,
+            sourceId = sourceId
         )
     }
     
@@ -65,6 +69,15 @@ class BookRepository {
         fileSize = row[Books.fileSize],
         isbn = row[Books.isbn],
         publisher = row[Books.publisher],
-        description = row[Books.description]
+        description = row[Books.description],
+        sourceId = row[Books.sourceId]?.value
     )
+    
+    fun deleteBySourceId(sourceId: Int): Int = transaction {
+        Books.deleteWhere { Books.sourceId eq sourceId }
+    }
+    
+    fun deleteAll(): Int = transaction {
+        Books.deleteAll()
+    }
 }

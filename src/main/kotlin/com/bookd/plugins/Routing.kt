@@ -10,6 +10,7 @@ fun Application.configureRouting() {
         bookRoutes()
         bookSourceRoutes()
         scanRoutes()
+        fileSystemRoutes()
         webRoutes()
     }
 }

@@ -24,7 +24,16 @@ services:
       DATABASE_USER: "bookd"
       DATABASE_PASSWORD: "bookd"
     volumes:
-      - /Users/shenchao/workspace/python/ESJZone-epub-novel-mirror/epubBooks_esjzone:/data/esjzone:ro
+      # NAS 全目录挂载（推荐用于 NAS 部署）
+      # 群晖 NAS: 取消下面两行注释
+      # - /volume1:/volume1:ro
+      # - /volume2:/volume2:ro
+      
+      # 威联通 NAS: 取消下面注释
+      # - /share:/share:ro
+      
+      # Mac/Linux 开发环境: 取消下面注释
+       - /Users:/Users:ro
     depends_on:
       - postgres
     networks:

@@ -13,5 +13,6 @@ data class Book(
     val fileSize: Long,
     val isbn: String? = null,
     val publisher: String? = null,
-    val description: String? = null
+    val description: String? = null,
+    val sourceId: Int? = null
 )
