@@ -28,6 +28,11 @@ class BookRepository {
             .singleOrNull()
     }
     
+    fun findBySourceId(sourceId: Int): List<Book> = transaction {
+        Books.selectAll().where { Books.sourceId eq sourceId }
+            .map { toBook(it) }
+    }
+    
     fun create(
         title: String,
         author: String?,

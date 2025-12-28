@@ -14,6 +14,10 @@ class BookService(
         return bookRepository.findById(id)
     }
     
+    fun getBooksBySourceId(sourceId: Int): List<Book> {
+        return bookRepository.findBySourceId(sourceId)
+    }
+    
     fun scanAndImportBook(filePath: String): Book? {
         // Check if book already exists
         val existing = bookRepository.findByFilePath(filePath)

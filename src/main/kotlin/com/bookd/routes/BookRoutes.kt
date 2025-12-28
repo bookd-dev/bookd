@@ -20,8 +20,13 @@ fun Route.bookRoutes() {
             val bookService = get<BookService>(BookService::class.java)
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
+            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
             
-            val books = bookService.getAllBooks(limit, offset)
+            val books = if (sourceId != null) {
+                bookService.getBooksBySourceId(sourceId)
+            } else {
+                bookService.getAllBooks(limit, offset)
+            }
             call.respond(BooksResponse(books, books.size))
         }
         

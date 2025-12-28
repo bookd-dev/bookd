@@ -61,11 +61,12 @@
         button.secondary:hover { background: #5a6268; }
         .source-list { list-style: none; }
         .source-item { 
-            display: flex; justify-content: space-between; align-items: center;
             padding: 20px; border: 2px solid #f0f2f5; border-radius: 12px; 
             margin-bottom: 12px; transition: all 0.3s; background: #fafbfc;
         }
-        .source-item:hover { border-color: #667eea; transform: translateX(4px); box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15); }
+        .source-item:hover { border-color: #667eea; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15); }
+        .source-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .source-header:hover .source-name { color: #667eea; }
         .source-info { flex: 1; }
         .source-name { font-weight: 600; margin-bottom: 8px; font-size: 16px; color: #1a1a1a; }
         .source-path { 
@@ -85,6 +86,20 @@
         .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
         .path-preview { font-size: 12px; color: #666; margin-top: 4px; font-style: italic; }
         .scan-all-btn { margin-bottom: 16px; }
+        .source-books { 
+            margin-top: 16px; padding-top: 16px; border-top: 2px dashed #e1e8ed; 
+            display: none; 
+        }
+        .source-books.expanded { display: block; }
+        .book-list { list-style: none; margin-top: 12px; }
+        .book-item { 
+            padding: 12px; background: white; border: 1px solid #e1e8ed; 
+            border-radius: 8px; margin-bottom: 8px; font-size: 13px;
+        }
+        .book-title { font-weight: 600; color: #1a1a1a; margin-bottom: 4px; }
+        .book-meta { color: #666; font-size: 12px; }
+        .expand-icon { margin-left: 8px; font-size: 12px; transition: transform 0.3s; display: inline-block; }
+        .expand-icon.expanded { transform: rotate(180deg); }
         
         /* 文件浏览器样式 */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
@@ -328,21 +343,27 @@
                 
                 list.innerHTML = sources.map(source => `
                     <li class="source-item">
-                        <div class="source-info">
-                            <div class="source-name">
-                                ${escapeHtml(source.name)}
-                                <span class="status-badge ${source.enabled ? 'status-enabled' : 'status-disabled'}">
-                                    ${source.enabled ? '✓ 已启用' : '✗ 已禁用'}
-                                </span>
+                        <div class="source-header" onclick="toggleBooks(${source.id})">
+                            <div class="source-info">
+                                <div class="source-name">
+                                    ${escapeHtml(source.name)}
+                                    <span class="status-badge ${source.enabled ? 'status-enabled' : 'status-disabled'}">
+                                        ${source.enabled ? '✓ 已启用' : '✗ 已禁用'}
+                                    </span>
+                                    <span class="expand-icon" id="icon-${source.id}">▼</span>
+                                </div>
+                                <div class="source-path">${escapeHtml(source.path)}</div>
                             </div>
-                            <div class="source-path">${escapeHtml(source.path)}</div>
+                            <div class="source-actions" onclick="event.stopPropagation()">
+                                <button class="scan-btn" onclick="scanSource(${source.id})">🔍 扫描</button>
+                                <button class="secondary" onclick="toggleSource(${source.id})">
+                                    ${source.enabled ? '⏸ 禁用' : '▶ 启用'}
+                                </button>
+                                <button class="danger" onclick="deleteSource(${source.id})">🗑️ 删除</button>
+                            </div>
                         </div>
-                        <div class="source-actions">
-                            <button class="scan-btn" onclick="scanSource(${source.id})">🔍 扫描</button>
-                            <button class="secondary" onclick="toggleSource(${source.id})">
-                                ${source.enabled ? '⏸ 禁用' : '▶ 启用'}
-                            </button>
-                            <button class="danger" onclick="deleteSource(${source.id})">🗑️ 删除</button>
+                        <div class="source-books" id="books-${source.id}">
+                            <div class="loading">加载中...</div>
                         </div>
                     </li>
                 `).join('');
@@ -455,6 +476,68 @@
                 closeFileBrowser();
             }
         });
+        
+        // 展开/收起书籍列表
+        async function toggleBooks(sourceId) {
+            const booksDiv = document.getElementById(`books-${sourceId}`);
+            const icon = document.getElementById(`icon-${sourceId}`);
+            
+            if (booksDiv.classList.contains('expanded')) {
+                booksDiv.classList.remove('expanded');
+                icon.classList.remove('expanded');
+            } else {
+                booksDiv.classList.add('expanded');
+                icon.classList.add('expanded');
+                
+                // 加载该源的书籍
+                if (!booksDiv.dataset.loaded) {
+                    await loadSourceBooks(sourceId);
+                    booksDiv.dataset.loaded = 'true';
+                }
+            }
+        }
+        
+        async function loadSourceBooks(sourceId) {
+            const booksDiv = document.getElementById(`books-${sourceId}`);
+            
+            try {
+                const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}`);
+                const data = await res.json();
+                
+                if (data.books && data.books.length > 0) {
+                    const bookListHtml = `
+                        <div style="color: #666; font-size: 13px; margin-bottom: 8px;">
+                            📚 共 ${data.books.length} 本书籍
+                        </div>
+                        <ul class="book-list">
+                            ${data.books.map(book => `
+                                <li class="book-item">
+                                    <div class="book-title">📖 ${escapeHtml(book.title)}</div>
+                                    <div class="book-meta">
+                                        ${book.author ? `作者: ${escapeHtml(book.author)} | ` : ''}
+                                        格式: ${escapeHtml(book.format)} | 
+                                        大小: ${formatFileSize(book.fileSize)}
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                    booksDiv.innerHTML = bookListHtml;
+                } else {
+                    booksDiv.innerHTML = '<div style="color: #999; padding: 20px; text-align: center;">📭 该书籍源暂无书籍</div>';
+                }
+            } catch (e) {
+                booksDiv.innerHTML = `<div style="color: #dc3545; padding: 20px; text-align: center;">❌ 加载失败: ${e.message}</div>`;
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (!bytes) return '未知';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
         
         loadStats();
         loadSources();
