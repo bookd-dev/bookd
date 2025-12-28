@@ -3,4 +3,21 @@ ktor:
     modules:
       - com.bookd.ApplicationKt.module
   deployment:
-    port: 8080
+    port: ${PORT:8080}
+    host: 0.0.0.0
+
+database:
+  url: ${DATABASE_URL:jdbc:postgresql://postgres:5432/bookd}
+  driver: "org.postgresql.Driver"
+  user: ${DATABASE_USER:bookd}
+  password: ${DATABASE_PASSWORD:bookd}
+
+app:
+  scan:
+    directories:
+      - "/data/books"
+    formats:
+      - "txt"
+      - "epub"
+      - "mobi"
+      - "azw3"

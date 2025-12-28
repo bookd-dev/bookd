@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookd-postgres
+    environment:
+      POSTGRES_DB: bookd
+      POSTGRES_USER: bookd
+      POSTGRES_PASSWORD: bookd
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bookd-network
+
+  bookd-server:
+    build: .
+    container_name: bookd-server
+    ports:
+      - "7919:7919"
+    environment:
+      PORT: "7919"
+      DATABASE_URL: "jdbc:postgresql://postgres:5432/bookd"
+      DATABASE_USER: "bookd"
+      DATABASE_PASSWORD: "bookd"
+    volumes:
+      - /Users/shenchao/workspace/python/ESJZone-epub-novel-mirror/epubBooks_esjzone:/data/esjzone:ro
+    depends_on:
+      - postgres
+    networks:
+      - bookd-network
+
+volumes:
+  postgres_data:
+
+networks:
+  bookd-network:
+    driver: bridge
