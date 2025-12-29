@@ -8,6 +8,7 @@ import com.bookd.domain.service.BookScanService
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.BookSourceService
 import com.bookd.domain.service.UserService
+import com.bookd.domain.service.CoverGeneratorService
 import org.koin.dsl.module
 
 val appModule = module {
@@ -20,6 +21,7 @@ val appModule = module {
     single { UserService(get()) }
     single { BookService(get()) }
     single { BookSourceService(get()) }
-    single { BookMetadataService(get()) }
+    single { CoverGeneratorService() }
+    single { BookMetadataService(get(), get()) }
     single { BookScanService(get(), get(), get()) }
 }

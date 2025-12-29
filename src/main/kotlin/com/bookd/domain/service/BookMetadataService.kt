@@ -13,7 +13,8 @@ import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 class BookMetadataService(
-    private val bookRepository: BookRepository
+    private val bookRepository: BookRepository,
+    private val coverGeneratorService: CoverGeneratorService
 ) {
     private val logger = LoggerFactory.getLogger(BookMetadataService::class.java)
     private val parser = AutoDetectParser()
@@ -116,7 +117,17 @@ class BookMetadataService(
                     coverPath = extractAndSaveEpubCover(file, bookId)
                 }
                 
-                logger.info("Extracted metadata for ${file.name} - author: $author, title: $title, publisher: $publisher, isbn: $isbn")
+                // If no cover extracted, generate a text-based cover
+                if (coverPath == null) {
+                    logger.info("No cover found for book ID: $bookId, generating text-based cover")
+                    val bookTitle = title ?: file.nameWithoutExtension
+                    coverPath = coverGeneratorService.generateCover(bookId, bookTitle, author)
+                    if (coverPath != null) {
+                        logger.info("Generated text-based cover for book ID: $bookId")
+                    }
+                }
+                
+                logger.info("Extracted metadata for ${file.name} - author: $author, title: $title, publisher: $publisher, isbn: $isbn, coverPath: $coverPath")
                 
                 // Update database - only update if we have at least one metadata field
                 if (author != null || publisher != null || isbn != null || description != null || coverPath != null) {

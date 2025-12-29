@@ -1,6 +1,8 @@
 package com.bookd.routes
 
 import com.bookd.domain.service.BookService
+import com.bookd.domain.service.CoverGeneratorService
+import com.bookd.data.repository.BookRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -63,6 +65,32 @@ fun Route.bookRoutes() {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "Book not found"))
             } else {
                 call.respond(book)
+            }
+        }
+        
+        post("/{id}/generate-cover") {
+            val coverGenerator = get<CoverGeneratorService>(CoverGeneratorService::class.java)
+            val bookRepository = get<BookRepository>(BookRepository::class.java)
+            
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                return@post
+            }
+            
+            val book = bookRepository.findById(id)
+            if (book == null) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Book not found"))
+                return@post
+            }
+            
+            val coverPath = coverGenerator.generateCover(id, book.title, book.author)
+            if (coverPath != null) {
+                // Update book with generated cover path
+                bookRepository.updateMetadata(id, coverPath = coverPath)
+                call.respond(mapOf("success" to true, "coverPath" to coverPath))
+            } else {
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to generate cover"))
             }
         }
     }
