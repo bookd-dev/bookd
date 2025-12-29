@@ -3,6 +3,7 @@ package com.bookd.config
 import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.BookSourceRepository
 import com.bookd.data.repository.UserRepository
+import com.bookd.domain.service.BookMetadataService
 import com.bookd.domain.service.BookScanService
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.BookSourceService
@@ -19,5 +20,6 @@ val appModule = module {
     single { UserService(get()) }
     single { BookService(get()) }
     single { BookSourceService(get()) }
-    single { BookScanService(get(), get()) }
+    single { BookMetadataService(get()) }
+    single { BookScanService(get(), get(), get()) }
 }

@@ -55,6 +55,17 @@
         button.browse-btn:hover { box-shadow: 0 4px 8px rgba(17, 153, 142, 0.4); }
         button.scan-btn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
         button.scan-btn:hover { box-shadow: 0 4px 8px rgba(17, 153, 142, 0.4); }
+        button.scan-btn:disabled { background: #ccc; cursor: not-allowed; opacity: 0.6; }
+        button.scanning { background: linear-gradient(135deg, #ffa500 0%, #ff6347 100%); animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .scanning-status { 
+            display: inline-block; padding: 4px 12px; border-radius: 16px; 
+            background: #fff3cd; color: #856404; font-size: 12px; font-weight: 600; 
+            margin-left: 8px; animation: pulse 2s infinite;
+        }
         button.danger { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); box-shadow: 0 2px 4px rgba(245, 87, 108, 0.3); }
         button.danger:hover { box-shadow: 0 4px 8px rgba(245, 87, 108, 0.4); }
         button.secondary { background: #6c757d; box-shadow: 0 2px 4px rgba(108, 117, 125, 0.3); }
@@ -261,6 +272,8 @@
         let currentPath = '/';
         let authToken = localStorage.getItem('authToken');
         let currentUser = null;
+        let scanStatusCheckInterval = null;
+        let isScanning = false;
         
         // Check authentication on page load
         async function checkAuth() {
@@ -569,9 +582,10 @@
         
         async function loadStats() {
             try {
-                const booksRes = await fetch(`${API_BASE}/books`);
-                const booksData = await booksRes.json();
-                document.getElementById('totalBooks').textContent = booksData.total || 0;
+                // Use the new count API endpoint
+                const countRes = await fetch(`${API_BASE}/books/count`);
+                const countData = await countRes.json();
+                document.getElementById('totalBooks').textContent = countData.count || 0;
                 
                 const sourcesRes = await fetch(`${API_BASE}/sources`);
                 const sourcesData = await sourcesRes.json();
@@ -593,7 +607,7 @@
                 }
                 
                 list.innerHTML = sources.map(source => `
-                    <li class="source-item">
+                    <li class="source-item" data-source-id="${source.id}">
                         <div class="source-header" onclick="toggleBooks(${source.id})">
                             <div class="source-info">
                                 <div class="source-name">
@@ -631,31 +645,133 @@
         }
         
         async function scanSource(id) {
+            if (isScanning) {
+                alert('⏳ 正在扫描中，请等待完成后再试');
+                return;
+            }
+            
             try {
+                isScanning = true;
+                updateScanButtons(true);
+                startScanStatusCheck();
+                
                 const res = await fetch(`${API_BASE}/scan/source/${id}`, { method: 'POST' });
                 const result = await res.json();
                 
                 if (result.message && result.message.includes('does not exist')) {
                     alert(`❌ 扫描失败！\n\n${result.message}\n\n提示：\n1. 确认路径是否正确\n2. Docker用户：检查是否已在 docker-compose.yml 中挂载目录\n3. 本地运行：确认目录是否存在且有读取权限`);
                 } else {
-                    alert(`✅ 扫描完成！\n\n发现文件: ${result.found} 个\n成功导入: ${result.imported} 本书籍\n\n${result.message}`);
+                    alert(`✅ 扫描完成！\n\n发现文件: ${result.found} 个\n成功导入: ${result.imported} 本书籍\n\n${result.message}\n\n💡 提示：元数据（作者、出版社等）正在后台异步提取中`);
                     loadStats();
                 }
             } catch (e) {
                 alert('❌ 扫描失败: ' + e.message);
+            } finally {
+                isScanning = false;
+                updateScanButtons(false);
+                stopScanStatusCheck();
             }
         }
         
         async function scanAllSources() {
+            if (isScanning) {
+                alert('⏳ 正在扫描中，请等待完成后再试');
+                return;
+            }
+            
             if (!confirm('确定要扫描所有启用的书籍源吗？\n这可能需要一些时间。')) return;
             
             try {
+                isScanning = true;
+                updateScanButtons(true);
+                startScanStatusCheck();
+                
                 const res = await fetch(`${API_BASE}/scan/all`, { method: 'POST' });
                 const result = await res.json();
-                alert(`✅ 批量扫描完成！\n\n发现文件: ${result.found} 个\n成功导入: ${result.imported} 本书籍`);
+                alert(`✅ 批量扫描完成！\n\n发现文件: ${result.found} 个\n成功导入: ${result.imported} 本书籍\n\n💡 提示：元数据（作者、出版社等）正在后台异步提取中`);
                 loadStats();
             } catch (e) {
                 alert('❌ 扫描失败: ' + e.message);
+            } finally {
+                isScanning = false;
+                updateScanButtons(false);
+                stopScanStatusCheck();
+            }
+        }
+        
+        // Check scan status periodically
+        async function checkScanStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/scan/status`);
+                const status = await res.json();
+                
+                if (status.scanning && !isScanning) {
+                    isScanning = true;
+                    updateScanButtons(true);
+                } else if (!status.scanning && isScanning) {
+                    isScanning = false;
+                    updateScanButtons(false);
+                    loadStats(); // Refresh stats when scan completes
+                }
+                
+                // Update individual source scan status
+                Object.entries(status.sourceStatuses || {}).forEach(([sourceId, sourceStatus]) => {
+                    updateSourceScanStatus(parseInt(sourceId), sourceStatus);
+                });
+            } catch (e) {
+                console.error('Failed to check scan status:', e);
+            }
+        }
+        
+        function startScanStatusCheck() {
+            if (!scanStatusCheckInterval) {
+                scanStatusCheckInterval = setInterval(checkScanStatus, 2000); // Check every 2 seconds
+            }
+        }
+        
+        function stopScanStatusCheck() {
+            if (scanStatusCheckInterval) {
+                clearInterval(scanStatusCheckInterval);
+                scanStatusCheckInterval = null;
+            }
+        }
+        
+        function updateScanButtons(scanning) {
+            const scanAllBtn = document.querySelector('.scan-all-btn');
+            const scanBtns = document.querySelectorAll('.scan-btn');
+            
+            scanBtns.forEach(btn => {
+                btn.disabled = scanning;
+                if (scanning) {
+                    btn.classList.add('scanning');
+                    btn.textContent = '⏳ 扫描中...';
+                } else {
+                    btn.classList.remove('scanning');
+                    if (btn.classList.contains('scan-all-btn')) {
+                        btn.textContent = '🔍 扫描所有书籍源';
+                    } else {
+                        btn.textContent = '🔍 扫描';
+                    }
+                }
+            });
+        }
+        
+        function updateSourceScanStatus(sourceId, status) {
+            const sourceItem = document.querySelector(`[data-source-id="${sourceId}"]`);
+            if (sourceItem) {
+                const sourceName = sourceItem.querySelector('.source-name');
+                let statusBadge = sourceName.querySelector('.scanning-status');
+                
+                if (status.scanning) {
+                    if (!statusBadge) {
+                        statusBadge = document.createElement('span');
+                        statusBadge.className = 'scanning-status';
+                        sourceName.appendChild(statusBadge);
+                    }
+                    statusBadge.textContent = `⏳ 扫描中: ${status.found}/${status.imported}`;
+                } else if (statusBadge) {
+                    statusBadge.remove();
+                }
             }
         }
         
@@ -752,27 +868,25 @@
             const booksDiv = document.getElementById(`books-${sourceId}`);
             
             try {
-                // 获取所有书籍（循环分页）
-                let allBooks = [];
-                let page = 1;
-                let totalPages = 1;
+                // Use the count API to get total books for this source
+                const countRes = await fetch(`${API_BASE}/books/count?sourceId=${sourceId}`);
+                const countData = await countRes.json();
+                const totalBooks = countData.count || 0;
                 
-                do {
-                    const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}&page=${page}&size=100`);
-                    const data = await res.json();
-                    
-                    if (data.books && data.books.length > 0) {
-                        allBooks = allBooks.concat(data.books);
-                    }
-                    
-                    totalPages = data.totalPages || 1;
-                    page++;
-                } while (page <= totalPages);
+                if (totalBooks === 0) {
+                    booksDiv.innerHTML = '<div style="color: #999; padding: 20px; text-align: center;">📭 该书籍源暂无书籍</div>';
+                    return;
+                }
+                
+                // Fetch all books for this source
+                const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}&limit=1000`);
+                const data = await res.json();
+                const allBooks = data.books || [];
                 
                 if (allBooks.length > 0) {
                     const bookListHtml = `
                         <div style="color: #666; font-size: 13px; margin-bottom: 8px;">
-                            📚 共 ${allBooks.length} 本书籍
+                            📚 共 ${totalBooks} 本书籍
                         </div>
                         <ul class="book-list">
                             ${allBooks.map(book => `
@@ -782,6 +896,8 @@
                                         ${book.author ? `作者: ${escapeHtml(book.author)} | ` : ''}
                                         格式: ${escapeHtml(book.format)} | 
                                         大小: ${formatFileSize(book.fileSize)}
+                                        ${book.isbn ? ` | ISBN: ${escapeHtml(book.isbn)}` : ''}
+                                        ${book.publisher ? ` | 出版社: ${escapeHtml(book.publisher)}` : ''}
                                     </div>
                                 </li>
                             `).join('')}
@@ -804,9 +920,19 @@
             return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
         }
         
+        // Initialize on page load
         loadStats();
         loadSources();
+        checkScanStatus(); // Check initial scan status
+        startScanStatusCheck(); // Start periodic checking
+        
+        // Refresh data periodically
         setInterval(() => { loadStats(); loadSources(); }, 30000);
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            stopScanStatusCheck();
+        });
     </script>
 </body>
 </html>

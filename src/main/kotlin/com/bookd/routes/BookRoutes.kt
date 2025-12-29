@@ -27,7 +27,27 @@ fun Route.bookRoutes() {
             } else {
                 bookService.getAllBooks(limit, offset)
             }
-            call.respond(BooksResponse(books, books.size))
+            
+            val total = if (sourceId != null) {
+                bookService.getCountBySourceId(sourceId).toInt()
+            } else {
+                bookService.getTotalCount().toInt()
+            }
+            
+            call.respond(BooksResponse(books, total))
+        }
+        
+        get("/count") {
+            val bookService = get<BookService>(BookService::class.java)
+            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
+            
+            val count = if (sourceId != null) {
+                bookService.getCountBySourceId(sourceId)
+            } else {
+                bookService.getTotalCount()
+            }
+            
+            call.respond(mapOf("count" to count))
         }
         
         get("/{id}") {

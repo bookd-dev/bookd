@@ -5,18 +5,46 @@ import com.bookd.data.repository.BookSourceRepository
 import com.bookd.domain.model.Book
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BookScanService(
     private val bookRepository: BookRepository,
-    private val bookSourceRepository: BookSourceRepository
+    private val bookSourceRepository: BookSourceRepository,
+    private val metadataService: BookMetadataService
 ) {
     private val logger = LoggerFactory.getLogger(BookScanService::class.java)
     private val supportedFormats = setOf("txt", "epub", "mobi", "azw3", "pdf")
+    
+    // Track scanning status
+    private val scanningInProgress = AtomicBoolean(false)
+    private val sourceScanStatus = ConcurrentHashMap<Int, ScanStatus>()
+    
+    /**
+     * Check if a scan is currently in progress
+     */
+    fun isScanningInProgress(): Boolean = scanningInProgress.get()
+    
+    /**
+     * Get scan status for a specific source
+     */
+    fun getScanStatus(sourceId: Int): ScanStatus? = sourceScanStatus[sourceId]
+    
+    /**
+     * Get all active scan statuses
+     */
+    fun getAllScanStatuses(): Map<Int, ScanStatus> = sourceScanStatus.toMap()
     
     /**
      * 扫描指定书籍源
      */
     fun scanBookSource(sourceId: Int): ScanResult {
+        // Check if already scanning this source
+        if (sourceScanStatus.containsKey(sourceId)) {
+            logger.warn("Source $sourceId is already being scanned")
+            return ScanResult(0, 0, "Source is already being scanned")
+        }
+        
         val source = bookSourceRepository.findById(sourceId)
         if (source == null) {
             logger.warn("Book source not found: $sourceId")
@@ -28,27 +56,54 @@ class BookScanService(
             return ScanResult(0, 0, "Book source is disabled")
         }
         
-        return scanDirectory(source.path, source.id)
+        // Mark as scanning
+        sourceScanStatus[sourceId] = ScanStatus(sourceId, true, 0, 0)
+        scanningInProgress.set(true)
+        
+        return try {
+            val result = scanDirectory(source.path, source.id)
+            result
+        } finally {
+            // Clear scanning status
+            sourceScanStatus.remove(sourceId)
+            if (sourceScanStatus.isEmpty()) {
+                scanningInProgress.set(false)
+            }
+        }
     }
     
     /**
      * 扫描所有启用的书籍源
      */
     fun scanAllSources(): ScanResult {
+        if (scanningInProgress.get()) {
+            logger.warn("A scan is already in progress")
+            return ScanResult(0, 0, "A scan is already in progress")
+        }
+        
         val sources = bookSourceRepository.findAll().filter { it.enabled }
         logger.info("Scanning ${sources.size} enabled book sources")
         
-        var totalFound = 0
-        var totalImported = 0
+        scanningInProgress.set(true)
         
-        sources.forEach { source ->
-            val result = scanDirectory(source.path, source.id)
-            totalFound += result.found
-            totalImported += result.imported
-            logger.info("Scanned ${source.name}: found ${result.found}, imported ${result.imported}")
+        return try {
+            var totalFound = 0
+            var totalImported = 0
+            
+            sources.forEach { source ->
+                sourceScanStatus[source.id] = ScanStatus(source.id, true, 0, 0)
+                val result = scanDirectory(source.path, source.id)
+                totalFound += result.found
+                totalImported += result.imported
+                logger.info("Scanned ${source.name}: found ${result.found}, imported ${result.imported}")
+                sourceScanStatus.remove(source.id)
+            }
+            
+            ScanResult(totalFound, totalImported, "Scan completed")
+        } finally {
+            scanningInProgress.set(false)
+            sourceScanStatus.clear()
         }
-        
-        return ScanResult(totalFound, totalImported, "Scan completed")
     }
     
     /**
@@ -79,10 +134,19 @@ class BookScanService(
                 }
                 .forEach { file ->
                     found++
+                    // Update scan status
+                    sourceId?.let { 
+                        sourceScanStatus[it] = ScanStatus(it, true, found, imported)
+                    }
+                    
                     try {
                         val book = importBook(file, sourceId)
                         if (book != null) {
                             imported++
+                            // Update scan status
+                            sourceId?.let { 
+                                sourceScanStatus[it] = ScanStatus(it, true, found, imported)
+                            }
                             logger.debug("Imported: ${file.name}")
                         }
                     } catch (e: Exception) {
@@ -114,13 +178,12 @@ class BookScanService(
         val format = file.extension.lowercase()
         val fileSize = file.length()
         
-        // TODO: 使用 Apache Tika 解析元数据
-        // 目前使用文件名作为标题
+        // 使用文件名作为初始标题
         val title = fileName
         val author = extractAuthorFromFileName(fileName)
         
         return try {
-            bookRepository.create(
+            val book = bookRepository.create(
                 title = title,
                 author = author,
                 format = format,
@@ -128,6 +191,16 @@ class BookScanService(
                 fileSize = fileSize,
                 sourceId = sourceId
             )
+            
+            // 异步提取详细元数据（不影响主流程）
+            try {
+                metadataService.extractMetadataAsync(book.id, filePath)
+            } catch (e: Exception) {
+                logger.error("Failed to start metadata extraction for $fileName", e)
+                // 不影响主流程，继续
+            }
+            
+            book
         } catch (e: Exception) {
             logger.error("Failed to create book: $fileName", e)
             null
@@ -158,4 +231,11 @@ data class ScanResult(
     val found: Int,
     val imported: Int,
     val message: String
+)
+
+data class ScanStatus(
+    val sourceId: Int,
+    val scanning: Boolean,
+    val found: Int,
+    val imported: Int
 )

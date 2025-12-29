@@ -15,8 +15,33 @@ data class ScanResponse(
     val message: String
 )
 
+@Serializable
+data class ScanStatusResponse(
+    val scanning: Boolean,
+    val sourceStatuses: Map<String, SourceScanStatus>
+)
+
+@Serializable
+data class SourceScanStatus(
+    val sourceId: Int,
+    val scanning: Boolean,
+    val found: Int,
+    val imported: Int
+)
+
 fun Route.scanRoutes() {
     route("/api/scan") {
+        // Get current scan status
+        get("/status") {
+            val scanService = get<BookScanService>(BookScanService::class.java)
+            val scanning = scanService.isScanningInProgress()
+            val statuses = scanService.getAllScanStatuses()
+                .mapKeys { it.key.toString() }
+                .mapValues { SourceScanStatus(it.value.sourceId, it.value.scanning, it.value.found, it.value.imported) }
+            
+            call.respond(ScanStatusResponse(scanning, statuses))
+        }
+        
         // 扫描所有启用的书籍源
         post("/all") {
             val scanService = get<BookScanService>(BookScanService::class.java)

@@ -18,6 +18,14 @@ class BookService(
         return bookRepository.findBySourceId(sourceId)
     }
     
+    fun getTotalCount(): Long {
+        return bookRepository.count()
+    }
+    
+    fun getCountBySourceId(sourceId: Int): Long {
+        return bookRepository.countBySourceId(sourceId)
+    }
+    
     fun scanAndImportBook(filePath: String): Book? {
         // Check if book already exists
         val existing = bookRepository.findByFilePath(filePath)

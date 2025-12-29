@@ -10,6 +10,14 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 
 class BookRepository {
+    fun count(): Long = transaction {
+        Books.selectAll().count()
+    }
+    
+    fun countBySourceId(sourceId: Int): Long = transaction {
+        Books.selectAll().where { Books.sourceId eq sourceId }.count()
+    }
+    
     fun findAll(limit: Int = 100, offset: Long = 0): List<Book> = transaction {
         Books.selectAll()
             .limit(limit, offset)
@@ -84,5 +92,24 @@ class BookRepository {
     
     fun deleteAll(): Int = transaction {
         Books.deleteAll()
+    }
+    
+    fun updateMetadata(
+        id: Int,
+        author: String? = null,
+        coverPath: String? = null,
+        isbn: String? = null,
+        publisher: String? = null,
+        description: String? = null
+    ): Int = transaction {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        Books.update({ Books.id eq id }) {
+            if (author != null) it[Books.author] = author
+            if (coverPath != null) it[Books.coverPath] = coverPath
+            if (isbn != null) it[Books.isbn] = isbn
+            if (publisher != null) it[Books.publisher] = publisher
+            if (description != null) it[Books.description] = description
+            it[updatedAt] = now
+        }
     }
 }
