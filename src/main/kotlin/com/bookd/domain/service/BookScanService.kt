@@ -170,7 +170,16 @@ class BookScanService(
         // 检查是否已存在
         val existing = bookRepository.findByFilePath(filePath)
         if (existing != null) {
-            return null // 已存在，跳过
+            // 如果已存在但没有作者信息，尝试提取元数据
+            if (existing.author == null || existing.author.isBlank()) {
+                logger.info("Book already exists but missing metadata, triggering extraction for: ${file.name}")
+                try {
+                    metadataService.extractMetadataAsync(existing.id, filePath)
+                } catch (e: Exception) {
+                    logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
+                }
+            }
+            return null // 已存在，跳过导入但可能触发元数据提取
         }
         
         // 提取基本信息
@@ -178,9 +187,8 @@ class BookScanService(
         val format = file.extension.lowercase()
         val fileSize = file.length()
         
-        // 使用文件名作为初始标题
-        val title = fileName
-        val author = extractAuthorFromFileName(fileName)
+        // 从文件名提取标题和作者
+        val (title, author) = extractTitleAndAuthorFromFileName(fileName)
         
         return try {
             val book = bookRepository.create(
@@ -208,22 +216,76 @@ class BookScanService(
     }
     
     /**
-     * 从文件名提取作者（简单规则）
+     * 从文件名提取标题和作者
+     * 支持格式：
+     * 1. 《书名》作者  或  <书名> 作者
+     * 2. 书名-作者
+     * 3. [作者]书名
+     * 4. 作者-书名
      */
-    private fun extractAuthorFromFileName(fileName: String): String? {
-        // 常见格式: "书名-作者", "作者-书名", "[作者]书名"
-        return when {
-            fileName.contains("-") -> {
-                val parts = fileName.split("-")
-                if (parts.size >= 2) parts[1].trim() else null
+    private fun extractTitleAndAuthorFromFileName(fileName: String): Pair<String, String?> {
+        // 格式1: 《书名》作者 或 <书名>作者
+        if (fileName.contains("《") && fileName.contains("》")) {
+            val start = fileName.indexOf("《")
+            val end = fileName.indexOf("》")
+            if (end > start) {
+                val title = fileName.substring(start + 1, end).trim()
+                val author = fileName.substring(end + 1).trim().takeIf { it.isNotEmpty() }
+                logger.debug("Extracted from 《》 format - title: $title, author: $author")
+                return Pair(title, author)
             }
-            fileName.contains("[") && fileName.contains("]") -> {
-                val start = fileName.indexOf("[")
-                val end = fileName.indexOf("]")
-                if (end > start) fileName.substring(start + 1, end).trim() else null
-            }
-            else -> null
         }
+        
+        if (fileName.contains("<") && fileName.contains(">")) {
+            val start = fileName.indexOf("<")
+            val end = fileName.indexOf(">")
+            if (end > start) {
+                val title = fileName.substring(start + 1, end).trim()
+                val author = fileName.substring(end + 1).trim().takeIf { it.isNotEmpty() }
+                logger.debug("Extracted from <> format - title: $title, author: $author")
+                return Pair(title, author)
+            }
+        }
+        
+        // 格式2: [作者]书名
+        if (fileName.contains("[") && fileName.contains("]")) {
+            val start = fileName.indexOf("[")
+            val end = fileName.indexOf("]")
+            if (end > start) {
+                val author = fileName.substring(start + 1, end).trim()
+                val title = fileName.substring(end + 1).trim().takeIf { it.isNotEmpty() } ?: fileName
+                logger.debug("Extracted from [] format - title: $title, author: $author")
+                return Pair(title, author)
+            }
+        }
+        
+        // 格式3: 书名-作者 或 作者-书名
+        if (fileName.contains("-")) {
+            val parts = fileName.split("-", limit = 2)
+            if (parts.size == 2) {
+                val first = parts[0].trim()
+                val second = parts[1].trim()
+                // 假设较长的是书名
+                val (title, author) = if (first.length > second.length) {
+                    Pair(first, second)
+                } else {
+                    Pair(second, first)
+                }
+                logger.debug("Extracted from - format - title: $title, author: $author")
+                return Pair(title, author)
+            }
+        }
+        
+        // 默认：整个文件名作为标题，没有作者
+        return Pair(fileName, null)
+    }
+    
+    /**
+     * 从文件名提取作者（已废弃，保留用于兼容）
+     */
+    @Deprecated("Use extractTitleAndAuthorFromFileName instead")
+    private fun extractAuthorFromFileName(fileName: String): String? {
+        return extractTitleAndAuthorFromFileName(fileName).second
     }
 }
 

@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.Executors
+import java.util.zip.ZipFile
+import javax.xml.parsers.DocumentBuilderFactory
 
 class BookMetadataService(
     private val bookRepository: BookRepository
@@ -68,37 +70,50 @@ class BookMetadataService(
                         }
                     }
                 } else {
-                    logger.warn("No metadata keys found in file: $filePath")
+                    logger.warn("No metadata keys found in file: ${file.name}, Tika failed to parse")
                 }
                 
                 // Extract metadata fields - try multiple variations
-                val author = metadata.get("author") 
+                var author = metadata.get("author") 
                     ?: metadata.get("creator") 
                     ?: metadata.get("dc:creator")
                     ?: metadata.get("meta:author")
                     ?: metadata.get("Author")
                 
-                val title = metadata.get("title") 
+                var title = metadata.get("title") 
                     ?: metadata.get("dc:title")
                     ?: metadata.get("Title")
                 
-                val publisher = metadata.get("publisher") 
+                var publisher = metadata.get("publisher") 
                     ?: metadata.get("dc:publisher")
                     ?: metadata.get("Publisher")
                 
-                val isbn = metadata.get("isbn")
+                var isbn = metadata.get("isbn")
                     ?: metadata.get("ISBN")
                 
-                val description = metadata.get("description") 
+                var description = metadata.get("description") 
                     ?: metadata.get("dc:description")
                     ?: metadata.get("subject")
                     ?: metadata.get("dc:subject")
                     ?: metadata.get("Description")
                 
+                // Fallback: Parse EPUB XML directly if Tika failed
+                if (filePath.endsWith(".epub", ignoreCase = true) && author == null && title == null) {
+                    logger.info("Tika failed to extract EPUB metadata, parsing XML directly")
+                    val epubMetadata = parseEpubMetadataDirectly(file)
+                    if (epubMetadata != null) {
+                        author = author ?: epubMetadata.author
+                        title = title ?: epubMetadata.title
+                        publisher = publisher ?: epubMetadata.publisher
+                        description = description ?: epubMetadata.description
+                        logger.info("Successfully extracted from EPUB XML - author: $author, title: $title")
+                    }
+                }
+                
                 // Extract cover image if available (for EPUB)
                 var coverPath: String? = null
                 if (filePath.endsWith(".epub", ignoreCase = true)) {
-                    coverPath = extractEpubCover(file)
+                    coverPath = extractAndSaveEpubCover(file, bookId)
                 }
                 
                 logger.info("Extracted metadata for ${file.name} - author: $author, title: $title, publisher: $publisher, isbn: $isbn")
@@ -130,14 +145,91 @@ class BookMetadataService(
     }
     
     /**
-     * Extract cover image from EPUB file
+     * Parse EPUB metadata directly from content.opf file
      */
-    private fun extractEpubCover(file: File): String? {
+    private fun parseEpubMetadataDirectly(file: File): EpubMetadata? {
         try {
-            // EPUB is a ZIP file
-            java.util.zip.ZipFile(file).use { zipFile ->
+            ZipFile(file).use { zipFile ->
+                // Find content.opf location from container.xml
+                val containerEntry = zipFile.getEntry("META-INF/container.xml")
+                var opfPath = "EPUB/content.opf" // Default path
+                
+                if (containerEntry != null) {
+                    zipFile.getInputStream(containerEntry).use { stream ->
+                        val factory = DocumentBuilderFactory.newInstance()
+                        factory.isNamespaceAware = true
+                        val doc = factory.newDocumentBuilder().parse(stream)
+                        val rootfiles = doc.getElementsByTagName("rootfile")
+                        if (rootfiles.length > 0) {
+                            val fullPath = rootfiles.item(0).attributes.getNamedItem("full-path")?.nodeValue
+                            if (fullPath != null) {
+                                opfPath = fullPath
+                            }
+                        }
+                    }
+                }
+                
+                // Parse content.opf
+                val opfEntry = zipFile.getEntry(opfPath)
+                if (opfEntry != null) {
+                    zipFile.getInputStream(opfEntry).use { stream ->
+                        val factory = DocumentBuilderFactory.newInstance()
+                        factory.isNamespaceAware = true
+                        val doc = factory.newDocumentBuilder().parse(stream)
+                        
+                        // Extract metadata - try both with and without namespace
+                        var title = doc.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "title")
+                            .item(0)?.textContent?.trim()
+                        if (title == null) {
+                            title = doc.getElementsByTagName("dc:title")
+                                .item(0)?.textContent?.trim()
+                        }
+                        
+                        var creator = doc.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "creator")
+                            .item(0)?.textContent?.trim()
+                        if (creator == null) {
+                            creator = doc.getElementsByTagName("dc:creator")
+                                .item(0)?.textContent?.trim()
+                        }
+                        
+                        var publisher = doc.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "publisher")
+                            .item(0)?.textContent?.trim()
+                        if (publisher == null) {
+                            publisher = doc.getElementsByTagName("dc:publisher")
+                                .item(0)?.textContent?.trim()
+                        }
+                        
+                        var description = doc.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "description")
+                            .item(0)?.textContent?.trim()
+                        if (description == null) {
+                            description = doc.getElementsByTagName("dc:description")
+                                .item(0)?.textContent?.trim()
+                        }
+                        
+                        logger.info("Parsed EPUB XML - title: $title, creator: $creator")
+                        
+                        if (title != null || creator != null) {
+                            return EpubMetadata(title, creator, publisher, description)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to parse EPUB metadata directly: ${e.message}")
+            e.printStackTrace()
+        }
+        return null
+    }
+    
+    /**
+     * Extract and save cover image from EPUB file
+     */
+    private fun extractAndSaveEpubCover(file: File, bookId: Int): String? {
+        try {
+            ZipFile(file).use { zipFile ->
                 // Common cover image paths in EPUB files
                 val coverPatterns = listOf(
+                    "EPUB/cover.png", "EPUB/cover.jpg", "EPUB/cover.jpeg",
                     "cover.jpg", "cover.jpeg", "cover.png",
                     "Cover.jpg", "Cover.jpeg", "Cover.png",
                     "OEBPS/Images/cover.jpg", "OEBPS/Images/cover.jpeg", "OEBPS/Images/cover.png",
@@ -145,34 +237,60 @@ class BookMetadataService(
                     "OPS/images/cover.jpg", "OPS/images/cover.jpeg", "OPS/images/cover.png"
                 )
                 
-                // Try to find cover image
+                var coverEntry: java.util.zip.ZipEntry? = null
+                
+                // Try to find cover image using patterns
                 for (pattern in coverPatterns) {
                     val entry = zipFile.getEntry(pattern)
                     if (entry != null) {
+                        coverEntry = entry
                         logger.info("Found cover image in EPUB: $pattern")
-                        // TODO: Extract and save the cover image
-                        // For now, just return the path within the EPUB
-                        return pattern
+                        break
                     }
                 }
                 
-                // Try to find any image with "cover" in the name
-                val coverEntry = zipFile.entries().asSequence().find { entry ->
-                    entry.name.lowercase().contains("cover") && 
-                    (entry.name.endsWith(".jpg", true) || 
-                     entry.name.endsWith(".jpeg", true) || 
-                     entry.name.endsWith(".png", true))
+                // If not found, try to find any image with "cover" in the name
+                if (coverEntry == null) {
+                    coverEntry = zipFile.entries().asSequence().find { entry ->
+                        entry.name.lowercase().contains("cover") && 
+                        (entry.name.endsWith(".jpg", true) || 
+                         entry.name.endsWith(".jpeg", true) || 
+                         entry.name.endsWith(".png", true))
+                    }
+                    
+                    if (coverEntry != null) {
+                        logger.info("Found cover image in EPUB: ${coverEntry.name}")
+                    }
                 }
                 
                 if (coverEntry != null) {
-                    logger.info("Found cover image in EPUB: ${coverEntry.name}")
-                    return coverEntry.name
+                    // Create covers directory
+                    val coversDir = File("covers")
+                    if (!coversDir.exists()) {
+                        coversDir.mkdirs()
+                        logger.info("Created covers directory: ${coversDir.absolutePath}")
+                    }
+                    
+                    // Get file extension
+                    val extension = coverEntry.name.substringAfterLast(".").lowercase()
+                    val outputFile = File(coversDir, "book_${bookId}.$extension")
+                    
+                    // Extract and save cover
+                    zipFile.getInputStream(coverEntry).use { input ->
+                        outputFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    logger.info("Saved cover to: ${outputFile.absolutePath}")
+                    return "/covers/book_${bookId}.$extension"
                 }
                 
                 logger.debug("No cover image found in EPUB: ${file.name}")
             }
         } catch (e: Exception) {
             logger.error("Failed to extract cover from EPUB: ${file.name} - ${e.message}")
+            e.printStackTrace()
         }
         return null
     }
@@ -185,3 +303,13 @@ class BookMetadataService(
         metadataDispatcher.close()
     }
 }
+
+/**
+ * Data class to hold EPUB metadata
+ */
+data class EpubMetadata(
+    val title: String?,
+    val author: String?,
+    val publisher: String?,
+    val description: String?
+)

@@ -5,6 +5,7 @@ import io.ktor.server.application.*
 import io.ktor.server.http.content.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import java.io.File
 
 fun Route.webRoutes() {
     // Serve login page at root and /login
@@ -45,6 +46,9 @@ fun Route.webRoutes() {
             ContentType.Text.Html
         )
     }
+    
+    // Serve covers directory
+    staticFiles("/covers", File("covers"))
     
     // Serve other static resources
     staticResources("/", "static")
