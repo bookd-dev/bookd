@@ -8,8 +8,12 @@ import io.ktor.server.routing.*
 
 fun Route.webRoutes() {
     get("/") {
-        call.respondRedirect("/index.html")
+        call.respondText("Bookd Server is running", ContentType.Text.Plain)
     }
     
-    staticResources("/", "static")
+    get("/admin") {
+        call.respondRedirect("/admin/")
+    }
+    
+    staticResources("/admin", "static")
 }
