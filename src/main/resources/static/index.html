@@ -501,16 +501,30 @@
             const booksDiv = document.getElementById(`books-${sourceId}`);
             
             try {
-                const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}`);
-                const data = await res.json();
+                // 获取所有书籍（循环分页）
+                let allBooks = [];
+                let page = 1;
+                let totalPages = 1;
                 
-                if (data.books && data.books.length > 0) {
+                do {
+                    const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}&page=${page}&size=100`);
+                    const data = await res.json();
+                    
+                    if (data.books && data.books.length > 0) {
+                        allBooks = allBooks.concat(data.books);
+                    }
+                    
+                    totalPages = data.totalPages || 1;
+                    page++;
+                } while (page <= totalPages);
+                
+                if (allBooks.length > 0) {
                     const bookListHtml = `
                         <div style="color: #666; font-size: 13px; margin-bottom: 8px;">
-                            📚 共 ${data.books.length} 本书籍
+                            📚 共 ${allBooks.length} 本书籍
                         </div>
                         <ul class="book-list">
-                            ${data.books.map(book => `
+                            ${allBooks.map(book => `
                                 <li class="book-item">
                                     <div class="book-title">📖 ${escapeHtml(book.title)}</div>
                                     <div class="book-meta">
