@@ -30,9 +30,17 @@ fun Application.module() {
             com.bookd.data.entity.Books,
             com.bookd.data.entity.BookSources,
             com.bookd.data.entity.ReadingProgress,
-            com.bookd.data.entity.FolderPermissions
+            com.bookd.data.entity.FolderPermissions,
+            com.bookd.data.entity.Sessions,
+            com.bookd.data.entity.InviteTokens
         )
     }
+    
+    // Initialize default admin user
+    val userService = com.bookd.domain.service.UserService(
+        com.bookd.data.repository.UserRepository()
+    )
+    userService.initializeDefaultAdmin()
     
     // Configure plugins
     configureDependencyInjection()

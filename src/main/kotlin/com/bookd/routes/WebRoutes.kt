@@ -7,13 +7,37 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun Route.webRoutes() {
+    // Serve login page at root and /login
     get("/") {
-        call.respondText("Bookd Server is running", ContentType.Text.Plain)
+        call.respondText(
+            this::class.java.classLoader.getResource("static/login.html")!!.readText(),
+            ContentType.Text.Html
+        )
     }
     
+    get("/login") {
+        call.respondText(
+            this::class.java.classLoader.getResource("static/login.html")!!.readText(),
+            ContentType.Text.Html
+        )
+    }
+    
+    // Serve admin page
     get("/admin") {
-        call.respondRedirect("/admin/")
+        call.respondText(
+            this::class.java.classLoader.getResource("static/admin.html")!!.readText(),
+            ContentType.Text.Html
+        )
     }
     
-    staticResources("/admin", "static")
+    // Serve reader page
+    get("/reader") {
+        call.respondText(
+            this::class.java.classLoader.getResource("static/reader.html")!!.readText(),
+            ContentType.Text.Html
+        )
+    }
+    
+    // Serve other static resources
+    staticResources("/", "static")
 }

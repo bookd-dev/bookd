@@ -63,6 +63,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:$logback_version")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+    implementation("org.mindrot:jbcrypt:0.4")
     
     // Testing
     testImplementation("io.ktor:ktor-server-test-host")

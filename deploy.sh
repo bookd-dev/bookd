@@ -1,149 +1,249 @@
 #!/bin/bash
-# BookD 快速部署脚本
+# BookD 统一部署管理脚本
 
 set -e
 
-echo "📦 BookD 部署助手"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# 选择操作
-echo "请选择操作:"
-echo "  1) 直接启动本地服务 (使用 docker-compose)"
-echo "  2) 构建镜像并推送到 Docker Hub"
-echo ""
-read -p "请输入选项 (1/2): " -n 1 -r
-echo ""
-echo ""
-
-if [[ $REPLY == "1" ]]; then
-    # 直接启动
-    echo "🚀 正在启动本地服务..."
+show_menu() {
+    clear
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📚 Bookd 部署管理工具"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
+    echo "请选择操作："
+    echo ""
+    echo "  1) 🚀 本地部署（开发/测试）"
+    echo "  2) 🔄 更新本地容器"
+    echo "  3) 📤 构建并推送到 Docker Hub"
+    echo "  4) 🧹 清理多余镜像"
+    echo "  5) 📊 查看运行状态"
+    echo "  6) 📝 查看日志"
+    echo "  0) ❌ 退出"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+local_deploy() {
+    echo ""
+    echo "🚀 开始本地部署..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    # 构建应用
-    echo "📦 构建应用..."
+    echo ""
+    echo "📦 1/3 构建应用..."
     ./gradlew clean build -x test
     
-    # 构建 Docker 镜像
-    echo "🐳 构建 Docker 镜像..."
+    echo ""
+    echo "🐳 2/3 构建 Docker 镜像..."
     docker build -t bookd:local .
     
-    # 更新 docker-compose 使用本地镜像
-    if [ -f "docker-compose.yml" ]; then
-        sed -i.bak 's|image: .*bookd.*|image: bookd:local|g' docker-compose.yml
-    fi
-    
-    # 启动服务
-    echo "🎯 启动服务..."
+    echo ""
+    echo "🎯 3/3 启动服务..."
     docker-compose up -d
     
+    show_success_info
+}
+
+update_local() {
     echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ 服务启动成功！"
-    echo ""
-    echo "📋 访问地址:"
-    echo "   管理界面: http://localhost:7919/admin"
-    echo "   API 文档: http://localhost:7919/api/health"
-    echo ""
-    echo "📊 查看日志:"
-    echo "   docker-compose logs -f bookd-server"
-    echo ""
-    echo "🛑 停止服务:"
-    echo "   docker-compose down"
+    echo "🔄 开始更新本地容器..."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    exit 0
-fi
+    echo ""
+    echo "📦 1/4 构建应用..."
+    ./gradlew clean build -x test
+    
+    echo ""
+    echo "🐳 2/4 构建新镜像..."
+    docker build -t bookd:local .
+    
+    echo ""
+    echo "🛑 3/4 停止旧容器..."
+    if docker ps -a --format '{{.Names}}' | grep -q '^bookd-server$'; then
+        docker-compose stop bookd-server
+        docker-compose rm -f bookd-server
+    else
+        echo "   ℹ️  未发现运行中的容器"
+    fi
+    
+    echo ""
+    echo "🚀 4/4 启动新容器..."
+    docker-compose up -d bookd-server
+    
+    show_success_info
+}
 
-# 检查 Docker Hub 用户名
-if [ -z "$2" ]; then
+push_to_hub() {
+    echo ""
     read -p "🔑 请输入 Docker Hub 用户名: " DOCKER_USER
-else
-    DOCKER_USER=$2
-fi
-
-IMAGE_NAME="${DOCKER_USER}/bookd:latest"
-
-echo "🏷️  镜像名称: $IMAGE_NAME"
-echo ""
-
-# 构建镜像
-echo "🏗️  正在构建镜像..."
-./gradlew clean build -x test
-docker build -t "$IMAGE_NAME" .
-
-echo ""
-echo "✅ 镜像构建完成"
-echo ""
-
-# 询问是否推送
-read -p "📤 是否推送到 Docker Hub? (y/N): " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "🔐 请先登录 Docker Hub:"
-    docker login
+    
+    if [ -z "$DOCKER_USER" ]; then
+        echo "❌ 用户名不能为空"
+        return
+    fi
+    
+    IMAGE_NAME="${DOCKER_USER}/bookd:latest"
     
     echo ""
-    echo "📤 正在推送镜像..."
+    echo "📤 构建并推送镜像到 Docker Hub"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🏷️  镜像名称: $IMAGE_NAME"
+    
+    echo ""
+    echo "🏗️  1/3 构建应用..."
+    ./gradlew clean build -x test
+    
+    echo ""
+    echo "🐳 2/3 构建镜像..."
+    docker build -t "$IMAGE_NAME" .
+    
+    echo ""
+    echo "🔐 3/3 登录并推送..."
+    docker login
     docker push "$IMAGE_NAME"
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ 部署成功！"
+    echo "✅ 镜像推送成功！"
     echo ""
-    echo "📋 NAS 部署步骤:"
+    echo "📋 NAS 部署命令："
     echo ""
-    echo "1. 在 NAS 上创建目录:"
-    echo "   mkdir -p /volume1/docker/bookd"
+    echo "# 拉取镜像"
+    echo "docker pull $IMAGE_NAME"
     echo ""
-    echo "2. 创建 docker-compose.yml:"
-    echo "   cat > docker-compose.yml << 'COMPOSE'"
-    echo "version: '3.8'"
-    echo "services:"
-    echo "  postgres:"
-    echo "    image: postgres:16-alpine"
-    echo "    container_name: bookd-postgres"
-    echo "    restart: unless-stopped"
-    echo "    environment:"
-    echo "      POSTGRES_DB: bookd"
-    echo "      POSTGRES_USER: bookd"
-    echo "      POSTGRES_PASSWORD: bookd123"
-    echo "    volumes:"
-    echo "      - /volume1/docker/bookd/postgres:/var/lib/postgresql/data"
+    echo "# 在 docker-compose.yml 中使用："
+    echo "image: $IMAGE_NAME"
     echo ""
-    echo "  bookd-server:"
-    echo "    image: $IMAGE_NAME"
-    echo "    container_name: bookd-server"
-    echo "    restart: unless-stopped"
-    echo "    environment:"
-    echo "      DATABASE_URL: jdbc:postgresql://postgres:5432/bookd"
-    echo "      DATABASE_USER: bookd"
-    echo "      DATABASE_PASSWORD: bookd123"
-    echo "      SERVER_PORT: 7919"
-    echo "    ports:"
-    echo "      - \"7919:7919\""
-    echo "    volumes:"
-    echo "      - /volume1:/nas"
-    echo "    depends_on:"
-    echo "      - postgres"
-    echo "COMPOSE"
+    
+    read -p "🔄 是否重启本地容器使用新镜像? (y/N): " -n 1 -r
     echo ""
-    echo "3. 启动服务:"
-    echo "   docker-compose up -d"
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo ""
+        echo "🔄 重启本地容器..."
+        
+        # Tag as local image
+        docker tag "$IMAGE_NAME" bookd:local
+        
+        if docker ps -a --format '{{.Names}}' | grep -q '^bookd-server$'; then
+            docker-compose stop bookd-server
+            docker-compose rm -f bookd-server
+        fi
+        
+        docker-compose up -d bookd-server
+        
+        show_success_info
+    fi
+}
+
+cleanup_images() {
     echo ""
-    echo "4. 访问管理界面:"
-    echo "   http://nas-ip:7919/admin"
+    echo "🧹 清理多余镜像"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "📋 当前的 bookd 镜像："
+    docker images | grep -E "bookd|REPOSITORY"
+    echo ""
+    
+    read -p "⚠️  确定要清理吗? 只保留 bookd:local (y/N): " -n 1 -r
+    echo ""
+    
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "❌ 取消清理"
+        return
+    fi
+    
+    echo ""
+    echo "🗑️  清理中..."
+    
+    # 删除旧的自动生成镜像
+    for img in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep 'bookd' | grep -v 'bookd:local'); do
+        echo "  删除: $img"
+        docker rmi "$img" 2>/dev/null || echo "  ⚠️  跳过（可能正在使用）"
+    done
+    
+    echo ""
+    echo "✅ 清理完成！"
+    echo ""
+    echo "📋 剩余镜像："
+    docker images | grep -E "bookd|REPOSITORY"
+}
+
+show_status() {
+    echo ""
+    echo "📊 运行状态"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    docker-compose ps
+    echo ""
+    echo "📋 镜像列表："
+    docker images | grep -E "bookd|REPOSITORY"
+}
+
+show_logs() {
+    echo ""
+    echo "📝 查看日志"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "按 Ctrl+C 退出日志查看"
+    echo ""
+    sleep 2
+    docker-compose logs -f bookd-server
+}
+
+show_success_info() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-else
+    echo "✅ 操作完成！"
     echo ""
-    echo "ℹ️  镜像已构建但未推送"
+    echo "📋 访问地址："
+    echo "   登录页面: http://localhost:7919/login"
+    echo "   管理后台: http://localhost:7919/admin"
+    echo "   健康检查: http://localhost:7919/api/health"
     echo ""
-    echo "💾 离线部署方式:"
-    echo "   docker save $IMAGE_NAME -o bookd-image.tar"
-    echo "   gzip bookd-image.tar"
-    echo "   scp bookd-image.tar.gz admin@nas-ip:/volume1/docker/"
+    echo "📊 常用命令："
+    echo "   查看日志: docker-compose logs -f bookd-server"
+    echo "   停止服务: docker-compose down"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+# 主循环
+while true; do
+    show_menu
+    read -p "请输入选项 (0-6): " -n 1 -r
     echo ""
-fi
+    
+    case $REPLY in
+        1)
+            local_deploy
+            read -p "按任意键继续..." -n 1 -r
+            ;;
+        2)
+            update_local
+            read -p "按任意键继续..." -n 1 -r
+            ;;
+        3)
+            push_to_hub
+            read -p "按任意键继续..." -n 1 -r
+            ;;
+        4)
+            cleanup_images
+            read -p "按任意键继续..." -n 1 -r
+            ;;
+        5)
+            show_status
+            read -p "按任意键继续..." -n 1 -r
+            ;;
+        6)
+            show_logs
+            ;;
+        0)
+            echo ""
+            echo "👋 再见！"
+            exit 0
+            ;;
+        *)
+            echo ""
+            echo "❌ 无效选项，请重新选择"
+            sleep 2
+            ;;
+    esac
+done
