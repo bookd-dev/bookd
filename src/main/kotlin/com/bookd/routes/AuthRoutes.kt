@@ -13,6 +13,28 @@ import io.ktor.util.pipeline.*
 
 fun Route.authRoutes(userService: UserService) {
     route("/api/auth") {
+        // Check if admin exists (for first-time setup)
+        get("/has-admin") {
+            call.respond(HttpStatusCode.OK, mapOf("hasAdmin" to userService.hasAdmin()))
+        }
+        
+        // First-time setup - create admin
+        post("/setup") {
+            if (userService.hasAdmin()) {
+                call.respond(HttpStatusCode.Conflict, mapOf("error" to "Admin already exists"))
+                return@post
+            }
+            
+            val request = call.receive<RegisterRequest>()
+            
+            try {
+                val admin = userService.createFirstAdmin(request.username, request.password, request.email)
+                call.respond(HttpStatusCode.Created, UserResponse(admin.id, admin.username, admin.email, admin.role))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "Setup failed")))
+            }
+        }
+        
         post("/login") {
             val request = call.receive<LoginRequest>()
             val response = userService.login(request.username, request.password)

@@ -72,12 +72,18 @@ class UserService(
         return userRepository.deleteUser(userId)
     }
     
-    fun initializeDefaultAdmin() {
-        val existingAdmin = userRepository.findByUsername("zuiren233")
-        if (existingAdmin == null) {
-            val hashedPassword = BCrypt.hashpw("Sy5201314", BCrypt.gensalt())
-            userRepository.create("zuiren233", hashedPassword, null, UserRole.ADMIN.value)
-            println("Default admin user created: zuiren233")
+    fun hasAdmin(): Boolean {
+        val users = userRepository.findAll()
+        return users.any { it.role == UserRole.ADMIN.value }
+    }
+    
+    fun createFirstAdmin(username: String, password: String, email: String?): User {
+        // Check if admin already exists
+        if (hasAdmin()) {
+            throw IllegalStateException("Admin user already exists")
         }
+        
+        val hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt())
+        return userRepository.create(username, hashedPassword, email, UserRole.ADMIN.value)
     }
 }

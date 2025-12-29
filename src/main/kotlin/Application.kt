@@ -36,11 +36,7 @@ fun Application.module() {
         )
     }
     
-    // Initialize default admin user
-    val userService = com.bookd.domain.service.UserService(
-        com.bookd.data.repository.UserRepository()
-    )
-    userService.initializeDefaultAdmin()
+    // Note: First-time setup will be handled via /setup page
     
     // Configure plugins
     configureDependencyInjection()

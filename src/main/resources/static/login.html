@@ -294,27 +294,46 @@
             }
         });
 
-        // Check if already logged in
-        if (localStorage.getItem('authToken')) {
-            fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
-            })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
+        // Check if system needs setup or already logged in
+        async function checkSystemStatus() {
+            // First check if admin exists
+            try {
+                const setupResponse = await fetch('/api/auth/has-admin');
+                const setupData = await setupResponse.json();
+                
+                if (!setupData.hasAdmin) {
+                    // No admin exists, redirect to setup
+                    window.location.href = '/setup';
+                    return;
                 }
-            })
-            .then(user => {
-                if (user) {
-                    // 根据用户角色跳转
-                    if (user.role === 'admin') {
-                        window.location.href = '/admin';
-                    } else {
-                        window.location.href = '/reader';
+            } catch (error) {
+                console.error('Failed to check admin status:', error);
+            }
+            
+            // Check if already logged in
+            if (localStorage.getItem('authToken')) {
+                fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
                     }
-                }
-            });
+                })
+                .then(user => {
+                    if (user) {
+                        // 根据用户角色跳转
+                        if (user.role === 'admin') {
+                            window.location.href = '/admin';
+                        } else {
+                            window.location.href = '/reader';
+                        }
+                    }
+                });
+            }
         }
+        
+        checkSystemStatus();
     </script>
 </body>
 </html>

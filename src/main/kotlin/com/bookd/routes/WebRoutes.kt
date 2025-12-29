@@ -22,6 +22,14 @@ fun Route.webRoutes() {
         )
     }
     
+    // Serve setup page
+    get("/setup") {
+        call.respondText(
+            this::class.java.classLoader.getResource("static/setup.html")!!.readText(),
+            ContentType.Text.Html
+        )
+    }
+    
     // Serve admin page
     get("/admin") {
         call.respondText(
