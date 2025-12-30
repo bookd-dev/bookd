@@ -23,9 +23,9 @@ fun Application.module() {
     
     DatabaseConfig.init(dbUrl, dbDriver, dbUser, dbPassword)
     
-    // Create tables
+    // Create tables and add missing columns
     transaction {
-        SchemaUtils.create(
+        SchemaUtils.createMissingTablesAndColumns(
             com.bookd.data.entity.Users,
             com.bookd.data.entity.Books,
             com.bookd.data.entity.BookSources,
@@ -34,7 +34,9 @@ fun Application.module() {
             com.bookd.data.entity.ReadingProgress,
             com.bookd.data.entity.FolderPermissions,
             com.bookd.data.entity.Sessions,
-            com.bookd.data.entity.InviteTokens
+            com.bookd.data.entity.InviteTokens,
+            com.bookd.data.entity.Bookmarks,
+            com.bookd.data.entity.ReaderSettings
         )
     }
     
