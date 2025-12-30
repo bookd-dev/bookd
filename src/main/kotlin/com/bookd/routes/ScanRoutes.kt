@@ -45,7 +45,8 @@ fun Route.scanRoutes() {
         // 扫描所有启用的书籍源
         post("/all") {
             val scanService = get<BookScanService>(BookScanService::class.java)
-            val result = scanService.scanAllSources()
+            val fullScan = call.request.queryParameters["fullScan"]?.toBoolean() ?: false
+            val result = scanService.scanAllSources(fullScan)
             call.respond(ScanResponse(result.found, result.imported, result.message))
         }
         
@@ -59,7 +60,8 @@ fun Route.scanRoutes() {
                 return@post
             }
             
-            val result = scanService.scanBookSource(id)
+            val fullScan = call.request.queryParameters["fullScan"]?.toBoolean() ?: false
+            val result = scanService.scanBookSource(id, fullScan)
             call.respond(ScanResponse(result.found, result.imported, result.message))
         }
     }

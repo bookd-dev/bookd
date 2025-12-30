@@ -172,6 +172,8 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
             transition: all 0.3s;
             cursor: pointer;
+            display: flex;
+            flex-direction: column;
         }
         .book-card:hover { 
             transform: translateY(-4px); 
@@ -187,6 +189,7 @@
             color: white;
             font-size: 48px;
             position: relative;
+            flex-shrink: 0;
         }
         .book-cover img { 
             width: 100%; 
@@ -195,7 +198,10 @@
         }
         .book-info { 
             padding: 16px;
-            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-height: 130px;
+            flex-shrink: 0;
         }
         .book-card-title { 
             font-weight: 600; 
@@ -207,27 +213,227 @@
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
+            line-height: 1.5;
+            min-height: 3em;
         }
         .book-card-author { 
             color: #666; 
             font-size: 13px; 
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .book-card-footer {
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            flex-shrink: 0;
         }
         .book-card-time { 
             color: #999; 
             font-size: 11px;
         }
         .book-card-format {
-            position: absolute;
-            bottom: 16px;
-            right: 16px;
             color: #999;
             font-size: 10px;
             text-transform: uppercase;
             font-weight: 600;
+        }
+        
+        /* Book Detail Modal Styles */
+        .book-detail-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        .book-detail-cover {
+            flex: 0 0 200px;
+            text-align: center;
+        }
+        .book-detail-cover-img {
+            width: 200px;
+            height: 280px;
+            border-radius: 8px;
+            object-fit: cover;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 64px;
+        }
+        .book-detail-cover-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .book-detail-info {
+            flex: 1;
+            min-width: 300px;
+        }
+        .book-detail-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .book-detail-meta {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .book-detail-meta-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f2f5;
+            gap: 12px;
+        }
+        .book-detail-meta-item:last-child {
+            border-bottom: none;
+        }
+        .book-detail-label {
+            font-weight: 600;
+            color: #666;
+            min-width: 100px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .book-detail-value {
+            color: #1a1a1a;
+            word-break: break-word;
+            flex: 1;
+            line-height: 1.6;
+        }
+        .book-detail-value.empty {
+            color: #999;
+            font-style: italic;
+        }
+        .book-detail-description {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #f0f2f5;
+        }
+        .book-detail-description-title {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #1a1a1a;
+        }
+        .book-detail-description-text {
+            color: #666;
+            line-height: 1.8;
+            white-space: pre-wrap;
+        }
+        
+        /* Book Detail Edit Styles */
+        .book-detail-edit-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+        .book-detail-edit-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .book-detail-edit-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s;
+        }
+        .book-detail-edit-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .book-detail-cover-upload {
+            margin-top: 12px;
+        }
+        .book-detail-cover-upload input[type="file"] {
+            display: none;
+        }
+        .book-detail-cover-upload-btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .book-detail-cover-upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+        }
+        .modal-header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .edit-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .edit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(17, 153, 142, 0.4);
+        }
+        .save-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+        }
+        .cancel-btn {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .cancel-btn:hover {
+            background: #5a6268;
         }
         
         @media (max-width: 768px) {
@@ -363,6 +569,49 @@
             </div>
             <div class="modal-body">
                 <div class="book-grid" id="bookGridContainer">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scan Options Modal -->
+    <div id="scanOptionsModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">🔍 扫描选项</div>
+                <button class="modal-close" onclick="closeScanOptionsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #666; margin-bottom: 20px;">选择扫描方式：</p>
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                    <button onclick="executeScan(false)" style="padding: 20px; text-align: left; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border: none; color: white; cursor: pointer; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: all 0.3s;">
+                        <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px; pointer-events: none;">📚 增量扫描（推荐）</div>
+                        <div style="font-size: 13px; opacity: 0.9; pointer-events: none;">只导入新书，跳过已存在的书籍。对缺失元数据的书籍会重新提取。</div>
+                    </button>
+                    <button onclick="executeScan(true)" style="padding: 20px; text-align: left; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; color: white; cursor: pointer; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: all 0.3s;">
+                        <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px; pointer-events: none;">🔄 强制全量扫描</div>
+                        <div style="font-size: 13px; opacity: 0.9; pointer-events: none;">重新扫描所有文件，包括已存在的书籍。会强制重新提取所有元数据（作者、ISBN等）。</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Book Detail Modal -->
+    <div id="bookDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <div class="modal-title">📖 书籍详情</div>
+                <div class="modal-header-actions">
+                    <button id="editBookBtn" class="edit-btn" onclick="toggleEditMode()" style="display: none;">✏️ 编辑</button>
+                    <button id="saveBookBtn" class="save-btn" onclick="saveBookDetail()" style="display: none;">💾 保存</button>
+                    <button id="cancelEditBtn" class="cancel-btn" onclick="cancelEditMode()" style="display: none;">✖️ 取消</button>
+                    <button class="modal-close" onclick="closeBookDetailModal()">×</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="bookDetailContainer" class="book-detail-container">
                     <div class="loading">加载中...</div>
                 </div>
             </div>
@@ -771,8 +1020,10 @@
                             <div class="book-info">
                                 <div class="book-card-title">${escapeHtml(book.title)}</div>
                                 <div class="book-card-author">👤 ${escapeHtml(book.author || '未知作者')}</div>
-                                <div class="book-card-time">📅 ${timeStr}</div>
-                                <div class="book-card-format">${escapeHtml(book.format || '')}</div>
+                                <div class="book-card-footer">
+                                    <div class="book-card-time">📅 ${timeStr}</div>
+                                    <div class="book-card-format">${escapeHtml(book.format || '')}</div>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -794,14 +1045,349 @@
         }
         
         function formatTime(book) {
-            // Assuming the book has updatedAt or createdAt field
-            // For now, just return a placeholder
+            if (book.updatedAt) {
+                try {
+                    // Parse ISO datetime string from backend
+                    const date = new Date(book.updatedAt);
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    
+                    if (diffDays === 0) {
+                        return '今天';
+                    } else if (diffDays === 1) {
+                        return '昨天';
+                    } else if (diffDays < 7) {
+                        return `${diffDays}天前`;
+                    } else if (diffDays < 30) {
+                        return `${Math.floor(diffDays / 7)}周前`;
+                    } else if (diffDays < 365) {
+                        return `${Math.floor(diffDays / 30)}个月前`;
+                    } else {
+                        return `${Math.floor(diffDays / 365)}年前`;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse date:', book.updatedAt, e);
+                    return '最近更新';
+                }
+            }
             return '最近更新';
         }
         
-        function viewBookDetail(bookId) {
-            // TODO: Implement book detail view
-            alert(`查看书籍详情 ID: ${bookId}`);
+        // Book Detail Modal Functions
+        let currentBookData = null;
+        let isEditMode = false;
+        let originalBookData = null;
+        
+        async function viewBookDetail(bookId) {
+            console.log('Viewing book detail for ID:', bookId);
+            isEditMode = false;
+            document.getElementById('bookDetailModal').classList.add('active');
+            await loadBookDetail(bookId);
+        }
+        
+        function closeBookDetailModal() {
+            document.getElementById('bookDetailModal').classList.remove('active');
+            isEditMode = false;
+            currentBookData = null;
+            originalBookData = null;
+        }
+        
+        async function loadBookDetail(bookId) {
+            const container = document.getElementById('bookDetailContainer');
+            container.innerHTML = '<div class="loading">加载中...</div>';
+            
+            try {
+                const res = await fetch(`${API_BASE}/books/${bookId}`);
+                if (!res.ok) {
+                    throw new Error('Failed to load book details');
+                }
+                const book = await res.json();
+                
+                const formatIcon = getFormatIcon(book.format);
+                const timeStr = formatTime(book);
+                const createdTimeStr = book.createdAt ? formatDateTime(book.createdAt) : '未知';
+                const updatedTimeStr = book.updatedAt ? formatDateTime(book.updatedAt) : '未知';
+                
+                container.innerHTML = `
+                    <div class="book-detail-cover">
+                        <div class="book-detail-cover-img">
+                            ${book.coverPath ? `<img src="${book.coverPath}" alt="${escapeHtml(book.title)}">` : formatIcon}
+                        </div>
+                    </div>
+                    <div class="book-detail-info">
+                        <div class="book-detail-title">${escapeHtml(book.title)}</div>
+                        <ul class="book-detail-meta">
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📖 书名</span>
+                                <span class="book-detail-value">${escapeHtml(book.title)}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">👤 作者</span>
+                                <span class="book-detail-value ${!book.author ? 'empty' : ''}">${escapeHtml(book.author || '未知')}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📚 ISBN</span>
+                                <span class="book-detail-value ${!book.isbn ? 'empty' : ''}">${escapeHtml(book.isbn || '未设置')}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">🏢 出版社</span>
+                                <span class="book-detail-value ${!book.publisher ? 'empty' : ''}">${escapeHtml(book.publisher || '未知')}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📄 格式</span>
+                                <span class="book-detail-value">${escapeHtml(book.format.toUpperCase())}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">💾 文件大小</span>
+                                <span class="book-detail-value">${formatFileSize(book.fileSize)}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📁 文件路径</span>
+                                <span class="book-detail-value" style="font-family: 'Courier New', monospace; font-size: 12px; word-break: break-all;">${escapeHtml(book.filePath)}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📅 更新时间</span>
+                                <span class="book-detail-value">${timeStr} (${updatedTimeStr})</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">🕒 创建时间</span>
+                                <span class="book-detail-value">${createdTimeStr}</span>
+                            </li>
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">🆔 书籍ID</span>
+                                <span class="book-detail-value">${book.id}</span>
+                            </li>
+                            ${book.sourceId ? `
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📂 书籍源ID</span>
+                                <span class="book-detail-value">${book.sourceId}</span>
+                            </li>
+                            ` : ''}
+                        </ul>
+                        ${book.description ? `
+                        <div class="book-detail-description">
+                            <div class="book-detail-description-title">📝 简介</div>
+                            <div class="book-detail-description-text">${escapeHtml(book.description)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                // 保存当前书籍数据
+                currentBookData = book;
+                originalBookData = JSON.parse(JSON.stringify(book));
+                
+                // 显示编辑按钮
+                document.getElementById('editBookBtn').style.display = 'inline-block';
+                document.getElementById('saveBookBtn').style.display = 'none';
+                document.getElementById('cancelEditBtn').style.display = 'none';
+                
+            } catch (e) {
+                console.error('Failed to load book detail:', e);
+                container.innerHTML = `<div style="color: #dc3545; text-align: center;">❌ 加载失败: ${e.message}</div>`;
+            }
+        }
+        
+        function formatDateTime(dateTimeStr) {
+            try {
+                const date = new Date(dateTimeStr);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            } catch (e) {
+                return dateTimeStr;
+            }
+        }
+        
+        // Edit Mode Functions
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            if (isEditMode) {
+                enterEditMode();
+            } else {
+                exitEditMode();
+            }
+        }
+        
+        function enterEditMode() {
+            console.log('Entering edit mode');
+            isEditMode = true;
+            
+            // 切换按钮
+            document.getElementById('editBookBtn').style.display = 'none';
+            document.getElementById('saveBookBtn').style.display = 'inline-block';
+            document.getElementById('cancelEditBtn').style.display = 'inline-block';
+            
+            // 渲染编辑模式的UI
+            renderEditMode();
+        }
+        
+        function exitEditMode() {
+            console.log('Exiting edit mode');
+            isEditMode = false;
+            
+            // 切换按钮
+            document.getElementById('editBookBtn').style.display = 'inline-block';
+            document.getElementById('saveBookBtn').style.display = 'none';
+            document.getElementById('cancelEditBtn').style.display = 'none';
+            
+            // 重新加载书籍详情（只读模式）
+            loadBookDetail(currentBookData.id);
+        }
+        
+        function cancelEditMode() {
+            if (confirm('确定要取消编辑吗？所有未保存的更改将丢失。')) {
+                currentBookData = JSON.parse(JSON.stringify(originalBookData));
+                exitEditMode();
+            }
+        }
+        
+        function renderEditMode() {
+            const container = document.getElementById('bookDetailContainer');
+            const book = currentBookData;
+            const formatIcon = getFormatIcon(book.format);
+            
+            container.innerHTML = `
+                <div class="book-detail-cover">
+                    <div class="book-detail-cover-img" id="coverPreview">
+                        ${book.coverPath ? `<img src="${book.coverPath}" alt="${escapeHtml(book.title)}">` : formatIcon}
+                    </div>
+                    <div class="book-detail-cover-upload">
+                        <input type="file" id="coverUpload" accept="image/*" onchange="handleCoverUpload(event)">
+                        <label for="coverUpload" class="book-detail-cover-upload-btn">📷 更换封面</label>
+                    </div>
+                </div>
+                <div class="book-detail-info">
+                    <input type="text" class="book-detail-edit-input" id="edit-title" value="${escapeHtml(book.title)}" placeholder="书名" style="font-size: 24px; font-weight: 700; margin-bottom: 12px;">
+                    <ul class="book-detail-meta">
+                        <li class="book-detail-meta-item">
+                            <span class="book-detail-label">👤 作者</span>
+                            <input type="text" class="book-detail-edit-input" id="edit-author" value="${escapeHtml(book.author || '')}" placeholder="作者">
+                        </li>
+                        <li class="book-detail-meta-item">
+                            <span class="book-detail-label">📚 ISBN</span>
+                            <input type="text" class="book-detail-edit-input" id="edit-isbn" value="${escapeHtml(book.isbn || '')}" placeholder="ISBN">
+                        </li>
+                        <li class="book-detail-meta-item">
+                            <span class="book-detail-label">🏢 出版社</span>
+                            <input type="text" class="book-detail-edit-input" id="edit-publisher" value="${escapeHtml(book.publisher || '')}" placeholder="出版社">
+                        </li>
+                        <li class="book-detail-meta-item">
+                            <span class="book-detail-label">📄 格式</span>
+                            <span class="book-detail-value">${escapeHtml(book.format.toUpperCase())} (不可编辑)</span>
+                        </li>
+                        <li class="book-detail-meta-item">
+                            <span class="book-detail-label">💾 文件大小</span>
+                            <span class="book-detail-value">${formatFileSize(book.fileSize)} (不可编辑)</span>
+                        </li>
+                        <li class="book-detail-meta-item">
+                            <span class="book-detail-label">📁 文件路径</span>
+                            <span class="book-detail-value" style="font-family: 'Courier New', monospace; font-size: 12px;">${escapeHtml(book.filePath)} (不可编辑)</span>
+                        </li>
+                    </ul>
+                    <div class="book-detail-description" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #f0f2f5;">
+                        <div class="book-detail-description-title">📝 简介</div>
+                        <textarea class="book-detail-edit-textarea" id="edit-description" placeholder="书籍简介">${escapeHtml(book.description || '')}</textarea>
+                    </div>
+                </div>
+            `;
+        }
+        
+        let uploadedCoverFile = null;
+        
+        function handleCoverUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            if (!file.type.startsWith('image/')) {
+                alert('请选择图片文件');
+                return;
+            }
+            
+            // 保存文件
+            uploadedCoverFile = file;
+            
+            // 预览
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('coverPreview');
+                preview.innerHTML = `<img src="${e.target.result}" alt="封面预览">`;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function saveBookDetail() {
+            if (!currentBookData) return;
+            
+            console.log('Saving book detail...');
+            
+            // 收集表单数据
+            const updatedData = {
+                title: document.getElementById('edit-title').value.trim(),
+                author: document.getElementById('edit-author').value.trim() || null,
+                isbn: document.getElementById('edit-isbn').value.trim() || null,
+                publisher: document.getElementById('edit-publisher').value.trim() || null,
+                description: document.getElementById('edit-description').value.trim() || null
+            };
+            
+            if (!updatedData.title) {
+                alert('书名不能为空');
+                return;
+            }
+            
+            try {
+                // 1. 如果有上传的封面，先上传封面
+                let coverPath = currentBookData.coverPath;
+                if (uploadedCoverFile) {
+                    const formData = new FormData();
+                    formData.append('cover', uploadedCoverFile);
+                    formData.append('bookId', currentBookData.id);
+                    
+                    const coverRes = await fetch(`${API_BASE}/books/${currentBookData.id}/cover`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (coverRes.ok) {
+                        const coverData = await coverRes.json();
+                        coverPath = coverData.coverPath;
+                        updatedData.coverPath = coverPath;
+                    } else {
+                        alert('封面上传失败，但将继续保存其他数据');
+                    }
+                }
+                
+                // 2. 更新书籍元数据
+                const updateRes = await fetch(`${API_BASE}/books/${currentBookData.id}/metadata`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updatedData)
+                });
+                
+                if (!updateRes.ok) {
+                    throw new Error('Failed to update book metadata');
+                }
+                
+                alert('✅ 保存成功！');
+                uploadedCoverFile = null;
+                
+                // 重新加载详情
+                await loadBookDetail(currentBookData.id);
+                
+                // 刷新已打开的列表
+                await refreshOpenBookLists();
+                
+            } catch (e) {
+                console.error('Failed to save book detail:', e);
+                alert('❌ 保存失败: ' + e.message);
+            }
         }
         
         async function loadStats() {
@@ -826,7 +1412,95 @@
             return div.innerHTML;
         }
         
+        // 刷新已打开的书籍列表
+        async function refreshOpenBookLists(specificSourceId = null) {
+            console.log('Refreshing open book lists, specificSourceId:', specificSourceId);
+            
+            // 1. 如果"所有书籍"模态框是打开的，刷新它
+            const allBooksModal = document.getElementById('allBooksModal');
+            if (allBooksModal.classList.contains('active')) {
+                console.log('Refreshing all books modal');
+                await loadAllBooksGrid();
+            }
+            
+            // 2. 如果书籍源管理模态框是打开的，刷新源列表
+            const bookSourcesModal = document.getElementById('bookSourcesModal');
+            if (bookSourcesModal.classList.contains('active')) {
+                console.log('Refreshing book sources modal');
+                await loadSourcesModal();
+            }
+            
+            // 3. 刷新展开的书籍源的书籍列表
+            if (specificSourceId) {
+                const booksDiv = document.getElementById(`books-${specificSourceId}`);
+                if (booksDiv && booksDiv.classList.contains('expanded')) {
+                    console.log('Refreshing expanded book list for source:', specificSourceId);
+                    booksDiv.dataset.loaded = 'false'; // 标记为未加载
+                    await loadSourceBooks(specificSourceId);
+                }
+            } else {
+                // 扫描所有源时，刷新所有展开的书籍列表
+                document.querySelectorAll('.source-books.expanded').forEach(async (booksDiv) => {
+                    const sourceId = booksDiv.id.replace('books-', '');
+                    if (sourceId) {
+                        console.log('Refreshing expanded book list for source:', sourceId);
+                        booksDiv.dataset.loaded = 'false';
+                        await loadSourceBooks(parseInt(sourceId));
+                    }
+                });
+            }
+        }
+        
+        // Scan options modal
+        let pendingScanSourceId = null;
+        let pendingScanAll = false;
+        
+        function showScanOptions(sourceId = null) {
+            console.log('showScanOptions called with sourceId:', sourceId);
+            pendingScanSourceId = sourceId;
+            pendingScanAll = (sourceId === null);
+            document.getElementById('scanOptionsModal').classList.add('active');
+        }
+        
+        function closeScanOptionsModal() {
+            console.log('closeScanOptionsModal called');
+            document.getElementById('scanOptionsModal').classList.remove('active');
+            pendingScanSourceId = null;
+            pendingScanAll = false;
+        }
+        
+        async function executeScan(fullScan) {
+            console.log('executeScan called with fullScan:', fullScan, 'pendingScanAll:', pendingScanAll, 'pendingScanSourceId:', pendingScanSourceId);
+            
+            // 先保存变量，再关闭模态框（因为 close 会重置这些变量）
+            const shouldScanAll = pendingScanAll;
+            const sourceId = pendingScanSourceId;
+            
+            closeScanOptionsModal();
+            
+            if (shouldScanAll) {
+                console.log('Executing scan all with fullScan:', fullScan);
+                await performScanAll(fullScan);
+            } else if (sourceId !== null) {
+                console.log('Executing scan source', sourceId, 'with fullScan:', fullScan);
+                await performScanSource(sourceId, fullScan);
+            } else {
+                console.error('No scan target set!');
+            }
+        }
+        
         async function scanSource(id) {
+            console.log('scanSource called with id:', id);
+            showScanOptions(id);
+        }
+        
+        async function scanAllSources() {
+            console.log('scanAllSources called');
+            showScanOptions(null);
+        }
+        
+        async function performScanSource(id, fullScan) {
+            console.log('performScanSource called with id:', id, 'fullScan:', fullScan);
             if (isScanning) {
                 alert('⏳ 正在扫描中，请等待完成后再试');
                 return;
@@ -837,14 +1511,30 @@
                 updateScanButtons(true);
                 startScanStatusCheck();
                 
-                const res = await fetch(`${API_BASE}/scan/source/${id}`, { method: 'POST' });
+                const scanMode = fullScan ? 'fullScan=true' : 'fullScan=false';
+                const url = `${API_BASE}/scan/source/${id}?${scanMode}`;
+                console.log('Calling scan API:', url);
+                const res = await fetch(url, { method: 'POST' });
                 const result = await res.json();
+                console.log('Scan result:', result);
                 
                 if (result.message && result.message.includes('does not exist')) {
                     alert(`❌ 扫描失败！\n\n${result.message}\n\n提示：\n1. 确认路径是否正确\n2. Docker用户：检查是否已在 docker-compose.yml 中挂载目录\n3. 本地运行：确认目录是否存在且有读取权限`);
                 } else {
-                    alert(`✅ 扫描完成！\n\n发现文件: ${result.found} 个\n成功导入: ${result.imported} 本书籍\n\n${result.message}\n\n💡 提示：元数据（作者、出版社等）正在后台异步提取中`);
+                    const modeText = fullScan ? '强制全量扫描' : '增量扫描';
+                    let message = `✅ ${modeText}完成！\n\n发现文件: ${result.found} 个\n处理书籍: ${result.imported} 本\n${result.message}`;
+                    
+                    if (fullScan) {
+                        message += '\n\n🔄 全量扫描已完成：\n• 已重新提取所有书籍的元数据\n• 已清理文件不存在的书籍记录\n• 元数据正在后台异步更新中';
+                    } else {
+                        message += '\n\n💡 提示：元数据（作者、出版社等）正在后台异步提取中';
+                    }
+                    
+                    alert(message);
                     loadStats();
+                    
+                    // 刷新已打开的书籍列表
+                    refreshOpenBookLists(id);
                 }
             } catch (e) {
                 alert('❌ 扫描失败: ' + e.message);
@@ -855,23 +1545,37 @@
             }
         }
         
-        async function scanAllSources() {
+        async function performScanAll(fullScan) {
             if (isScanning) {
                 alert('⏳ 正在扫描中，请等待完成后再试');
                 return;
             }
             
-            if (!confirm('确定要扫描所有启用的书籍源吗？\n这可能需要一些时间。')) return;
+            const modeText = fullScan ? '强制全量扫描' : '增量扫描';
+            if (!confirm(`确定要${modeText}所有启用的书籍源吗？\n这可能需要一些时间。`)) return;
             
             try {
                 isScanning = true;
                 updateScanButtons(true);
                 startScanStatusCheck();
                 
-                const res = await fetch(`${API_BASE}/scan/all`, { method: 'POST' });
+                const scanMode = fullScan ? 'fullScan=true' : 'fullScan=false';
+                const res = await fetch(`${API_BASE}/scan/all?${scanMode}`, { method: 'POST' });
                 const result = await res.json();
-                alert(`✅ 批量扫描完成！\n\n发现文件: ${result.found} 个\n成功导入: ${result.imported} 本书籍\n\n💡 提示：元数据（作者、出版社等）正在后台异步提取中`);
+                
+                let message = `✅ ${modeText}完成！\n\n发现文件: ${result.found} 个\n处理书籍: ${result.imported} 本\n${result.message}`;
+                
+                if (fullScan) {
+                    message += '\n\n🔄 全量扫描已完成：\n• 已重新提取所有书籍的元数据\n• 已清理文件不存在的书籍记录\n• 元数据正在后台异步更新中';
+                } else {
+                    message += '\n\n💡 提示：元数据（作者、出版社等）正在后台异步提取中';
+                }
+                
+                alert(message);
                 loadStats();
+                
+                // 刷新所有已打开的书籍列表
+                refreshOpenBookLists();
             } catch (e) {
                 alert('❌ 扫描失败: ' + e.message);
             } finally {
@@ -881,7 +1585,7 @@
             }
         }
         
-        // Check scan status periodically
+        // Check scan status periodically (only during active scan)
         async function checkScanStatus() {
             try {
                 const res = await fetch(`${API_BASE}/scan/status`);
@@ -893,6 +1597,7 @@
                 } else if (!status.scanning && isScanning) {
                     isScanning = false;
                     updateScanButtons(false);
+                    stopScanStatusCheck();
                     loadStats(); // Refresh stats when scan completes
                 }
                 
@@ -907,12 +1612,14 @@
         
         function startScanStatusCheck() {
             if (!scanStatusCheckInterval) {
+                console.log('Starting scan status check');
                 scanStatusCheckInterval = setInterval(checkScanStatus, 2000); // Check every 2 seconds
             }
         }
         
         function stopScanStatusCheck() {
             if (scanStatusCheckInterval) {
+                console.log('Stopping scan status check');
                 clearInterval(scanStatusCheckInterval);
                 scanStatusCheckInterval = null;
             }
@@ -1037,6 +1744,18 @@
             }
         });
         
+        document.getElementById('scanOptionsModal').addEventListener('click', (e) => {
+            if (e.target.id === 'scanOptionsModal') {
+                closeScanOptionsModal();
+            }
+        });
+        
+        document.getElementById('bookDetailModal').addEventListener('click', (e) => {
+            if (e.target.id === 'bookDetailModal') {
+                closeBookDetailModal();
+            }
+        });
+        
         // 展开/收起书籍列表
         async function toggleBooks(sourceId) {
             const booksDiv = document.getElementById(`books-${sourceId}`);
@@ -1115,8 +1834,8 @@
         
         // Initialize on page load
         loadStats();
-        checkScanStatus(); // Check initial scan status
-        startScanStatusCheck(); // Start periodic checking
+        
+        // Don't check scan status on page load - only when scan is triggered
         
         // Refresh data periodically
         setInterval(() => { loadStats(); }, 30000);

@@ -37,8 +37,9 @@ class BookScanService(
     
     /**
      * 扫描指定书籍源
+     * @param fullScan true=强制全量扫描(重新导入所有书籍), false=只扫描新增书籍(跳过已存在的书籍)
      */
-    fun scanBookSource(sourceId: Int): ScanResult {
+    fun scanBookSource(sourceId: Int, fullScan: Boolean = false): ScanResult {
         // Check if already scanning this source
         if (sourceScanStatus.containsKey(sourceId)) {
             logger.warn("Source $sourceId is already being scanned")
@@ -61,7 +62,7 @@ class BookScanService(
         scanningInProgress.set(true)
         
         return try {
-            val result = scanDirectory(source.path, source.id)
+            val result = scanDirectory(source.path, source.id, fullScan)
             result
         } finally {
             // Clear scanning status
@@ -74,8 +75,9 @@ class BookScanService(
     
     /**
      * 扫描所有启用的书籍源
+     * @param fullScan true=强制全量扫描(重新导入所有书籍), false=只扫描新增书籍(跳过已存在的书籍)
      */
-    fun scanAllSources(): ScanResult {
+    fun scanAllSources(fullScan: Boolean = false): ScanResult {
         if (scanningInProgress.get()) {
             logger.warn("A scan is already in progress")
             return ScanResult(0, 0, "A scan is already in progress")
@@ -92,7 +94,7 @@ class BookScanService(
             
             sources.forEach { source ->
                 sourceScanStatus[source.id] = ScanStatus(source.id, true, 0, 0)
-                val result = scanDirectory(source.path, source.id)
+                val result = scanDirectory(source.path, source.id, fullScan)
                 totalFound += result.found
                 totalImported += result.imported
                 logger.info("Scanned ${source.name}: found ${result.found}, imported ${result.imported}")
@@ -108,8 +110,9 @@ class BookScanService(
     
     /**
      * 扫描目录并导入书籍
+     * @param fullScan true=强制全量扫描(重新提取元数据+清理不存在的文件), false=只导入新书籍
      */
-    private fun scanDirectory(path: String, sourceId: Int? = null): ScanResult {
+    private fun scanDirectory(path: String, sourceId: Int? = null, fullScan: Boolean = false): ScanResult {
         val directory = File(path)
         
         if (!directory.exists()) {
@@ -124,6 +127,15 @@ class BookScanService(
         
         var found = 0
         var imported = 0
+        var deleted = 0
+        
+        // 全量扫描：获取该源的所有现有书籍，用于后续清理
+        val existingBooks = if (fullScan && sourceId != null) {
+            bookRepository.findBySourceId(sourceId)
+        } else {
+            emptyList()
+        }
+        val scannedFilePaths = mutableSetOf<String>()
         
         try {
             directory.walkTopDown()
@@ -134,52 +146,86 @@ class BookScanService(
                 }
                 .forEach { file ->
                     found++
+                    val filePath = file.absolutePath
+                    scannedFilePaths.add(filePath)
+                    
                     // Update scan status
                     sourceId?.let { 
                         sourceScanStatus[it] = ScanStatus(it, true, found, imported)
                     }
                     
                     try {
-                        val book = importBook(file, sourceId)
+                        val book = importBook(file, sourceId, fullScan)
                         if (book != null) {
                             imported++
                             // Update scan status
                             sourceId?.let { 
                                 sourceScanStatus[it] = ScanStatus(it, true, found, imported)
                             }
-                            logger.debug("Imported: ${file.name}")
+                            logger.debug("Processed: ${file.name}")
                         }
                     } catch (e: Exception) {
                         logger.error("Failed to import ${file.absolutePath}", e)
                     }
                 }
+            
+            // 全量扫描：删除文件已不存在的书籍
+            if (fullScan && sourceId != null) {
+                existingBooks.forEach { book ->
+                    if (book.filePath !in scannedFilePaths) {
+                        logger.info("Deleting book with missing file: ${book.title} (${book.filePath})")
+                        bookRepository.deleteById(book.id)
+                        deleted++
+                    }
+                }
+                if (deleted > 0) {
+                    logger.info("Deleted $deleted books with missing files")
+                }
+            }
         } catch (e: Exception) {
             logger.error("Error scanning directory: $path", e)
             return ScanResult(found, imported, "Error: ${e.message}")
         }
         
-        return ScanResult(found, imported, "Success")
+        val message = if (deleted > 0) {
+            "Success (deleted $deleted missing files)"
+        } else {
+            "Success"
+        }
+        return ScanResult(found, imported, message)
     }
     
     /**
      * 导入单个书籍文件
+     * @param fullScan true=强制重新提取元数据, false=跳过已存在的书籍
      */
-    private fun importBook(file: File, sourceId: Int? = null): Book? {
+    private fun importBook(file: File, sourceId: Int? = null, fullScan: Boolean = false): Book? {
         val filePath = file.absolutePath
         
         // 检查是否已存在
         val existing = bookRepository.findByFilePath(filePath)
         if (existing != null) {
-            // 如果已存在但没有作者信息，尝试提取元数据
-            if (existing.author == null || existing.author.isBlank()) {
-                logger.info("Book already exists but missing metadata, triggering extraction for: ${file.name}")
+            if (fullScan) {
+                // 全量扫描模式：强制重新提取元数据
+                logger.info("Full scan mode: Re-extracting metadata for existing book: ${file.name}")
                 try {
                     metadataService.extractMetadataAsync(existing.id, filePath)
                 } catch (e: Exception) {
                     logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
                 }
+                return existing // 返回已存在的书籍，表示已处理
+            } else {
+                // 增量扫描模式：只对缺失元数据的书籍提取
+                if (existing.author == null || existing.author.isBlank()) {
+                    logger.info("Book already exists but missing metadata, triggering extraction for: ${file.name}")
+                    try {
+                        metadataService.extractMetadataAsync(existing.id, filePath)
+                    } catch (e: Exception) {
+                        logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
+                    }
+                }
+                return null // 已存在，跳过
             }
-            return null // 已存在，跳过导入但可能触发元数据提取
         }
         
         // 提取基本信息

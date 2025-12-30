@@ -83,11 +83,21 @@ class BookRepository {
         isbn = row[Books.isbn],
         publisher = row[Books.publisher],
         description = row[Books.description],
-        sourceId = row[Books.sourceId]?.value
+        sourceId = row[Books.sourceId]?.value,
+        createdAt = row[Books.createdAt],
+        updatedAt = row[Books.updatedAt]
     )
     
     fun deleteBySourceId(sourceId: Int): Int = transaction {
         Books.deleteWhere { Books.sourceId eq sourceId }
+    }
+    
+    fun deleteById(id: Int): Int = transaction {
+        Books.deleteWhere { Books.id eq id }
+    }
+    
+    fun deleteByFilePath(filePath: String): Int = transaction {
+        Books.deleteWhere { Books.filePath eq filePath }
     }
     
     fun deleteAll(): Int = transaction {

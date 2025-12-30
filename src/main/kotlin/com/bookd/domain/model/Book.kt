@@ -1,5 +1,6 @@
 package com.bookd.domain.model
 
+import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -14,5 +15,7 @@ data class Book(
     val isbn: String? = null,
     val publisher: String? = null,
     val description: String? = null,
-    val sourceId: Int? = null
+    val sourceId: Int? = null,
+    val createdAt: LocalDateTime? = null,
+    val updatedAt: LocalDateTime? = null
 )
