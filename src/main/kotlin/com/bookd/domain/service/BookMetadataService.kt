@@ -98,23 +98,74 @@ class BookMetadataService(
                     ?: metadata.get("dc:subject")
                     ?: metadata.get("Description")
                 
-                // Fallback: Parse EPUB XML directly if Tika failed
-                if (filePath.endsWith(".epub", ignoreCase = true) && author == null && title == null) {
-                    logger.info("Tika failed to extract EPUB metadata, parsing XML directly")
-                    val epubMetadata = parseEpubMetadataDirectly(file)
-                    if (epubMetadata != null) {
-                        author = author ?: epubMetadata.author
-                        title = title ?: epubMetadata.title
-                        publisher = publisher ?: epubMetadata.publisher
-                        description = description ?: epubMetadata.description
-                        logger.info("Successfully extracted from EPUB XML - author: $author, title: $title")
+                // If no metadata found, try to extract from filename
+                if (author == null && title == null) {
+                    logger.info("No embedded metadata, attempting to parse from filename: ${file.name}")
+                    val filenameMetadata = parseMetadataFromFilename(file.nameWithoutExtension)
+                    author = author ?: filenameMetadata.author
+                    title = title ?: filenameMetadata.title
+                    logger.info("Parsed from filename - title: $title, author: $author")
+                }
+                
+                // Fallback: Parse specific formats directly if Tika failed
+                if (author == null && title == null) {
+                    val format = filePath.substringAfterLast('.', "").lowercase()
+                    logger.info("Tika failed to extract metadata for $format, trying format-specific parser")
+                    
+                    when (format) {
+                        "epub" -> {
+                            val epubMetadata = parseEpubMetadataDirectly(file)
+                            if (epubMetadata != null) {
+                                author = author ?: epubMetadata.author
+                                title = title ?: epubMetadata.title
+                                publisher = publisher ?: epubMetadata.publisher
+                                description = description ?: epubMetadata.description
+                                logger.info("Successfully extracted from EPUB XML - author: $author, title: $title")
+                            }
+                        }
+                        "mobi" -> {
+                            // MOBI metadata extraction
+                            val mobiMetadata = parseMobiMetadata(file)
+                            if (mobiMetadata != null) {
+                                author = author ?: mobiMetadata.author
+                                title = title ?: mobiMetadata.title
+                                publisher = publisher ?: mobiMetadata.publisher
+                                description = description ?: mobiMetadata.description
+                                logger.info("Successfully extracted from MOBI - author: $author, title: $title")
+                            }
+                        }
+                        "azw3", "azw" -> {
+                            // AZW3 is similar to MOBI
+                            val azw3Metadata = parseMobiMetadata(file)
+                            if (azw3Metadata != null) {
+                                author = author ?: azw3Metadata.author
+                                title = title ?: azw3Metadata.title
+                                publisher = publisher ?: azw3Metadata.publisher
+                                description = description ?: azw3Metadata.description
+                                logger.info("Successfully extracted from AZW3 - author: $author, title: $title")
+                            }
+                        }
+                        "pdf" -> {
+                            // PDF metadata - Tika usually works well, but add fallback
+                            val pdfMetadata = parsePdfMetadata(file)
+                            if (pdfMetadata != null) {
+                                author = author ?: pdfMetadata.author
+                                title = title ?: pdfMetadata.title
+                                publisher = publisher ?: pdfMetadata.publisher
+                                description = description ?: pdfMetadata.description
+                                logger.info("Successfully extracted from PDF - author: $author, title: $title")
+                            }
+                        }
                     }
                 }
                 
-                // Extract cover image if available (for EPUB)
+                // Extract cover image based on format
                 var coverPath: String? = null
-                if (filePath.endsWith(".epub", ignoreCase = true)) {
-                    coverPath = extractAndSaveEpubCover(file, bookId)
+                val format = filePath.substringAfterLast('.', "").lowercase()
+                when (format) {
+                    "epub" -> coverPath = extractAndSaveEpubCover(file, bookId)
+                    "mobi", "azw3", "azw" -> coverPath = extractAndSaveMobiCover(file, bookId)
+                    "pdf" -> coverPath = extractAndSavePdfCover(file, bookId)
                 }
                 
                 // If no cover extracted, generate a text-based cover
@@ -313,7 +364,161 @@ class BookMetadataService(
         scope.cancel()
         metadataDispatcher.close()
     }
+    
+    /**
+     * Parse MOBI/AZW3 metadata using Tika with specific configuration
+     */
+    private fun parseMobiMetadata(file: File): EpubMetadata? {
+        try {
+            val metadata = Metadata()
+            val handler = BodyContentHandler(-1) // No limit for MOBI
+            
+            FileInputStream(file).use { stream ->
+                parser.parse(stream, handler, metadata)
+            }
+            
+            // MOBI specific metadata keys
+            val author = metadata.get("Author") 
+                ?: metadata.get("creator")
+                ?: metadata.get("dc:creator")
+            
+            val title = metadata.get("title") 
+                ?: metadata.get("dc:title")
+            
+            val publisher = metadata.get("Publisher")
+                ?: metadata.get("publisher")
+                ?: metadata.get("dc:publisher")
+            
+            val description = metadata.get("description")
+                ?: metadata.get("dc:description")
+                ?: metadata.get("subject")
+            
+            logger.info("MOBI/AZW3 parsed - title: $title, author: $author")
+            
+            if (title != null || author != null) {
+                return EpubMetadata(title, author, publisher, description)
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to parse MOBI/AZW3 metadata: ${e.message}")
+        }
+        return null
+    }
+    
+    /**
+     * Parse PDF metadata
+     */
+    private fun parsePdfMetadata(file: File): EpubMetadata? {
+        try {
+            val metadata = Metadata()
+            val handler = BodyContentHandler(-1)
+            
+            FileInputStream(file).use { stream ->
+                parser.parse(stream, handler, metadata)
+            }
+            
+            // PDF specific metadata keys
+            val author = metadata.get("Author")
+                ?: metadata.get("pdf:docinfo:author")
+                ?: metadata.get("creator")
+                ?: metadata.get("dc:creator")
+            
+            val title = metadata.get("title")
+                ?: metadata.get("pdf:docinfo:title")
+                ?: metadata.get("dc:title")
+            
+            val publisher = metadata.get("publisher")
+                ?: metadata.get("dc:publisher")
+            
+            val description = metadata.get("subject")
+                ?: metadata.get("pdf:docinfo:subject")
+                ?: metadata.get("dc:subject")
+                ?: metadata.get("description")
+            
+            logger.info("PDF parsed - title: $title, author: $author")
+            
+            if (title != null || author != null) {
+                return EpubMetadata(title, author, publisher, description)
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to parse PDF metadata: ${e.message}")
+        }
+        return null
+    }
+    
+    /**
+     * Extract cover from MOBI/AZW3 (not commonly available, generate instead)
+     */
+    private fun extractAndSaveMobiCover(file: File, bookId: Int): String? {
+        // MOBI/AZW3 cover extraction is complex and not well supported
+        // Most MOBI files don't have easily extractable covers
+        logger.debug("MOBI/AZW3 cover extraction not implemented, will use generated cover")
+        return null
+    }
+    
+    /**
+     * Extract cover from PDF (first page as thumbnail)
+     */
+    private fun extractAndSavePdfCover(file: File, bookId: Int): String? {
+        // PDF cover extraction would require PDFBox or similar library
+        // For now, return null to use generated cover
+        logger.debug("PDF cover extraction not implemented, will use generated cover")
+        return null
+    }
+    
+    /**
+     * Parse metadata from filename
+     * Common patterns:
+     * - "书名 (作者).ext"
+     * - "书名 - 作者.ext"
+     * - "书名（作者）.ext"
+     * - "作者 - 书名.ext"
+     */
+    private fun parseMetadataFromFilename(filename: String): FilenameMetadata {
+        var title: String? = null
+        var author: String? = null
+        
+        // Try pattern: "书名 (作者)" or "书名（作者）"
+        val pattern1 = Regex("""^(.+?)\s*[（(](.+?)[）)].*$""")
+        val match1 = pattern1.find(filename)
+        if (match1 != null) {
+            title = match1.groupValues[1].trim()
+            author = match1.groupValues[2].trim()
+            
+            // Remove common suffixes from author
+            author = author.replace(Regex("""\s*\(.*?\).*$"""), "")
+                .replace(Regex("""\s*（.*?）.*$"""), "")
+                .replace(Regex("""\s*(Z-Library|epub|mobi|pdf).*$""", RegexOption.IGNORE_CASE), "")
+                .trim()
+            
+            // Clean up title
+            title = title.replace(Regex("""\s*[:：]\s*.*$"""), "").trim()
+        }
+        
+        // If pattern failed or author looks suspicious (too long), try another pattern
+        if (author != null && author.length > 50) {
+            author = null
+            title = filename.trim()
+        }
+        
+        // Fallback: use whole filename as title
+        if (title == null) {
+            title = filename
+                .replace(Regex("""\s*\(.*?\)"""), "")
+                .replace(Regex("""\s*（.*?）"""), "")
+                .trim()
+        }
+        
+        return FilenameMetadata(title, author)
+    }
 }
+
+/**
+ * Data class to hold filename-parsed metadata
+ */
+data class FilenameMetadata(
+    val title: String?,
+    val author: String?
+)
 
 /**
  * Data class to hold EPUB metadata
