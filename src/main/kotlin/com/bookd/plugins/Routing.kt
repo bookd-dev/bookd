@@ -24,5 +24,6 @@ fun Application.configureRouting() {
         tagRoutes()
         fileSystemRoutes()
         webRoutes()
+        readingRoutes()
     }
 }

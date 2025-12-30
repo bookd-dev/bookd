@@ -1,308 +1,392 @@
-# 📚 Bookd - 电子书管理系统
+# 📚 Bookd
 
-基于 Kotlin + Ktor 的现代化电子书管理系统，专为 NAS 环境设计。
+基于 Kotlin + Ktor 构建的现代化电子书管理系统，专为 NAS 和私有云环境设计，支持跨平台阅读进度同步。
 
 ## ✨ 功能特性
 
-### 📖 核心功能
+### 📖 书籍管理
 - **智能扫描** - 自动扫描导入电子书（EPUB, PDF, TXT, MOBI, AZW3）
 - **多源管理** - 支持配置多个书籍目录，独立控制启用/禁用
 - **元数据提取** - 自动读取书籍标题、作者、封面等信息
-- **文件浏览器** - 可视化浏览 NAS 目录，快速添加书籍源
+- **封面管理** - 支持上传自定义封面或自动生成封面
+- **标签系统** - 多标签分类管理，支持标签合并
+
+### 📱 阅读功能
+- **阅读进度同步** - 跨设备同步阅读位置（支持 EPUB CFI 定位）
+- **书签管理** - 添加、编辑、删除书签，支持备注
+- **阅读器设置** - 字体、字号、主题、行距等个性化配置
+- **阅读历史** - 记录最近阅读书籍
 
 ### 👥 用户系统
 - **三种角色** - 管理员、普通用户、访客
-- **邀请码机制** - 管理员生成邀请码供用户注册
-- **权限分离** - 不同角色访问不同功能模块
+- **邀请码注册** - 管理员生成邀请码供用户注册
 - **安全认证** - BCrypt 密码加密，Token 会话管理
 
 ### 🎨 管理界面
-- **现代化 UI** - 响应式设计，支持移动端
-- **实时统计** - 书籍总数、书籍源数量
-- **批量操作** - 扫描所有书籍源、批量导入
+- **响应式 Web UI** - 支持桌面和移动端
+- **文件浏览器** - 可视化浏览 NAS 目录
 - **用户管理** - 查看用户列表、管理邀请码
+
+## 🛠️ 技术栈
+
+| 组件 | 技术 |
+|------|------|
+| 后端框架 | Kotlin 2.x + Ktor 3.x |
+| 数据库 | PostgreSQL 16 + Exposed ORM |
+| 依赖注入 | Koin |
+| 容器化 | Docker + Docker Compose |
+| 运行时 | Eclipse Temurin JRE 21 |
+
+## 📄 支持格式
+
+| 格式 | 扩展名 | 元数据提取 |
+|------|--------|------------|
+| EPUB | .epub | ✅ 完整支持 |
+| PDF | .pdf | ✅ 完整支持 |
+| TXT | .txt | ⚠️ 基础支持 |
+| MOBI | .mobi | ⚠️ 基础支持 |
+| AZW3 | .azw3 | ⚠️ 基础支持 |
+
+---
 
 ## 🚀 快速开始
 
 ### 使用部署脚本（推荐）
 
 ```bash
-# 运行交互式部署工具
 ./deploy.sh
-
-# 选择操作：
-# 1) 本地部署（首次使用）
-# 2) 更新本地容器（代码修改后）
-# 3) 构建并推送到 Docker Hub
-# 4) 清理多余镜像
-# 5) 查看运行状态
-# 6) 查看日志
 ```
+
+交互式菜单选项：
+1. 本地部署（首次使用）
+2. 更新本地容器
+3. 构建并推送到 Docker Hub
+4. 清理多余镜像
+5. 查看运行状态
+6. 查看日志
 
 ### 手动部署
 
 ```bash
-# 1. 构建项目
+# 构建项目
 ./gradlew clean build -x test
 
-# 2. 构建镜像
+# 构建镜像并启动
 docker build -t bookd:local .
-
-# 3. 启动服务
 docker-compose up -d
-
-# 4. 查看日志
-docker-compose logs -f bookd-server
 ```
 
-## 🔑 首次设置
+### 首次设置
 
-首次部署后，访问系统会自动跳转到设置页面：
+1. 访问 `http://localhost:7919`
+2. 自动跳转到 `/setup` 创建管理员账号
+3. 完成后登录系统
 
-1. 访问 http://localhost:7919
-2. 自动跳转到 `/setup` 设置页面
-3. 创建您的管理员账号
-4. 完成后跳转到登录页面
+---
 
-> 💡 只有在没有任何管理员账号时才会显示设置页面
+## 🐳 NAS 部署指南
 
-## 📍 访问地址
+### 群晖 DSM 部署
 
-- 🔐 **登录页面**: http://localhost:7919/login
-- 🎨 **管理后台**: http://localhost:7919/admin
-- 📚 **书籍 API**: http://localhost:7919/api/books
-- ❤️ **健康检查**: http://localhost:7919/api/health
+#### 方式一：Docker Compose（推荐）
 
-## 🛠️ 技术栈
+1. **安装 Container Manager**（DSM 7.2+）或 Docker 套件
 
-- **后端**: Kotlin 2.2.21 + Ktor 3.3.2
-- **数据库**: PostgreSQL 16 + Exposed ORM
-- **依赖注入**: Koin
-- **密码加密**: BCrypt
-- **容器化**: Docker + Docker Compose
+2. **创建项目目录**
+   ```bash
+   mkdir -p /volume1/docker/bookd
+   cd /volume1/docker/bookd
+   ```
 
-## ⚙️ 配置说明
+3. **创建 docker-compose.yml**
+   ```yaml
+   services:
+     postgres:
+       image: postgres:16-alpine
+       container_name: bookd-postgres
+       environment:
+         POSTGRES_DB: bookd
+         POSTGRES_USER: bookd
+         POSTGRES_PASSWORD: your_secure_password
+       volumes:
+         - ./postgres_data:/var/lib/postgresql/data
+       restart: unless-stopped
+
+     bookd-server:
+       image: yourusername/bookd:latest  # 或使用本地构建的镜像
+       container_name: bookd-server
+       ports:
+         - "7919:7919"
+       environment:
+         PORT: "7919"
+         DATABASE_URL: "jdbc:postgresql://postgres:5432/bookd"
+         DATABASE_USER: "bookd"
+         DATABASE_PASSWORD: "your_secure_password"
+       volumes:
+         - ./covers:/app/covers
+         - /volume1:/volume1:ro          # 挂载书籍目录（只读）
+         - /volume2:/volume2:ro          # 可选：挂载其他卷
+       depends_on:
+         - postgres
+       restart: unless-stopped
+   ```
+
+4. **启动服务**
+   ```bash
+   docker-compose up -d
+   ```
+
+5. **配置反向代理**（可选）
+   - 在 DSM 控制面板 → 登录门户 → 高级 → 反向代理
+   - 添加规则：外部 HTTPS → 内部 http://localhost:7919
+
+#### 方式二：离线镜像部署
+
+```bash
+# 在开发机上
+docker save bookd:local | gzip > bookd.tar.gz
+scp bookd.tar.gz admin@nas-ip:/volume1/docker/
+
+# 在 NAS 上
+cd /volume1/docker
+gunzip bookd.tar.gz
+docker load -i bookd.tar
+```
+
+### 威联通 QTS 部署
+
+1. **安装 Container Station**
+
+2. **创建项目目录**
+   ```bash
+   mkdir -p /share/Container/bookd
+   ```
+
+3. **修改 docker-compose.yml 挂载路径**
+   ```yaml
+   volumes:
+     - /share/Multimedia:/share/Multimedia:ro
+     - /share/Books:/share/Books:ro
+   ```
+
+### UNRAID 部署
+
+1. 在 Apps 中搜索 PostgreSQL 并安装
+2. 创建 bookd 容器，配置：
+   - 镜像：`yourusername/bookd:latest`
+   - 端口：`7919:7919`
+   - 环境变量：DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD
+   - 路径映射：`/mnt/user/books:/books:ro`
+
+---
+
+## 🏗️ 多架构镜像构建
+
+### 构建 AMD64/ARM64 双架构镜像
+
+#### 前置条件
+
+```bash
+# 创建并使用 buildx 构建器
+docker buildx create --name multiarch --use
+docker buildx inspect --bootstrap
+```
+
+#### 构建并推送
+
+```bash
+# 构建项目
+./gradlew clean build -x test
+
+# 构建多架构镜像并推送到 Docker Hub
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t yourusername/bookd:latest \
+  -t yourusername/bookd:1.0.0 \
+  --push \
+  .
+```
+
+#### 仅构建本地架构测试
+
+```bash
+# 构建当前架构镜像
+docker buildx build --load -t bookd:local .
+```
+
+### 为不同 NAS 构建
+
+| NAS 型号 | 架构 | 构建参数 |
+|----------|------|----------|
+| 群晖 x86 (DS920+, DS1621+) | amd64 | `--platform linux/amd64` |
+| 群晖 ARM (DS220j, DS420j) | arm64 | `--platform linux/arm64` |
+| 威联通 x86 | amd64 | `--platform linux/amd64` |
+| 威联通 ARM | arm64 | `--platform linux/arm64` |
+
+### 验证镜像架构
+
+```bash
+docker manifest inspect yourusername/bookd:latest
+```
+
+---
+
+## 📡 API 参考
+
+### 认证 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/auth/has-admin` | 检查是否存在管理员 |
+| POST | `/api/auth/setup` | 首次设置创建管理员 |
+| POST | `/api/auth/login` | 用户登录 |
+| POST | `/api/auth/logout` | 用户登出 |
+| GET | `/api/auth/me` | 获取当前用户信息 |
+| POST | `/api/auth/register/guest` | 访客注册 |
+| POST | `/api/auth/register/user` | 邀请码注册 |
+
+### 用户管理 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/users` | 获取用户列表（管理员） |
+| DELETE | `/api/users/{id}` | 删除用户 |
+| POST | `/api/users/invite-tokens` | 创建邀请码 |
+| GET | `/api/users/invite-tokens` | 获取邀请码列表 |
+
+### 书籍 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/books` | 获取书籍列表 |
+| GET | `/api/books/{id}` | 获取书籍详情 |
+| GET | `/api/books/count` | 获取书籍总数 |
+| PUT | `/api/books/{id}/metadata` | 更新书籍元数据 |
+| POST | `/api/books/{id}/cover` | 上传书籍封面 |
+| POST | `/api/books/{id}/generate-cover` | 生成书籍封面 |
+
+### 书籍源 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/sources` | 获取书籍源列表 |
+| POST | `/api/sources` | 添加书籍源 |
+| DELETE | `/api/sources/{id}` | 删除书籍源 |
+| POST | `/api/sources/{id}/toggle` | 切换启用状态 |
+
+### 扫描 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/scan/status` | 获取扫描状态 |
+| POST | `/api/scan/all` | 扫描所有书籍源 |
+| POST | `/api/scan/source/{id}` | 扫描指定书籍源 |
+
+### 标签 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/tags` | 获取所有标签 |
+| POST | `/api/tags/merge` | 合并标签 |
+| GET | `/api/tags/book/{bookId}` | 获取书籍标签 |
+| POST | `/api/tags/book/{bookId}` | 添加书籍标签 |
+| DELETE | `/api/tags/book/{bookId}/{tagId}` | 移除书籍标签 |
+| DELETE | `/api/tags/{tagId}` | 删除标签 |
+| GET | `/api/tags/{tagId}/books` | 获取标签下的书籍 |
+| POST | `/api/tags/auto-tag/book/{bookId}` | 自动标签单本书 |
+| POST | `/api/tags/auto-tag/all` | 自动标签所有书籍 |
+
+### 阅读进度 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/books/{bookId}/progress` | 获取阅读进度 |
+| PUT | `/api/books/{bookId}/progress` | 更新阅读进度 |
+| GET | `/api/user/reading-history` | 获取阅读历史 |
+
+### 书签 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/books/{bookId}/bookmarks` | 获取书籍书签 |
+| POST | `/api/books/{bookId}/bookmarks` | 添加书签 |
+| PUT | `/api/bookmarks/{id}` | 更新书签 |
+| DELETE | `/api/bookmarks/{id}` | 删除书签 |
+| GET | `/api/user/bookmarks` | 获取用户所有书签 |
+
+### 阅读器设置 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/user/reader-settings` | 获取阅读器设置 |
+| PUT | `/api/user/reader-settings` | 更新阅读器设置 |
+| PATCH | `/api/user/reader-settings` | 部分更新设置 |
+
+### 文件系统 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/filesystem/list` | 列出目录内容 |
+| GET | `/api/filesystem/validate` | 验证路径是否有效 |
+| GET | `/api/filesystem/roots` | 获取根目录列表 |
+
+### 健康检查
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/health` | 健康检查 |
+| GET | `/api/health` | API 健康检查 |
+
+---
+
+## ⚙️ 配置参考
 
 ### 环境变量
 
-在 `docker-compose.yml` 中配置：
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | 7919 | 服务端口 |
+| `DATABASE_URL` | jdbc:postgresql://localhost:5432/bookd | 数据库连接 |
+| `DATABASE_USER` | bookd | 数据库用户 |
+| `DATABASE_PASSWORD` | bookd | 数据库密码 |
+| `TZ` | Asia/Shanghai | 时区 |
 
-```yaml
-environment:
-  PORT: "7919"                    # 服务端口
-  DATABASE_URL: "jdbc:..."        # 数据库连接地址
-  DATABASE_USER: "bookd"          # 数据库用户
-  DATABASE_PASSWORD: "bookd"      # 数据库密码
-```
-
-### NAS 目录挂载
-
-编辑 `docker-compose.yml` 中的 volumes 部分：
+### 目录挂载建议
 
 ```yaml
 volumes:
-  # 群晖 NAS
-  - /volume1:/volume1:ro
+  # 数据持久化（必须）
+  - ./covers:/app/covers
   
-  # 威联通 NAS
-  - /share:/share:ro
-  
-  # Mac/Linux 开发环境
-  - /Users:/Users:ro
+  # 书籍目录（只读挂载）
+  - /your/books/path:/books:ro
 ```
 
-> 💡 挂载整个 NAS 目录后，在 Web 界面添加书籍源时选择具体子目录
-
-### 端口修改
-
-如果 7919 端口被占用：
-
-```yaml
-ports:
-  - "8080:7919"  # 外部8080映射到容器7919
-```
-
-## 📖 使用指南
-
-### 1. 登录系统
-
-访问 http://localhost:7919/login 使用默认管理员账号登录
-
-### 2. 添加书籍源
-
-1. 进入管理后台 "📚 书籍管理" 标签
-2. 输入源名称（如：个人收藏、技术书籍）
-3. 点击 "📂 浏览文件夹" 选择 NAS 目录
-4. 点击 "➕ 添加书籍源"
-
-### 3. 扫描导入书籍
-
-- **单个源扫描**: 点击书籍源右侧的 "🔍 扫描" 按钮
-- **批量扫描**: 点击 "🔍 扫描所有书籍源" 按钮
-
-### 4. 用户管理
-
-1. 切换到 "👥 用户管理" 标签
-2. 生成邀请码供他人注册
-3. 查看用户列表，删除不需要的用户
-
-## 🐳 Docker 部署
-
-### 本地开发
-
-```bash
-# 启动
-./deploy.sh  # 选择 1
-
-# 更新代码后重新部署
-./deploy.sh  # 选择 2
-```
-
-### NAS 部署
-
-#### 方式一：Docker Hub
-
-```bash
-# 开发机构建并推送
-./deploy.sh  # 选择 3
-
-# NAS 上拉取
-docker pull yourusername/bookd:latest
-docker-compose up -d
-```
-
-#### 方式二：离线部署
-
-```bash
-# 开发机导出
-docker save bookd:local -o bookd.tar
-gzip bookd.tar
-
-# 传输到 NAS
-scp bookd.tar.gz admin@nas-ip:/volume1/docker/
-
-# NAS 导入
-gunzip bookd.tar.gz
-docker load -i bookd.tar
-docker-compose up -d
-```
-
-## 📝 常用命令
-
-```bash
-# 查看运行状态
-docker-compose ps
-
-# 查看实时日志
-docker-compose logs -f bookd-server
-
-# 重启服务
-docker-compose restart
-
-# 停止服务
-docker-compose down
-
-# 进入容器调试
-docker exec -it bookd-server sh
-
-# 清理镜像
-./deploy.sh  # 选择 4
-```
-
-## 🎯 API 示例
-
-### 认证相关
-
-```bash
-# 登录
-curl -X POST http://localhost:7919/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"zuiren233","password":"Sy5201314"}'
-
-# 获取当前用户信息
-curl http://localhost:7919/api/auth/me \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### 书籍管理
-
-```bash
-# 添加书籍源
-curl -X POST http://localhost:7919/api/sources \
-  -H "Content-Type: application/json" \
-  -d '{"name":"我的书库","path":"/volume1/books"}'
-
-# 扫描书籍源
-curl -X POST http://localhost:7919/api/scan/source/1
-
-# 查看所有书籍
-curl http://localhost:7919/api/books?page=1&size=20
-```
+---
 
 ## 🔧 故障排查
 
-### 容器无法启动
+### 常见问题
 
+**容器无法启动**
 ```bash
-# 查看日志
 docker-compose logs bookd-server
-
-# 检查端口占用
-lsof -i :7919
-
-# 重新构建
-./deploy.sh  # 选择 2
 ```
 
-### 数据库连接失败
-
+**数据库连接失败**
 ```bash
-# 检查数据库状态
-docker-compose ps postgres
-
-# 查看数据库日志
-docker-compose logs postgres
-
-# 测试数据库连接
 docker exec -it bookd-postgres psql -U bookd -d bookd -c "SELECT 1;"
 ```
 
-### 扫描不到书籍
+**扫描不到书籍**
+1. 检查目录挂载是否正确
+2. 确认容器内可访问书籍目录：`docker exec -it bookd-server ls /books`
+3. 检查文件格式是否支持
 
-1. 检查 docker-compose.yml 中的目录挂载是否正确
-2. 确认容器内能访问到书籍目录
-3. 查看书籍文件格式是否支持（EPUB/PDF/TXT/MOBI/AZW3）
+**新增字段报错**
+- 确保使用 `SchemaUtils.createMissingTablesAndColumns` 自动迁移
 
-## 📊 项目状态
-
-### ✅ 已完成
-- 书籍源管理（CRUD、启用/禁用）
-- 书籍扫描导入（多格式支持）
-- 用户认证系统（三种角色）
-- Web 管理界面
-- Docker 容器化部署
-- 文件浏览器
-
-### 🚧 计划中
-- Compose 跨平台阅读器
-- EPUB 在线阅读
-- 阅读进度同步
-- 书籍封面管理
-- 高级元数据编辑
-
-## 📄 支持格式
-
-| 格式 | 扩展名 | 元数据提取 | 状态 |
-|------|--------|------------|------|
-| EPUB | .epub | ✅ 支持 | ✅ 完成 |
-| PDF | .pdf | ✅ 支持 | ✅ 完成 |
-| TXT | .txt | ⚠️ 有限 | ✅ 完成 |
-| MOBI | .mobi | ⚠️ 有限 | ✅ 完成 |
-| AZW3 | .azw3 | ⚠️ 有限 | ✅ 完成 |
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
+---
 
 ## 📄 License
 
@@ -310,4 +394,4 @@ MIT License
 
 ---
 
-**版本**: 1.0.0 | **更新**: 2025-12-29
+**版本**: 0.1.1 | **更新**: 2025-12-30
