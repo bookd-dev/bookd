@@ -243,6 +243,38 @@
             font-weight: 600;
         }
         
+        /* Book Source Filter Styles */
+        .book-source-filter {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f5f7fa;
+            border-radius: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .source-filter-btn {
+            padding: 8px 16px;
+            background: white;
+            border: 2px solid #e1e8ed;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        .source-filter-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+        .source-filter-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+        
         /* Book Detail Modal Styles */
         .book-detail-container {
             display: flex;
@@ -436,6 +468,134 @@
             background: #5a6268;
         }
         
+        /* Tag Styles */
+        .tag-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin: 2px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tag-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+        }
+        .tag-badge.removable {
+            padding-right: 6px;
+        }
+        .tag-badge .remove-tag {
+            margin-left: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .tag-badge .remove-tag:hover {
+            opacity: 1;
+        }
+        .available-tag-item {
+            display: inline-block;
+            padding: 6px 12px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .available-tag-item:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+        }
+        .available-tag-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: #ccc;
+            color: #999;
+        }
+        .available-tag-item.disabled:hover {
+            background: white;
+            color: #999;
+            transform: none;
+            box-shadow: none;
+        }
+        .tag-input-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .tag-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .tag-list {
+            list-style: none;
+            padding: 0;
+        }
+        .tag-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #fafbfc;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .tag-list-item:hover {
+            background: #f5f7fa;
+        }
+        .tag-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .tag-count {
+            color: #666;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        .tag-checkbox-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tag-checkbox-item:hover {
+            background: #f5f7fa;
+            border-color: #667eea;
+        }
+        .tag-checkbox-item input[type="checkbox"] {
+            margin-right: 12px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .tag-checkbox-label {
+            flex: 1;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
         @media (max-width: 768px) {
             .source-item { flex-direction: column; gap: 16px; align-items: flex-start; }
             .source-actions { width: 100%; justify-content: flex-end; }
@@ -457,6 +617,7 @@
         
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('books')">📚 书籍管理</button>
+            <button class="nav-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
             <button class="nav-tab" onclick="switchTab('users')">👥 用户管理</button>
         </div>
         
@@ -496,6 +657,26 @@
                 </div>
                 <button type="submit">➕ 添加书籍源</button>
             </form>
+        </div>
+    </div>
+    
+    <div id="tags-tab" class="tab-pane">
+        <div class="section">
+            <h2>🏷️ 标签管理</h2>
+            <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+                管理书籍标签。标签会从文件名自动提取（格式：书名-数字-作者-标签1,标签2.ext）
+            </p>
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button onclick="autoTagAllBooks()">🤖 自动提取所有书籍标签</button>
+                <button onclick="showCreateTagDialog()" class="secondary">➕ 手动创建标签</button>
+                <button onclick="showMergeTagsDialog()" class="secondary">🔀 合并标签</button>
+            </div>
+            <ul class="tag-list" id="tagList">
+                <li class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div>加载中...</div>
+                </li>
+            </ul>
         </div>
     </div>
     
@@ -568,6 +749,28 @@
                 <button class="modal-close" onclick="closeAllBooksModal()">×</button>
             </div>
             <div class="modal-body">
+                <div class="book-source-filter" id="bookSourceFilter">
+                    <button class="source-filter-btn active" onclick="filterBooksBySource(null)">所有</button>
+                </div>
+                <div id="bookTagFilterSection" style="display: none; background: #f5f7fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div style="font-weight: 600; color: #333;">🏷️ 标签筛选（可多选）</div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="secondary" onclick="clearTagFilters()" style="font-size: 13px; padding: 6px 12px;">清除筛选</button>
+                            <button class="secondary" onclick="toggleTagFilterMode()" style="font-size: 13px; padding: 6px 12px;">
+                                <span id="tagFilterModeText">AND 模式</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div style="color: #666; font-size: 12px; margin-bottom: 8px;">
+                        <span id="tagFilterDescription">AND 模式：书籍必须包含所有选中的标签</span>
+                    </div>
+                    <div class="book-source-filter" id="bookTagFilter">
+                        <button class="source-filter-btn" onclick="toggleTagFilter(null)">加载中...</button>
+                    </div>
+                    <div id="selectedTagsInfo" style="margin-top: 8px; color: #667eea; font-size: 13px; font-weight: 600;">
+                    </div>
+                </div>
                 <div class="book-grid" id="bookGridContainer">
                     <div class="loading">加载中...</div>
                 </div>
@@ -613,6 +816,58 @@
             <div class="modal-body">
                 <div id="bookDetailContainer" class="book-detail-container">
                     <div class="loading">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Create Tag Modal -->
+    <div id="createTagModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">➕ 创建新标签</div>
+                <button class="modal-close" onclick="closeCreateTagModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>标签名称</label>
+                    <input type="text" id="newTagName" placeholder="输入标签名称" class="book-detail-edit-input">
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="createNewTag()" style="flex: 1;">创建</button>
+                    <button onclick="closeCreateTagModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Merge Tags Modal -->
+    <div id="mergeTagsModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <div class="modal-title">🔀 合并标签</div>
+                <button class="modal-close" onclick="closeMergeTagsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #666; margin-bottom: 16px; font-size: 14px;">
+                    选择要合并的源标签，然后指定目标标签名称。所有源标签的书籍将被打上目标标签，源标签将被删除。
+                </p>
+                <div class="form-group">
+                    <label>选择源标签（要合并的标签）</label>
+                    <div id="sourceTagsList" style="max-height: 300px; overflow-y: auto; border: 2px solid #e1e8ed; border-radius: 8px; padding: 12px;">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label>目标标签名称</label>
+                    <input type="text" id="targetTagName" placeholder="输入目标标签名称" class="book-detail-edit-input">
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        💡 如果目标标签不存在，将会自动创建
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="executeMergeTags()" style="flex: 1;">合并标签</button>
+                    <button onclick="closeMergeTagsModal()" class="secondary" style="flex: 1;">取消</button>
                 </div>
             </div>
         </div>
@@ -707,6 +962,8 @@
             if (tab === 'users') {
                 loadUsers();
                 loadInviteTokens();
+            } else if (tab === 'tags') {
+                loadTags();
             }
         }
         
@@ -985,23 +1242,208 @@
         }
         
         // All Books Modal Functions
+        let currentSourceFilter = null;
+        let selectedTagFilters = new Set();
+        let tagFilterMode = 'AND'; // 'AND' or 'OR'
+        let allBookSources = [];
+        let allBookTags = [];
+        
         function showAllBooks() {
             document.getElementById('allBooksModal').classList.add('active');
-            loadAllBooksGrid();
+            loadBookSourcesForFilter();
         }
         
         function closeAllBooksModal() {
             document.getElementById('allBooksModal').classList.remove('active');
+            currentSourceFilter = null;
+            selectedTagFilters.clear();
+            tagFilterMode = 'AND';
         }
         
-        async function loadAllBooksGrid() {
+        async function loadBookSourcesForFilter() {
+            try {
+                // Load book sources
+                const sourcesRes = await fetch(`${API_BASE}/sources`);
+                const sources = await sourcesRes.json();
+                allBookSources = sources;
+                
+                // Load tags
+                const tagsRes = await fetch(`${API_BASE}/tags`);
+                const tags = await tagsRes.json();
+                allBookTags = tags;
+                
+                // Render source filter buttons
+                const sourceFilterContainer = document.getElementById('bookSourceFilter');
+                let sourceFilterHtml = '<button class="source-filter-btn active" onclick="filterBooksBySource(null)">所有</button>';
+                
+                sources.forEach(source => {
+                    if (source.enabled) {
+                        sourceFilterHtml += `<button class="source-filter-btn" onclick="filterBooksBySource(${source.id})">${escapeHtml(source.name)}</button>`;
+                    }
+                });
+                
+                sourceFilterContainer.innerHTML = sourceFilterHtml;
+                
+                // Render tag filter buttons if there are tags
+                const tagFilterSection = document.getElementById('bookTagFilterSection');
+                const tagFilterContainer = document.getElementById('bookTagFilter');
+                if (tags.length > 0) {
+                    tagFilterSection.style.display = 'block';
+                    let tagFilterHtml = '';
+                    
+                    tags.forEach(tag => {
+                        tagFilterHtml += `<button class="source-filter-btn" data-tag-id="${tag.id}" onclick="toggleTagFilter(${tag.id})">${escapeHtml(tag.name)}</button>`;
+                    });
+                    
+                    tagFilterContainer.innerHTML = tagFilterHtml;
+                } else {
+                    tagFilterSection.style.display = 'none';
+                }
+                
+                // Load books with current filter
+                await loadAllBooksGrid(currentSourceFilter);
+            } catch (e) {
+                console.error('Failed to load book sources:', e);
+                // Still load books even if sources fail
+                await loadAllBooksGrid(currentSourceFilter);
+            }
+        }
+        
+        function toggleTagFilter(tagId) {
+            if (tagId === null) {
+                // Should not happen with new UI
+                return;
+            }
+            
+            // Toggle tag selection
+            if (selectedTagFilters.has(tagId)) {
+                selectedTagFilters.delete(tagId);
+            } else {
+                selectedTagFilters.add(tagId);
+            }
+            
+            // Update button states
+            updateTagFilterButtons();
+            
+            // Update selected tags info
+            updateSelectedTagsInfo();
+            
+            // Reload books
+            loadAllBooksGrid(currentSourceFilter);
+        }
+        
+        function updateTagFilterButtons() {
+            document.querySelectorAll('#bookTagFilter .source-filter-btn').forEach(btn => {
+                const tagId = parseInt(btn.getAttribute('data-tag-id'));
+                if (selectedTagFilters.has(tagId)) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+        
+        function updateSelectedTagsInfo() {
+            const infoDiv = document.getElementById('selectedTagsInfo');
+            if (selectedTagFilters.size === 0) {
+                infoDiv.textContent = '';
+            } else {
+                const selectedTagNames = allBookTags
+                    .filter(t => selectedTagFilters.has(t.id))
+                    .map(t => t.name)
+                    .join(', ');
+                infoDiv.textContent = `已选择 ${selectedTagFilters.size} 个标签: ${selectedTagNames}`;
+            }
+        }
+        
+        function clearTagFilters() {
+            selectedTagFilters.clear();
+            updateTagFilterButtons();
+            updateSelectedTagsInfo();
+            loadAllBooksGrid(currentSourceFilter);
+        }
+        
+        function toggleTagFilterMode() {
+            tagFilterMode = (tagFilterMode === 'AND') ? 'OR' : 'AND';
+            
+            // Update UI
+            const modeText = document.getElementById('tagFilterModeText');
+            const modeDesc = document.getElementById('tagFilterDescription');
+            
+            if (tagFilterMode === 'AND') {
+                modeText.textContent = 'AND 模式';
+                modeDesc.textContent = 'AND 模式：书籍必须包含所有选中的标签';
+            } else {
+                modeText.textContent = 'OR 模式';
+                modeDesc.textContent = 'OR 模式：书籍只需包含任意一个选中的标签';
+            }
+            
+            // Reload if tags are selected
+            if (selectedTagFilters.size > 0) {
+                loadAllBooksGrid(currentSourceFilter);
+            }
+        }
+        
+        async function filterBooksBySource(sourceId) {
+            currentSourceFilter = sourceId;
+            
+            // Update active state on source buttons
+            document.querySelectorAll('#bookSourceFilter .source-filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Reload books with filter
+            await loadAllBooksGrid(sourceId);
+        }
+        
+        async function loadAllBooksGrid(sourceId = null) {
             const container = document.getElementById('bookGridContainer');
             container.innerHTML = '<div class="loading">加载中...</div>';
             
             try {
-                const res = await fetch(`${API_BASE}/books?limit=500`);
-                const data = await res.json();
-                const books = data.books || [];
+                let books = [];
+                
+                // Step 1: Get books filtered by source
+                if (sourceId !== null) {
+                    const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}&limit=500`);
+                    const data = await res.json();
+                    books = data.books || [];
+                } else {
+                    const res = await fetch(`${API_BASE}/books?limit=500`);
+                    const data = await res.json();
+                    books = data.books || [];
+                }
+                
+                // Step 2: Apply tag filters if any
+                if (selectedTagFilters.size > 0) {
+                    const selectedTagIds = Array.from(selectedTagFilters);
+                    
+                    if (tagFilterMode === 'AND') {
+                        // AND mode: book must have ALL selected tags
+                        // Get tags for each book and check
+                        const booksWithTags = await Promise.all(
+                            books.map(async (book) => {
+                                const tags = await getBookTags(book.id);
+                                const bookTagIds = new Set(tags.map(t => t.id));
+                                const hasAllTags = selectedTagIds.every(tagId => bookTagIds.has(tagId));
+                                return hasAllTags ? book : null;
+                            })
+                        );
+                        books = booksWithTags.filter(b => b !== null);
+                    } else {
+                        // OR mode: book must have AT LEAST ONE selected tag
+                        const booksWithTags = await Promise.all(
+                            books.map(async (book) => {
+                                const tags = await getBookTags(book.id);
+                                const bookTagIds = new Set(tags.map(t => t.id));
+                                const hasAnyTag = selectedTagIds.some(tagId => bookTagIds.has(tagId));
+                                return hasAnyTag ? book : null;
+                            })
+                        );
+                        books = booksWithTags.filter(b => b !== null);
+                    }
+                }
                 
                 if (books.length === 0) {
                     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>暂无书籍</div></div>';
@@ -1164,6 +1606,12 @@
                                 <span class="book-detail-value">${book.sourceId}</span>
                             </li>
                             ` : ''}
+                            <li class="book-detail-meta-item">
+                                <span class="book-detail-label">🏷️ 标签</span>
+                                <span class="book-detail-value" id="bookTagsDisplay">
+                                    <span style="color: #999;">加载中...</span>
+                                </span>
+                            </li>
                         </ul>
                         ${book.description ? `
                         <div class="book-detail-description">
@@ -1178,6 +1626,9 @@
                 currentBookData = book;
                 originalBookData = JSON.parse(JSON.stringify(book));
                 
+                // Load and display tags
+                loadBookTagsDisplay(book.id);
+                
                 // 显示编辑按钮
                 document.getElementById('editBookBtn').style.display = 'inline-block';
                 document.getElementById('saveBookBtn').style.display = 'none';
@@ -1186,6 +1637,22 @@
             } catch (e) {
                 console.error('Failed to load book detail:', e);
                 container.innerHTML = `<div style="color: #dc3545; text-align: center;">❌ 加载失败: ${e.message}</div>`;
+            }
+        }
+        
+        async function loadBookTagsDisplay(bookId) {
+            const tagsDisplay = document.getElementById('bookTagsDisplay');
+            try {
+                const tags = await getBookTags(bookId);
+                if (tags.length === 0) {
+                    tagsDisplay.innerHTML = '<span style="color: #999;">暂无标签</span>';
+                } else {
+                    tagsDisplay.innerHTML = tags.map(tag => 
+                        `<span class="tag-badge">${escapeHtml(tag.name)}</span>`
+                    ).join('');
+                }
+            } catch (e) {
+                tagsDisplay.innerHTML = '<span style="color: #dc3545;">加载失败</span>';
             }
         }
         
@@ -1278,6 +1745,33 @@
                             <input type="text" class="book-detail-edit-input" id="edit-publisher" value="${escapeHtml(book.publisher || '')}" placeholder="出版社">
                         </li>
                         <li class="book-detail-meta-item">
+                            <span class="book-detail-label">🏷️ 标签</span>
+                            <div class="book-detail-value" style="width: 100%;">
+                                <div id="editBookTags" style="min-height: 40px; margin-bottom: 12px;">
+                                    <span style="color: #999;">加载中...</span>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px;">
+                                    <button type="button" onclick="toggleAvailableTagsPanel()" class="secondary" style="font-size: 13px; padding: 8px 16px;">
+                                        📋 从已有标签选择
+                                    </button>
+                                </div>
+                                
+                                <div id="availableTagsPanel" style="display: none; margin-bottom: 12px; padding: 12px; background: #f5f7fa; border-radius: 8px; max-height: 200px; overflow-y: auto;">
+                                    <div style="color: #666; font-size: 12px; margin-bottom: 8px;">点击标签快速添加：</div>
+                                    <div id="availableTagsList">
+                                        <span style="color: #999;">加载中...</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="tag-input-group">
+                                    <input type="text" id="newBookTagInput" class="tag-input" placeholder="输入新标签名称后回车添加" list="tagSuggestions">
+                                    <datalist id="tagSuggestions"></datalist>
+                                    <button type="button" onclick="addTagToCurrentBook()" style="padding: 8px 16px; font-size: 13px;">添加</button>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="book-detail-meta-item">
                             <span class="book-detail-label">📄 格式</span>
                             <span class="book-detail-value">${escapeHtml(book.format.toUpperCase())} (不可编辑)</span>
                         </li>
@@ -1296,6 +1790,202 @@
                     </div>
                 </div>
             `;
+            
+            // Load and render editable tags
+            loadEditableBookTags(book.id);
+            
+            // Load available tags
+            loadAvailableTagsForBook();
+            
+            // Add enter key listener for tag input
+            setTimeout(() => {
+                const tagInput = document.getElementById('newBookTagInput');
+                if (tagInput) {
+                    tagInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addTagToCurrentBook();
+                        }
+                    });
+                }
+            }, 100);
+        }
+        
+        // ============ Edit Mode Tag Functions ============
+        
+        let currentBookTags = [];
+        let allAvailableTags = [];
+        
+        async function loadEditableBookTags(bookId) {
+            try {
+                const tags = await getBookTags(bookId);
+                currentBookTags = tags;
+                renderEditableBookTags();
+            } catch (e) {
+                const container = document.getElementById('editBookTags');
+                if (container) {
+                    container.innerHTML = '<span style="color: #dc3545;">加载失败</span>';
+                }
+            }
+        }
+        
+        function renderEditableBookTags() {
+            const container = document.getElementById('editBookTags');
+            if (!container) return;
+            
+            if (currentBookTags.length === 0) {
+                container.innerHTML = '<span style="color: #999;">暂无标签</span>';
+            } else {
+                container.innerHTML = currentBookTags.map(tag => 
+                    `<span class="tag-badge removable" data-tag-id="${tag.id}">
+                        ${escapeHtml(tag.name)}
+                        <span class="remove-tag" onclick="removeTagFromCurrentBook(${tag.id})">×</span>
+                    </span>`
+                ).join('');
+            }
+            
+            // Update available tags display
+            renderAvailableTags();
+        }
+        
+        async function loadAvailableTagsForBook() {
+            try {
+                const res = await fetch(`${API_BASE}/tags`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                allAvailableTags = await res.json();
+                renderAvailableTags();
+                updateTagSuggestions();
+            } catch (e) {
+                console.error('Failed to load available tags:', e);
+            }
+        }
+        
+        function renderAvailableTags() {
+            const container = document.getElementById('availableTagsList');
+            if (!container) return;
+            
+            if (allAvailableTags.length === 0) {
+                container.innerHTML = '<span style="color: #999;">暂无可用标签</span>';
+                return;
+            }
+            
+            // Filter out tags that are already added to the book
+            const currentTagNames = new Set(currentBookTags.map(t => t.name));
+            
+            container.innerHTML = allAvailableTags.map(tag => {
+                const isAdded = currentTagNames.has(tag.name);
+                return `<span class="available-tag-item ${isAdded ? 'disabled' : ''}" 
+                             onclick="${isAdded ? '' : `quickAddTag('${escapeHtml(tag.name).replace(/'/g, "\\'")}')`}">
+                    ${escapeHtml(tag.name)} ${isAdded ? '✓' : ''}
+                </span>`;
+            }).join('');
+        }
+        
+        function updateTagSuggestions() {
+            const datalist = document.getElementById('tagSuggestions');
+            if (!datalist) return;
+            
+            const currentTagNames = new Set(currentBookTags.map(t => t.name));
+            const availableTags = allAvailableTags.filter(t => !currentTagNames.has(t.name));
+            
+            datalist.innerHTML = availableTags.map(tag => 
+                `<option value="${escapeHtml(tag.name)}">`
+            ).join('');
+        }
+        
+        function toggleAvailableTagsPanel() {
+            const panel = document.getElementById('availableTagsPanel');
+            if (!panel) return;
+            
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+        
+        async function quickAddTag(tagName) {
+            // Check if tag already exists (shouldn't happen but just in case)
+            if (currentBookTags.some(t => t.name === tagName)) {
+                return;
+            }
+            
+            try {
+                const tag = await addTagToBook(currentBookData.id, tagName);
+                if (tag) {
+                    currentBookTags.push(tag);
+                    renderEditableBookTags();
+                    updateTagSuggestions();
+                } else {
+                    alert('添加标签失败');
+                }
+            } catch (e) {
+                console.error('Failed to add tag:', e);
+                alert('添加标签失败: ' + e.message);
+            }
+        }
+        
+        async function addTagToCurrentBook() {
+            const input = document.getElementById('newBookTagInput');
+            if (!input) return;
+            
+            const tagName = input.value.trim();
+            if (!tagName) {
+                alert('请输入标签名称');
+                return;
+            }
+            
+            // Check if tag already exists
+            if (currentBookTags.some(t => t.name === tagName)) {
+                alert('该标签已存在');
+                input.value = '';
+                return;
+            }
+            
+            try {
+                const tag = await addTagToBook(currentBookData.id, tagName);
+                if (tag) {
+                    currentBookTags.push(tag);
+                    renderEditableBookTags();
+                    updateTagSuggestions();
+                    input.value = '';
+                    
+                    // If it's a new tag, add to available tags list
+                    if (!allAvailableTags.some(t => t.name === tag.name)) {
+                        allAvailableTags.push({
+                            id: tag.id,
+                            name: tag.name,
+                            bookCount: 1,
+                            createdAt: tag.createdAt
+                        });
+                        renderAvailableTags();
+                    }
+                } else {
+                    alert('添加标签失败');
+                }
+            } catch (e) {
+                console.error('Failed to add tag:', e);
+                alert('添加标签失败: ' + e.message);
+            }
+        }
+        
+        async function removeTagFromCurrentBook(tagId) {
+            if (!confirm('确定要移除此标签吗？')) return;
+            
+            try {
+                const success = await removeTagFromBook(currentBookData.id, tagId);
+                if (success) {
+                    currentBookTags = currentBookTags.filter(t => t.id !== tagId);
+                    renderEditableBookTags();
+                    updateTagSuggestions();
+                } else {
+                    alert('移除标签失败');
+                }
+            } catch (e) {
+                console.error('Failed to remove tag:', e);
+                alert('移除标签失败: ' + e.message);
+            }
         }
         
         let uploadedCoverFile = null;
@@ -1756,6 +2446,18 @@
             }
         });
         
+        document.getElementById('createTagModal').addEventListener('click', (e) => {
+            if (e.target.id === 'createTagModal') {
+                closeCreateTagModal();
+            }
+        });
+        
+        document.getElementById('mergeTagsModal').addEventListener('click', (e) => {
+            if (e.target.id === 'mergeTagsModal') {
+                closeMergeTagsModal();
+            }
+        });
+        
         // 展开/收起书籍列表
         async function toggleBooks(sourceId) {
             const booksDiv = document.getElementById(`books-${sourceId}`);
@@ -1830,6 +2532,273 @@
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
             if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
             return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+        
+        // ============ Tag Management Functions ============
+        
+        async function loadTags() {
+            try {
+                const res = await fetch(`${API_BASE}/tags`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const tags = await res.json();
+                
+                const list = document.getElementById('tagList');
+                if (tags.length === 0) {
+                    list.innerHTML = '<li class="empty-state"><div class="empty-state-icon">📭</div><div>暂无标签，请点击"自动提取所有书籍标签"按钮</div></li>';
+                    return;
+                }
+                
+                list.innerHTML = tags.map(tag => `
+                    <li class="tag-list-item">
+                        <div>
+                            <span class="tag-name">🏷️ ${escapeHtml(tag.name)}</span>
+                            <span class="tag-count">(${tag.bookCount} 本书籍)</span>
+                        </div>
+                        <button class="danger" onclick="deleteTag(${tag.id}, '${escapeHtml(tag.name)}')">删除</button>
+                    </li>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load tags:', error);
+                const list = document.getElementById('tagList');
+                list.innerHTML = '<li class="empty-state"><div style="color: #dc3545;">❌ 加载失败</div></li>';
+            }
+        }
+        
+        async function autoTagAllBooks() {
+            if (!confirm('确定要自动提取所有书籍的标签吗？\n\n这将从文件名中提取标签（格式：书名-数字-作者-标签1,标签2.ext）')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/tags/auto-tag/all`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    alert(`✅ 自动标签提取完成！\n\n处理书籍: ${result.totalBooks} 本\n成功打标: ${result.booksTagged} 本\n新增标签: ${result.tagsCreated} 个`);
+                    loadTags();
+                    loadStats();
+                } else {
+                    alert('❌ 自动标签提取失败');
+                }
+            } catch (error) {
+                console.error('Failed to auto-tag books:', error);
+                alert('❌ 自动标签提取失败: ' + error.message);
+            }
+        }
+        
+        async function deleteTag(tagId, tagName) {
+            if (!confirm(`确定要删除标签 "${tagName}" 吗？\n\n这将从所有书籍中移除该标签。`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/tags/${tagId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok || res.status === 204) {
+                    alert('✅ 标签已删除');
+                    loadTags();
+                } else {
+                    alert('❌ 删除失败');
+                }
+            } catch (error) {
+                console.error('Failed to delete tag:', error);
+                alert('❌ 删除失败: ' + error.message);
+            }
+        }
+        
+        async function getBookTags(bookId) {
+            try {
+                const res = await fetch(`${API_BASE}/tags/book/${bookId}`);
+                return await res.json();
+            } catch (error) {
+                console.error('Failed to load book tags:', error);
+                return [];
+            }
+        }
+        
+        async function addTagToBook(bookId, tagName) {
+            try {
+                const res = await fetch(`${API_BASE}/tags/book/${bookId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ tagName })
+                });
+                
+                if (res.ok) {
+                    return await res.json();
+                }
+                return null;
+            } catch (error) {
+                console.error('Failed to add tag to book:', error);
+                return null;
+            }
+        }
+        
+        async function removeTagFromBook(bookId, tagId) {
+            try {
+                const res = await fetch(`${API_BASE}/tags/book/${bookId}/${tagId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                return res.ok || res.status === 204;
+            } catch (error) {
+                console.error('Failed to remove tag from book:', error);
+                return false;
+            }
+        }
+        
+        // ============ Create Tag Functions ============
+        
+        function showCreateTagDialog() {
+            document.getElementById('createTagModal').classList.add('active');
+            document.getElementById('newTagName').value = '';
+        }
+        
+        function closeCreateTagModal() {
+            document.getElementById('createTagModal').classList.remove('active');
+        }
+        
+        async function createNewTag() {
+            const tagName = document.getElementById('newTagName').value.trim();
+            
+            if (!tagName) {
+                alert('❌ 请输入标签名称');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/tags`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ name: tagName })
+                });
+                
+                if (res.ok) {
+                    alert('✅ 标签创建成功！');
+                    closeCreateTagModal();
+                    loadTags();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 创建失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to create tag:', error);
+                alert('❌ 创建失败: ' + error.message);
+            }
+        }
+        
+        // ============ Merge Tags Functions ============
+        
+        let allTagsForMerge = [];
+        let selectedSourceTagIds = new Set();
+        
+        async function showMergeTagsDialog() {
+            document.getElementById('mergeTagsModal').classList.add('active');
+            document.getElementById('targetTagName').value = '';
+            selectedSourceTagIds.clear();
+            await loadTagsForMerge();
+        }
+        
+        function closeMergeTagsModal() {
+            document.getElementById('mergeTagsModal').classList.remove('active');
+            selectedSourceTagIds.clear();
+        }
+        
+        async function loadTagsForMerge() {
+            try {
+                const res = await fetch(`${API_BASE}/tags`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                allTagsForMerge = await res.json();
+                
+                const container = document.getElementById('sourceTagsList');
+                if (allTagsForMerge.length === 0) {
+                    container.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">暂无标签</div>';
+                    return;
+                }
+                
+                container.innerHTML = allTagsForMerge.map(tag => `
+                    <div class="tag-checkbox-item">
+                        <input type="checkbox" id="tag-${tag.id}" onchange="toggleTagSelection(${tag.id})">
+                        <label for="tag-${tag.id}" class="tag-checkbox-label">
+                            <span>${escapeHtml(tag.name)}</span>
+                            <span style="color: #666; font-size: 12px;">(${tag.bookCount} 本书籍)</span>
+                        </label>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load tags for merge:', error);
+                document.getElementById('sourceTagsList').innerHTML = '<div style="color: #dc3545;">❌ 加载失败</div>';
+            }
+        }
+        
+        function toggleTagSelection(tagId) {
+            if (selectedSourceTagIds.has(tagId)) {
+                selectedSourceTagIds.delete(tagId);
+            } else {
+                selectedSourceTagIds.add(tagId);
+            }
+        }
+        
+        async function executeMergeTags() {
+            const targetTagName = document.getElementById('targetTagName').value.trim();
+            
+            if (selectedSourceTagIds.size === 0) {
+                alert('❌ 请至少选择一个源标签');
+                return;
+            }
+            
+            if (!targetTagName) {
+                alert('❌ 请输入目标标签名称');
+                return;
+            }
+            
+            const selectedTags = allTagsForMerge.filter(t => selectedSourceTagIds.has(t.id));
+            const tagNames = selectedTags.map(t => t.name).join(', ');
+            
+            if (!confirm(`确定要将以下标签合并到 "${targetTagName}" 吗？\n\n源标签：${tagNames}\n\n源标签将被删除，所有相关书籍将打上目标标签。`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/tags/merge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        sourceTagIds: Array.from(selectedSourceTagIds),
+                        targetTagName: targetTagName
+                    })
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    alert(`✅ 标签合并成功！\n\n目标标签：${result.targetTag.name}\n合并数量：${result.mergedCount} 个\n相关书籍：${result.targetTag.bookCount} 本`);
+                    closeMergeTagsModal();
+                    loadTags();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 合并失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to merge tags:', error);
+                alert('❌ 合并失败: ' + error.message);
+            }
         }
         
         // Initialize on page load

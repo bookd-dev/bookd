@@ -1,0 +1,182 @@
+package com.bookd.domain.service
+
+import com.bookd.data.repository.TagRepository
+import com.bookd.data.repository.BookRepository
+import com.bookd.domain.model.Tag
+import java.io.File
+
+class TagService(
+    private val tagRepository: TagRepository,
+    private val bookRepository: BookRepository
+) {
+    
+    /**
+     * Extract tags from filename
+     * Pattern: filename ends with -数字-作者-标签1,标签2,标签3.ext
+     * Example: 书名-11600360-作者-附身,性转换,夺取.epub
+     */
+    fun extractTagsFromFilename(filename: String): List<String> {
+        try {
+            // Remove extension
+            val nameWithoutExt = filename.substringBeforeLast('.')
+            
+            // Split by last dash to get the tag part
+            val parts = nameWithoutExt.split('-')
+            if (parts.size < 2) return emptyList()
+            
+            // The last part should be tags
+            val tagPart = parts.last().trim()
+            if (tagPart.isEmpty()) return emptyList()
+            
+            // Split by comma to get individual tags
+            val tags = tagPart.split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it.length <= 50 } // Filter out invalid tags
+                .distinct()
+            
+            return tags
+        } catch (e: Exception) {
+            println("❌ Failed to extract tags from filename: $filename - ${e.message}")
+            return emptyList()
+        }
+    }
+    
+    /**
+     * Auto-tag a book based on its filename
+     */
+    fun autoTagBook(bookId: Int): List<Tag> {
+        val book = bookRepository.findById(bookId) ?: return emptyList()
+        val filename = File(book.filePath).name
+        val tagNames = extractTagsFromFilename(filename)
+        
+        if (tagNames.isEmpty()) return emptyList()
+        
+        val tags = mutableListOf<Tag>()
+        for (tagName in tagNames) {
+            try {
+                val tag = tagRepository.findOrCreateTag(tagName)
+                tagRepository.addTagToBook(bookId, tag.id)
+                tags.add(tag)
+            } catch (e: Exception) {
+                println("⚠️ Failed to add tag '$tagName' to book $bookId: ${e.message}")
+            }
+        }
+        
+        return tags
+    }
+    
+    /**
+     * Auto-tag all books
+     */
+    fun autoTagAllBooks(): Map<String, Int> {
+        val books = bookRepository.findAll()
+        var booksTagged = 0
+        var tagsCreated = 0
+        val initialTagCount = tagRepository.getAllTags().size
+        
+        for (book in books) {
+            val tags = autoTagBook(book.id)
+            if (tags.isNotEmpty()) {
+                booksTagged++
+            }
+        }
+        
+        val finalTagCount = tagRepository.getAllTags().size
+        tagsCreated = finalTagCount - initialTagCount
+        
+        return mapOf(
+            "booksTagged" to booksTagged,
+            "tagsCreated" to tagsCreated,
+            "totalBooks" to books.size
+        )
+    }
+    
+    /**
+     * Get all tags
+     */
+    fun getAllTags(): List<Tag> {
+        return tagRepository.getAllTags()
+    }
+    
+    /**
+     * Get tags for a book
+     */
+    fun getTagsForBook(bookId: Int): List<Tag> {
+        return tagRepository.getTagsByBookId(bookId)
+    }
+    
+    /**
+     * Add tag to book
+     */
+    fun addTagToBook(bookId: Int, tagName: String): Tag {
+        val tag = tagRepository.findOrCreateTag(tagName)
+        tagRepository.addTagToBook(bookId, tag.id)
+        return tag
+    }
+    
+    /**
+     * Remove tag from book
+     */
+    fun removeTagFromBook(bookId: Int, tagId: Int): Boolean {
+        return tagRepository.removeTagFromBook(bookId, tagId)
+    }
+    
+    /**
+     * Delete a tag (and remove from all books)
+     */
+    fun deleteTag(tagId: Int): Boolean {
+        return tagRepository.deleteTag(tagId)
+    }
+    
+    /**
+     * Get tag statistics (tag -> book count)
+     */
+    fun getTagStats(): Map<Tag, Int> {
+        val stats = tagRepository.getTagStats()
+        val tags = tagRepository.getAllTags()
+        return tags.associateWith { stats[it.id] ?: 0 }
+    }
+    
+    /**
+     * Get books by tag
+     */
+    fun getBooksByTagId(tagId: Int): List<Int> {
+        return tagRepository.getBookIdsByTagId(tagId)
+    }
+    
+    /**
+     * Create a new tag manually
+     */
+    fun createTag(tagName: String): Tag {
+        return tagRepository.findOrCreateTag(tagName)
+    }
+    
+    /**
+     * Merge multiple tags into one target tag
+     * All books from source tags will be tagged with the target tag
+     * Source tags will be deleted after merge
+     */
+    fun mergeTags(sourceTagIds: List<Int>, targetTagName: String): Tag {
+        // Create or get target tag
+        val targetTag = tagRepository.findOrCreateTag(targetTagName)
+        
+        // For each source tag
+        for (sourceTagId in sourceTagIds) {
+            // Skip if source is the same as target
+            if (sourceTagId == targetTag.id) continue
+            
+            // Get all books with this source tag
+            val bookIds = tagRepository.getBookIdsByTagId(sourceTagId)
+            
+            // Add target tag to all these books
+            for (bookId in bookIds) {
+                tagRepository.addTagToBook(bookId, targetTag.id)
+            }
+            
+            // Delete the source tag
+            tagRepository.deleteTag(sourceTagId)
+        }
+        
+        return targetTag
+    }
+}

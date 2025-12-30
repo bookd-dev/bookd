@@ -29,6 +29,8 @@ fun Application.module() {
             com.bookd.data.entity.Users,
             com.bookd.data.entity.Books,
             com.bookd.data.entity.BookSources,
+            com.bookd.data.entity.Tags,
+            com.bookd.data.entity.BookTags,
             com.bookd.data.entity.ReadingProgress,
             com.bookd.data.entity.FolderPermissions,
             com.bookd.data.entity.Sessions,

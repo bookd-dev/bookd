@@ -21,6 +21,7 @@ fun Application.configureRouting() {
         bookRoutes()
         bookSourceRoutes()
         scanRoutes()
+        tagRoutes()
         fileSystemRoutes()
         webRoutes()
     }
