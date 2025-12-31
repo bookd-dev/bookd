@@ -2,10 +2,13 @@ package com.bookd.domain.service.parser
 
 import com.bookd.domain.model.ContentElement
 import com.bookd.domain.model.TextSpan
+import com.bookd.domain.service.TxtParseRuleService
 import org.slf4j.LoggerFactory
 import java.io.File
 
-class TxtParser {
+class TxtParser(
+    private val txtParseRuleService: TxtParseRuleService
+) {
     
     private val logger = LoggerFactory.getLogger(TxtParser::class.java)
     
@@ -23,9 +26,34 @@ class TxtParser {
     )
     
     /**
-     * 章节标题正则模式
+     * 获取启用的章节解析规则
      */
-    private val chapterPatterns = listOf(
+    private suspend fun getChapterPatterns(): List<Regex> {
+        return try {
+            val rules = txtParseRuleService.getEnabledRules()
+            if (rules.isEmpty()) {
+                logger.warn("No enabled TXT parse rules found, using fallback patterns")
+                getFallbackPatterns()
+            } else {
+                rules.mapNotNull { rule ->
+                    try {
+                        rule.rule.toRegex()
+                    } catch (e: Exception) {
+                        logger.error("Invalid regex pattern for rule '${rule.name}': ${rule.rule}", e)
+                        null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to load TXT parse rules, using fallback patterns", e)
+            getFallbackPatterns()
+        }
+    }
+    
+    /**
+     * 备用模式（如果数据库规则加载失败）
+     */
+    private fun getFallbackPatterns(): List<Regex> = listOf(
         // 英文: Chapter 1, Chapter One, Ch.1, Ch 1
         """^(Chapter|CHAPTER|Ch\.|Ch)\s*([0-9]+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten).*$""".toRegex(),
         
@@ -45,7 +73,7 @@ class TxtParser {
     /**
      * 解析 TXT 文件结构
      */
-    fun parseStructure(file: File): TxtStructure? {
+    suspend fun parseStructure(file: File): TxtStructure? {
         try {
             val fullText = file.readText()
             val chapters = detectChapters(fullText)
@@ -61,7 +89,8 @@ class TxtParser {
     /**
      * 检测章节分割
      */
-    private fun detectChapters(text: String): List<ChapterInfo> {
+    private suspend fun detectChapters(text: String): List<ChapterInfo> {
+        val chapterPatterns = getChapterPatterns()
         val chapters = mutableListOf<ChapterInfo>()
         val lines = text.lines()
         

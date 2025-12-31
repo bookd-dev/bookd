@@ -809,6 +809,7 @@
                         <div class="sub-tabs" id="books-group">
                             <button class="nav-tab sub-tab" onclick="switchTab('book-manage')">📖 书籍管理</button>
                             <button class="nav-tab sub-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('txt-rules')">📝 TXT解析规则</button>
                         </div>
                     </div>
                     
@@ -885,6 +886,26 @@
                 <button onclick="showMergeTagsDialog()" class="secondary">🔀 合并标签</button>
             </div>
             <ul class="tag-list" id="tagList">
+                <li class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div>加载中...</div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="txt-rules-tab" class="tab-pane">
+        <div class="section">
+            <h2>📝 TXT 解析规则管理</h2>
+            <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+                管理 TXT 书籍的章节识别规则，规则按优先级顺序应用（数字越小优先级越高）
+            </p>
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button onclick="showAddTxtRuleDialog()">➕ 添加规则</button>
+                <button onclick="importTxtRulesFromJson()" class="browse-btn">📥 从 JSON 导入</button>
+                <button onclick="testTxtRules()" class="secondary">🧪 测试规则</button>
+            </div>
+            <ul class="tag-list" id="txtRuleList">
                 <li class="empty-state">
                     <div class="empty-state-icon">⏳</div>
                     <div>加载中...</div>
@@ -1105,6 +1126,115 @@
         </div>
     </div>
     
+    <!-- Add TXT Rule Modal -->
+    <div id="addTxtRuleModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <div class="modal-title">➕ 添加 TXT 解析规则</div>
+                <button class="modal-close" onclick="closeAddTxtRuleModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>规则名称</label>
+                    <input type="text" id="newTxtRuleName" placeholder="例如：常规模式、英文章节等" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>正则表达式</label>
+                    <textarea id="newTxtRulePattern" placeholder="输入正则表达式，例如：^第([零一二三四五六七八九十百千万0-9]+)[章节回].*$" class="book-detail-edit-textarea" style="font-family: 'Courier New', monospace; min-height: 80px;"></textarea>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        💡 使用正则表达式匹配章节标题
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>示例（可选）</label>
+                    <input type="text" id="newTxtRuleExample" placeholder="例如：第一章 我还活着" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>优先级</label>
+                    <input type="number" id="newTxtRulePriority" value="0" min="0" max="100" class="book-detail-edit-input">
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        数字越小优先级越高
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="createTxtRule()" style="flex: 1;">创建</button>
+                    <button onclick="closeAddTxtRuleModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit TXT Rule Modal -->
+    <div id="editTxtRuleModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <div class="modal-title">✏️ 编辑 TXT 解析规则</div>
+                <button class="modal-close" onclick="closeEditTxtRuleModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editTxtRuleId">
+                <div class="form-group">
+                    <label>规则名称</label>
+                    <input type="text" id="editTxtRuleName" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>正则表达式</label>
+                    <textarea id="editTxtRulePattern" class="book-detail-edit-textarea" style="font-family: 'Courier New', monospace; min-height: 80px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>示例（可选）</label>
+                    <input type="text" id="editTxtRuleExample" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>优先级</label>
+                    <input type="number" id="editTxtRulePriority" min="0" max="100" class="book-detail-edit-input">
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="updateTxtRule()" style="flex: 1;">保存</button>
+                    <button onclick="closeEditTxtRuleModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import JSON Modal -->
+    <div id="importJsonModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="modal-title">📥 导入 TXT 解析规则</div>
+                <button class="modal-close" onclick="closeImportJsonModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #666; margin-bottom: 16px; font-size: 14px;">
+                    将 JSON 格式的规则粘贴到下方文本框中，支持批量导入。已存在的同名规则将被跳过。
+                </p>
+                <div class="form-group">
+                    <label>JSON 内容</label>
+                    <textarea id="importJsonContent" placeholder='[
+  {
+    "name": "常规模式",
+    "rule": "^第([零一二三四五六七八九十百千万0-9]+)[章节回].*$",
+    "example": "第一章 我还活着"
+  },
+  {
+    "name": "英文章节",
+    "rule": "^(Chapter|CHAPTER)\\s+\\d+.*$",
+    "example": "Chapter 1"
+  }
+]' class="book-detail-edit-textarea" style="font-family: 'Courier New', monospace; min-height: 300px;"></textarea>
+                    <div style="color: #666; font-size: 12px; margin-top: 8px;">
+                        💡 格式说明：JSON 数组，每个对象包含 name（名称）、rule（正则）、example（示例）
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="executeImportJson()" style="flex: 1;">导入</button>
+                    <button onclick="loadDefaultJson()" class="browse-btn" style="flex: 1;">📄 加载默认规则</button>
+                    <button onclick="closeImportJsonModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script>
         const API_BASE = '/api';
         let currentPath = '/';
@@ -1236,6 +1366,8 @@
                 loadInviteTokens();
             } else if (tab === 'tags') {
                 loadTags();
+            } else if (tab === 'txt-rules') {
+                loadTxtRules();
             }
         }
         
@@ -3176,6 +3308,329 @@
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
             stopScanStatusCheck();
+        });
+        
+        // ============ TXT Parse Rule Management Functions ============
+        
+        async function loadTxtRules() {
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const rules = await res.json();
+                
+                const list = document.getElementById('txtRuleList');
+                if (rules.length === 0) {
+                    list.innerHTML = '<li class="empty-state"><div class="empty-state-icon">📭</div><div>暂无解析规则</div></li>';
+                    return;
+                }
+                
+                list.innerHTML = rules.map(rule => `
+                    <li class="tag-list-item" style="${!rule.enabled ? 'opacity: 0.5;' : ''}">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <span class="tag-name">📝 ${escapeHtml(rule.name)}</span>
+                                <span style="font-size: 11px; background: #e1e8ed; padding: 2px 8px; border-radius: 12px; color: #666;">
+                                    优先级: ${rule.priority}
+                                </span>
+                                <span class="status-badge ${rule.enabled ? 'status-enabled' : 'status-disabled'}">
+                                    ${rule.enabled ? '启用' : '禁用'}
+                                </span>
+                            </div>
+                            <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #666; background: #f5f7fa; padding: 8px; border-radius: 4px; margin-bottom: 4px; word-break: break-all;">
+                                ${escapeHtml(rule.rule)}
+                            </div>
+                            ${rule.example ? `
+                                <div style="font-size: 12px; color: #999;">
+                                    示例: ${escapeHtml(rule.example)}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="toggleTxtRuleEnabled(${rule.id})" class="secondary" style="padding: 8px 16px; font-size: 13px;">
+                                ${rule.enabled ? '禁用' : '启用'}
+                            </button>
+                            <button onclick="editTxtRule(${rule.id})" class="secondary" style="padding: 8px 16px; font-size: 13px;">编辑</button>
+                            <button onclick="deleteTxtRule(${rule.id}, '${escapeHtml(rule.name)}')" class="danger" style="padding: 8px 16px; font-size: 13px;">删除</button>
+                        </div>
+                    </li>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load TXT rules:', error);
+                const list = document.getElementById('txtRuleList');
+                list.innerHTML = '<li class="empty-state"><div style="color: #dc3545;">❌ 加载失败</div></li>';
+            }
+        }
+        
+        function showAddTxtRuleDialog() {
+            document.getElementById('addTxtRuleModal').classList.add('active');
+            document.getElementById('newTxtRuleName').value = '';
+            document.getElementById('newTxtRulePattern').value = '';
+            document.getElementById('newTxtRuleExample').value = '';
+            document.getElementById('newTxtRulePriority').value = '0';
+        }
+        
+        function closeAddTxtRuleModal() {
+            document.getElementById('addTxtRuleModal').classList.remove('active');
+        }
+        
+        async function createTxtRule() {
+            const name = document.getElementById('newTxtRuleName').value.trim();
+            const rule = document.getElementById('newTxtRulePattern').value.trim();
+            const example = document.getElementById('newTxtRuleExample').value.trim();
+            const priority = parseInt(document.getElementById('newTxtRulePriority').value);
+            
+            if (!name || !rule) {
+                alert('❌ 请填写规则名称和正则表达式');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        name,
+                        rule,
+                        example: example || null,
+                        enabled: true,
+                        priority
+                    })
+                });
+                
+                if (res.ok) {
+                    alert('✅ 规则创建成功！');
+                    closeAddTxtRuleModal();
+                    loadTxtRules();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 创建失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to create TXT rule:', error);
+                alert('❌ 创建失败: ' + error.message);
+            }
+        }
+        
+        async function editTxtRule(ruleId) {
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const rule = await res.json();
+                
+                document.getElementById('editTxtRuleId').value = rule.id;
+                document.getElementById('editTxtRuleName').value = rule.name;
+                document.getElementById('editTxtRulePattern').value = rule.rule;
+                document.getElementById('editTxtRuleExample').value = rule.example || '';
+                document.getElementById('editTxtRulePriority').value = rule.priority;
+                
+                document.getElementById('editTxtRuleModal').classList.add('active');
+            } catch (error) {
+                console.error('Failed to load TXT rule:', error);
+                alert('❌ 加载失败: ' + error.message);
+            }
+        }
+        
+        function closeEditTxtRuleModal() {
+            document.getElementById('editTxtRuleModal').classList.remove('active');
+        }
+        
+        async function updateTxtRule() {
+            const id = parseInt(document.getElementById('editTxtRuleId').value);
+            const name = document.getElementById('editTxtRuleName').value.trim();
+            const rule = document.getElementById('editTxtRulePattern').value.trim();
+            const example = document.getElementById('editTxtRuleExample').value.trim();
+            const priority = parseInt(document.getElementById('editTxtRulePriority').value);
+            
+            if (!name || !rule) {
+                alert('❌ 请填写规则名称和正则表达式');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        name,
+                        rule,
+                        example: example || null,
+                        enabled: true,
+                        priority
+                    })
+                });
+                
+                if (res.ok) {
+                    alert('✅ 规则更新成功！');
+                    closeEditTxtRuleModal();
+                    loadTxtRules();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 更新失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to update TXT rule:', error);
+                alert('❌ 更新失败: ' + error.message);
+            }
+        }
+        
+        async function deleteTxtRule(ruleId, ruleName) {
+            if (!confirm(`确定要删除规则 "${ruleName}" 吗？`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok || res.status === 204) {
+                    alert('✅ 规则已删除');
+                    loadTxtRules();
+                } else {
+                    alert('❌ 删除失败');
+                }
+            } catch (error) {
+                console.error('Failed to delete TXT rule:', error);
+                alert('❌ 删除失败: ' + error.message);
+            }
+        }
+        
+        async function toggleTxtRuleEnabled(ruleId) {
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    loadTxtRules();
+                } else {
+                    alert('❌ 操作失败');
+                }
+            } catch (error) {
+                console.error('Failed to toggle TXT rule:', error);
+                alert('❌ 操作失败: ' + error.message);
+            }
+        }
+        
+        async function importTxtRulesFromJson() {
+            showImportJsonModal();
+        }
+        
+        function showImportJsonModal() {
+            document.getElementById('importJsonModal').classList.add('active');
+            document.getElementById('importJsonContent').value = '';
+        }
+        
+        function closeImportJsonModal() {
+            document.getElementById('importJsonModal').classList.remove('active');
+        }
+        
+        async function loadDefaultJson() {
+            // 这里可以预填一些默认的规则 JSON
+            const defaultJson = `[
+  {
+    "name": "常规模式",
+    "rule": "^[ 　\\\\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\\\\s{0,4}[\\\\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+?\\\\s{0,4}(?:章|节(?!课)|卷|集(?![合和])|部(?![分赛游])|篇(?!张))).{0,30}$",
+    "example": "第一章 我还活着"
+  },
+  {
+    "name": "英文章节",
+    "rule": "^[ 　\\\\t]{0,4}(?:[Cc]hapter|[Ss]ection|[Pp]art|ＰＡＲＴ|[Nn][oO][.、]|[Ee]pisode)\\\\s{0,4}\\\\d{1,4}.{0,30}$",
+    "example": "Chapter 1 The Beginning"
+  },
+  {
+    "name": "纯数字标题",
+    "rule": "(?<=[　\\\\s])\\\\d+\\\\.?[ 　\\\\t]{0,4}$",
+    "example": "12"
+  },
+  {
+    "name": "数字 分隔符 标题",
+    "rule": "^[ 　\\\\t]{0,4}\\\\d{1,5}[:：,.， 、_—\\\\-].{1,30}$",
+    "example": "1、这个就是标题"
+  }
+]`;
+            document.getElementById('importJsonContent').value = defaultJson;
+        }
+        
+        async function executeImportJson() {
+            const jsonContent = document.getElementById('importJsonContent').value.trim();
+            
+            if (!jsonContent) {
+                alert('❌ 请输入 JSON 内容');
+                return;
+            }
+            
+            // 验证 JSON 格式
+            try {
+                JSON.parse(jsonContent);
+            } catch (e) {
+                alert('❌ JSON 格式错误：' + e.message);
+                return;
+            }
+            
+            if (!confirm('确定要导入这些规则吗？\n\n已存在的同名规则将被跳过。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/import`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}` 
+                    },
+                    body: JSON.stringify({
+                        jsonContent: jsonContent,
+                        useFile: false
+                    })
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    alert(`✅ 导入完成！\n\n导入: ${result.imported} 条\n跳过: ${result.skipped} 条`);
+                    closeImportJsonModal();
+                    loadTxtRules();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 导入失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to import TXT rules:', error);
+                alert('❌ 导入失败: ' + error.message);
+            }
+        }
+        
+        function testTxtRules() {
+            alert('测试功能开发中...\n\n您可以通过添加规则后扫描TXT书籍来测试效果。');
+        }
+        
+        // Add modal click handlers for TXT rules
+        document.getElementById('addTxtRuleModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'addTxtRuleModal') {
+                closeAddTxtRuleModal();
+            }
+        });
+        
+        document.getElementById('editTxtRuleModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'editTxtRuleModal') {
+                closeEditTxtRuleModal();
+            }
+        });
+        
+        document.getElementById('importJsonModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'importJsonModal') {
+                closeImportJsonModal();
+            }
         });
     </script>
 </body>

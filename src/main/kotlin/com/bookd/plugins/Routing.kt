@@ -23,6 +23,7 @@ fun Application.configureRouting() {
         bookSourceRoutes()
         scanRoutes()
         tagRoutes()
+        txtParseRuleRoutes()
         fileSystemRoutes()
         webRoutes()
         readingRoutes()

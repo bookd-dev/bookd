@@ -16,12 +16,12 @@ import java.util.concurrent.Executors
 
 class BookContentService(
     private val bookRepository: BookRepository,
-    private val chapterRepository: BookChapterRepository
+    private val chapterRepository: BookChapterRepository,
+    private val txtParser: TxtParser
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
     private val epubParser = EpubParser()
-    private val txtParser = TxtParser()
     private val pdfParser = PdfParser()
     private val mobiParser = MobiParser()
     
@@ -182,7 +182,7 @@ class BookContentService(
     /**
      * 解析 TXT 内容
      */
-    private fun parseTxtContent(bookId: Int, file: File) {
+    private suspend fun parseTxtContent(bookId: Int, file: File) {
         logger.info("Parsing TXT content for book ID: $bookId")
         
         val structure = txtParser.parseStructure(file) ?: run {
