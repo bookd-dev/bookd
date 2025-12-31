@@ -139,9 +139,20 @@
         .loading { text-align: center; padding: 40px; color: #999; }
         
         /* User management styles */
-        .nav-tabs { display: flex; gap: 8px; margin-bottom: 24px; background: white; padding: 8px; border-radius: 12px; }
-        .nav-tab { flex: 1; padding: 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #666; transition: all 0.3s; }
+        .layout { display: flex; gap: 24px; }
+        .sidebar { width: 220px; flex-shrink: 0; }
+        .main-content { flex: 1; }
+        .nav-tabs { display: flex; flex-direction: column; gap: 2px; background: white; padding: 12px; border-radius: 12px; }
+        .nav-group { display: flex; flex-direction: column; gap: 2px; }
+        .nav-tab { padding: 12px 16px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #666; transition: all 0.3s; text-align: left; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
         .nav-tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3); }
+        .nav-tab.parent { font-weight: 700; }
+        .nav-tab.sub-tab { padding-left: 36px; font-size: 13px; font-weight: 500; }
+        .nav-tab:hover:not(.active) { background: #f5f7fa; }
+        .nav-tab .expand-arrow { font-size: 12px; transition: transform 0.3s; display: inline-block; }
+        .nav-tab .expand-arrow.expanded { transform: rotate(90deg); }
+        .sub-tabs { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .sub-tabs.expanded { max-height: 200px; }
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
         .user-list { list-style: none; }
@@ -760,6 +771,13 @@
         }
         
         @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar { width: 100%; }
+            .nav-tabs { gap: 4px; }
+            .nav-group { margin-bottom: 8px; }
+            .nav-tab { font-size: 13px; padding: 10px 14px; }
+            .nav-tab.sub-tab { padding-left: 28px; font-size: 12px; }
+            .sidebar { width: 200px; }
             .source-item { flex-direction: column; gap: 16px; align-items: flex-start; }
             .source-actions { width: 100%; justify-content: flex-end; }
             .book-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -778,27 +796,59 @@
             </div>
         </header>
         
-        <div class="nav-tabs">
-            <button class="nav-tab active" onclick="switchTab('books')">📚 书籍管理</button>
-            <button class="nav-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
-            <button class="nav-tab" onclick="switchTab('users')">👥 用户管理</button>
-        </div>
-        
-        <div id="books-tab" class="tab-pane active">
-            <div class="stats">
-                <div class="stat-card clickable" onclick="showAllBooks()">
-                    <div class="stat-value" id="totalBooks">0</div>
-                    <div class="stat-label">📖 图书总数</div>
-                    <div class="stat-hint">点击查看所有书籍</div>
-                </div>
-                <div class="stat-card clickable" onclick="showBookSources()">
-                    <div class="stat-value" id="totalSources">0</div>
-                    <div class="stat-label">📁 书籍源</div>
-                    <div class="stat-hint">点击管理书籍源</div>
+        <div class="layout">
+            <div class="sidebar">
+                <div class="nav-tabs">
+                    <button class="nav-tab active" onclick="switchTab('home')">🏠 首页</button>
+                    
+                    <div class="nav-group">
+                        <button class="nav-tab parent" onclick="toggleNavGroup('books-group')">
+                            <span>📚 书籍</span>
+                            <span class="expand-arrow" id="books-arrow">▶</span>
+                        </button>
+                        <div class="sub-tabs" id="books-group">
+                            <button class="nav-tab sub-tab" onclick="switchTab('book-manage')">📖 书籍管理</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
+                        </div>
+                    </div>
+                    
+                    <div class="nav-group">
+                        <button class="nav-tab parent" onclick="toggleNavGroup('users-group')">
+                            <span>👥 用户</span>
+                            <span class="expand-arrow" id="users-arrow">▶</span>
+                        </button>
+                        <div class="sub-tabs" id="users-group">
+                            <button class="nav-tab sub-tab" onclick="switchTab('user-manage')">👤 用户管理</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('invite-tokens')">🎫 邀请码管理</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-        
-        <div class="section">
+            
+            <div class="main-content">
+                <div id="home-tab" class="tab-pane active">
+                    <div class="section">
+                        <h2>🏠 欢迎使用 Bookd 电子书管理系统</h2>
+                        <p style="color: #666; font-size: 14px; line-height: 1.8;">
+                            这是您的管理后台首页。请使用左侧导航菜单管理您的电子书库、标签和用户。
+                        </p>
+                    </div>
+                </div>
+                
+                <div id="book-manage-tab" class="tab-pane">
+                    <div class="stats">
+                        <div class="stat-card clickable" onclick="showAllBooks()">
+                            <div class="stat-value" id="totalBooks">0</div>
+                            <div class="stat-label">📖 图书总数</div>
+                            <div class="stat-hint">点击查看所有书籍</div>
+                        </div>
+                        <div class="stat-card clickable" onclick="showBookSources()">
+                            <div class="stat-value" id="totalSources">0</div>
+                            <div class="stat-label">📁 书籍源</div>
+                            <div class="stat-hint">点击管理书籍源</div>
+                        </div>
+                    </div>
+                    <div class="section">
             <h2>📁 添加书籍源</h2>
             <form id="addSourceForm">
                 <div class="form-group">
@@ -843,7 +893,7 @@
         </div>
     </div>
     
-    <div id="users-tab" class="tab-pane">
+    <div id="user-manage-tab" class="tab-pane">
         <div class="section">
             <h2>👥 用户列表</h2>
             <ul class="user-list" id="userList">
@@ -853,7 +903,9 @@
                 </li>
             </ul>
         </div>
-        
+    </div>
+    
+    <div id="invite-tokens-tab" class="tab-pane">
         <div class="section">
             <h2>🎫 邀请码管理</h2>
             <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
@@ -867,7 +919,8 @@
             </ul>
         </div>
     </div>
-</div>
+        </div>
+    </div>
     
     <!-- 文件浏览器模态框 -->
     <div id="fileBrowserModal" class="modal">
@@ -1131,15 +1184,55 @@
             window.location.href = '/login';
         }
         
+        function toggleNavGroup(groupId) {
+            const group = document.getElementById(groupId);
+            const arrow = document.getElementById(groupId.replace('-group', '-arrow'));
+            
+            if (group.classList.contains('expanded')) {
+                group.classList.remove('expanded');
+                arrow.classList.remove('expanded');
+            } else {
+                group.classList.add('expanded');
+                arrow.classList.add('expanded');
+            }
+        }
+        
         function switchTab(tab) {
+            // Remove active from all tabs and panes
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
             
-            event.target.classList.add('active');
-            document.getElementById(`${tab}-tab`).classList.add('active');
+            // Activate the clicked tab
+            const tabs = Array.from(document.querySelectorAll('.nav-tab'));
+            const clickedTab = tabs.find(t => {
+                const onclick = t.getAttribute('onclick');
+                return onclick && onclick.includes(`'${tab}'`);
+            });
+            if (clickedTab) {
+                clickedTab.classList.add('active');
+                
+                // Auto-expand parent group if clicking sub-tab
+                const parentGroup = clickedTab.closest('.nav-group');
+                if (parentGroup) {
+                    const subTabs = parentGroup.querySelector('.sub-tabs');
+                    const arrow = parentGroup.querySelector('.expand-arrow');
+                    if (subTabs && !subTabs.classList.contains('expanded')) {
+                        subTabs.classList.add('expanded');
+                        arrow.classList.add('expanded');
+                    }
+                }
+            }
             
-            if (tab === 'users') {
+            // Show the corresponding pane
+            const pane = document.getElementById(`${tab}-tab`);
+            if (pane) {
+                pane.classList.add('active');
+            }
+            
+            // Load data for specific tabs
+            if (tab === 'user-manage') {
                 loadUsers();
+            } else if (tab === 'invite-tokens') {
                 loadInviteTokens();
             } else if (tab === 'tags') {
                 loadTags();
