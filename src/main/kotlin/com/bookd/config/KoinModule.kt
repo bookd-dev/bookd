@@ -19,7 +19,10 @@ import com.bookd.domain.service.TagService
 import com.bookd.domain.service.ReadingService
 import com.bookd.domain.service.BookContentService
 import com.bookd.domain.service.TxtParseRuleService
+import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.parser.TxtParser
+import com.bookd.infrastructure.cache.RedisService
+import com.bookd.infrastructure.cache.BookCacheService
 import org.koin.dsl.module
 
 val appModule = module {
@@ -34,6 +37,37 @@ val appModule = module {
     single { BookChapterRepository() }
     single { TxtParseRuleRepository() }
     
+    // Redis (optional, graceful degradation if not available)
+    single<RedisService?> {
+        try {
+            val redisHost = System.getenv("REDIS_HOST") ?: "localhost"
+            val redisPort = System.getenv("REDIS_PORT")?.toIntOrNull() ?: 6379
+            val redisPassword = System.getenv("REDIS_PASSWORD")?.takeIf { it.isNotBlank() }
+            val redisDatabase = System.getenv("REDIS_DATABASE")?.toIntOrNull() ?: 0
+            val redisEnabled = System.getenv("REDIS_ENABLED")?.toBoolean() ?: false
+            
+            if (redisEnabled) {
+                val redis = RedisService(redisHost, redisPort, redisPassword, redisDatabase)
+                try {
+                    redis.ping()
+                    println("✅ Redis connected: $redisHost:$redisPort")
+                    redis
+                } catch (e: Exception) {
+                    println("⚠️  Redis connection test failed: ${e.message}, running without cache")
+                    null
+                }
+            } else {
+                println("ℹ️  Redis disabled, running without cache")
+                null
+            }
+        } catch (e: Exception) {
+            println("⚠️  Redis initialization failed: ${e.message}, running without cache")
+            null
+        }
+    }
+    
+    single<BookCacheService> { BookCacheService(getOrNull()) }
+    
     // Services
     single { UserService(get()) }
     single { BookService(get(), get()) }
@@ -41,9 +75,10 @@ val appModule = module {
     single { CoverGeneratorService() }
     single { TxtParseRuleService(get()) }
     single { TxtParser(get()) }
-    single { BookContentService(get(), get(), get()) }
+    single { BookContentService(get(), get(), get(), getOrNull<BookCacheService>()) }
     single { BookMetadataService(get(), get()) }
     single { BookScanService(get(), get(), get(), get()) }
     single { TagService(get(), get()) }
     single { ReadingService(get(), get(), get()) }
+    single { BackgroundParseService(get(), get()) }
 }

@@ -13,6 +13,17 @@ services:
     networks:
       - bookd-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: bookd-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - bookd-network
+
   bookd-server:
     image: bookd:local
     container_name: bookd-server
@@ -23,6 +34,9 @@ services:
       DATABASE_URL: "jdbc:postgresql://postgres:5432/bookd"
       DATABASE_USER: "bookd"
       DATABASE_PASSWORD: "bookd"
+      REDIS_ENABLED: "true"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
     # Memory and resource limits
     deploy:
       resources:
@@ -46,11 +60,13 @@ services:
       - /Users:/Users:ro
     depends_on:
       - postgres
+      - redis
     networks:
       - bookd-network
 
 volumes:
   postgres_data:
+  redis_data:
   covers_data:
 
 networks:

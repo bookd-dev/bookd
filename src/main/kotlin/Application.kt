@@ -64,4 +64,8 @@ fun Application.module() {
             txtParseRuleService.initializeFromJson(jsonFile)
         }
     }
+    
+    // Start background parse service
+    val backgroundParseService by inject<com.bookd.domain.service.BackgroundParseService>()
+    backgroundParseService.start()
 }

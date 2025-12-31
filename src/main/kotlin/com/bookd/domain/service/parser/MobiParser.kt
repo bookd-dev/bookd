@@ -4,11 +4,12 @@ import com.bookd.domain.model.ContentElement
 import com.bookd.domain.model.TextSpan
 import org.apache.tika.metadata.Metadata
 import org.apache.tika.parser.AutoDetectParser
-import org.apache.tika.sax.BodyContentHandler
+import org.apache.tika.sax.ToXMLContentHandler
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.TextNode
 import org.slf4j.LoggerFactory
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 
@@ -59,13 +60,22 @@ class MobiParser {
     private fun extractHtmlContent(file: File): String {
         return try {
             val metadata = Metadata()
-            val handler = BodyContentHandler(-1) // 无限制
+            val outputStream = ByteArrayOutputStream()
+            val handler = ToXMLContentHandler(outputStream, "UTF-8")
             
             FileInputStream(file).use { stream ->
                 parser.parse(stream, handler, metadata)
             }
             
-            handler.toString()
+            val xmlContent = outputStream.toString("UTF-8")
+            logger.debug("Extracted content length: ${xmlContent.length}")
+            
+            // 如果内容太短，可能解析失败
+            if (xmlContent.length < 100) {
+                logger.warn("Extracted content is too short, might be empty")
+            }
+            
+            xmlContent
         } catch (e: Exception) {
             logger.error("Failed to extract HTML from MOBI/AZW3", e)
             ""
@@ -81,17 +91,17 @@ class MobiParser {
         try {
             val doc = Jsoup.parse(htmlContent)
             
-            // 查找所有标题标签 (h1, h2, h3)
-            val headings = doc.select("h1, h2, h3, h4")
+            // 查找所有标题标签 (h1, h2, h3, h4)
+            val headings = doc.select("h1, h2, h3, h4, h5, h6")
             
-            if (headings.isEmpty()) {
-                // 如果没有标题，尝试基于特定模式分割
-                chapters.addAll(detectChaptersByPattern(htmlContent))
-            } else {
+            if (headings.isNotEmpty()) {
                 // 基于 HTML 标题分章
+                logger.info("Found ${headings.size} headings in HTML")
                 headings.forEachIndexed { index, heading ->
                     val title = heading.text().trim()
-                    val level = heading.tagName().substring(1).toIntOrNull() ?: 1
+                    if (title.isEmpty()) return@forEachIndexed
+                    
+                    val level = heading.tagName().substring(1).toIntOrNull()?.minus(1) ?: 0
                     
                     // 计算章节在原始 HTML 中的位置
                     val startPos = htmlContent.indexOf(heading.outerHtml())
@@ -104,19 +114,27 @@ class MobiParser {
                     if (startPos >= 0 && endPos > startPos) {
                         chapters.add(
                             ChapterInfo(
-                                index = index,
+                                index = chapters.size,
                                 title = title,
                                 startPos = startPos,
                                 endPos = endPos,
-                                level = level - 1 // 转换为 0-based level
+                                level = level
                             )
                         )
                     }
                 }
             }
             
+            // 如果没有找到标题，尝试基于特定模式分割
+            if (chapters.isEmpty()) {
+                logger.info("No headings found, trying pattern-based detection")
+                val plainText = doc.text()
+                chapters.addAll(detectChaptersByPattern(plainText, htmlContent))
+            }
+            
             // 如果还是没有章节，创建一个包含全部内容的章节
             if (chapters.isEmpty()) {
+                logger.warn("No chapters detected, creating single chapter")
                 chapters.add(
                     ChapterInfo(
                         index = 0,
@@ -129,6 +147,16 @@ class MobiParser {
             }
         } catch (e: Exception) {
             logger.error("Failed to detect chapters from HTML", e)
+            // 降级：创建单一章节
+            chapters.add(
+                ChapterInfo(
+                    index = 0,
+                    title = "全文",
+                    startPos = 0,
+                    endPos = htmlContent.length,
+                    level = 0
+                )
+            )
         }
         
         return chapters
@@ -137,9 +165,8 @@ class MobiParser {
     /**
      * 基于文本模式检测章节
      */
-    private fun detectChaptersByPattern(htmlContent: String): List<ChapterInfo> {
+    private fun detectChaptersByPattern(plainText: String, htmlContent: String): List<ChapterInfo> {
         val chapters = mutableListOf<ChapterInfo>()
-        val plainText = Jsoup.parse(htmlContent).text()
         
         // 章节模式（与 TxtParser 类似）
         val chapterPatterns = listOf(
@@ -157,29 +184,52 @@ class MobiParser {
             }
         }
         
-        // 按位置排序
+        // 按位置排序并去重
         matches.sortBy { it.first }
+        val uniqueMatches = matches.distinctBy { it.first }
         
         // 创建章节
-        matches.forEachIndexed { index, (pos, title) ->
-            val endPos = if (index < matches.size - 1) {
-                matches[index + 1].first
+        uniqueMatches.forEachIndexed { index, (pos, title) ->
+            // 在 HTML 中查找对应位置
+            val htmlPos = findTextPositionInHtml(htmlContent, title, pos)
+            val endPos = if (index < uniqueMatches.size - 1) {
+                val nextTitle = uniqueMatches[index + 1].second
+                findTextPositionInHtml(htmlContent, nextTitle, uniqueMatches[index + 1].first)
             } else {
                 htmlContent.length
             }
             
-            chapters.add(
-                ChapterInfo(
-                    index = index,
-                    title = title,
-                    startPos = pos,
-                    endPos = endPos,
-                    level = 0
+            if (htmlPos >= 0 && endPos > htmlPos) {
+                chapters.add(
+                    ChapterInfo(
+                        index = index,
+                        title = title,
+                        startPos = htmlPos,
+                        endPos = endPos,
+                        level = 0
+                    )
                 )
-            )
+            }
         }
         
         return chapters
+    }
+    
+    /**
+     * 在 HTML 中查找文本位置
+     */
+    private fun findTextPositionInHtml(htmlContent: String, text: String, approximatePos: Int): Int {
+        // 首先尝试精确匹配
+        var pos = htmlContent.indexOf(text)
+        if (pos >= 0) return pos
+        
+        // 尝试模糊匹配（处理 HTML 标签）
+        val cleanText = text.replace(Regex("\\s+"), " ")
+        pos = htmlContent.indexOf(cleanText)
+        if (pos >= 0) return pos
+        
+        // 使用近似位置
+        return approximatePos.coerceIn(0, htmlContent.length)
     }
     
     /**

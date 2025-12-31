@@ -112,16 +112,52 @@ fun Route.bookRoutes() {
         
         // 获取书籍章节列表
         get("/{id}/chapters") {
+            val bookRepository = get<com.bookd.data.repository.BookRepository>(
+                com.bookd.data.repository.BookRepository::class.java
+            )
             val chapterRepository = get<com.bookd.data.repository.BookChapterRepository>(
                 com.bookd.data.repository.BookChapterRepository::class.java
             )
+            val contentService = get<com.bookd.domain.service.BookContentService>(
+                com.bookd.domain.service.BookContentService::class.java
+            )
+            
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
                 return@get
             }
             
+            // 1. 获取书籍信息
+            val book = bookRepository.findById(id)
+            if (book == null) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Book not found"))
+                return@get
+            }
+            
+            // 2. 如果未解析，触发按需解析
+            if (!book.chaptersParsed) {
+                try {
+                    val parsed = contentService.parseOnDemand(id, book.filePath)
+                    if (!parsed) {
+                        call.respond(
+                            HttpStatusCode.InternalServerError, 
+                            mapOf("error" to "Failed to parse chapters")
+                        )
+                        return@get
+                    }
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.InternalServerError, 
+                        mapOf("error" to "Error parsing chapters: ${e.message}")
+                    )
+                    return@get
+                }
+            }
+            
+            // 3. 从数据库获取章节
             val chapters = chapterRepository.findByBookId(id)
+            
             call.respond(
                 ChaptersResponse(
                     bookId = id,

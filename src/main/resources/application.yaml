@@ -12,6 +12,13 @@ database:
   user: ${DATABASE_USER:bookd}
   password: ${DATABASE_PASSWORD:bookd}
 
+redis:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  password: ${REDIS_PASSWORD:}
+  database: ${REDIS_DATABASE:0}
+  enabled: ${REDIS_ENABLED:true}
+
 app:
   scan:
     directories:
@@ -21,3 +28,8 @@ app:
       - "epub"
       - "mobi"
       - "azw3"
+  parse:
+    autoParseOnScan: false  # 扫描时不自动解析章节
+    backgroundParseEnabled: true  # 启用后台解析
+    backgroundParseInterval: 60  # 后台解析间隔(秒)
+    backgroundParseBatchSize: 5  # 每次处理的书籍数量

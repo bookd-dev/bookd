@@ -207,20 +207,16 @@ class BookScanService(
         val existing = bookRepository.findByFilePath(filePath)
         if (existing != null) {
             if (fullScan) {
-                // 全量扫描模式：强制重新提取元数据和解析内容
-                logger.info("Full scan mode: Re-extracting metadata and content for existing book: ${file.name}")
+                // 全量扫描模式：强制重新提取元数据
+                logger.info("Full scan mode: Re-extracting metadata for existing book: ${file.name}")
                 try {
                     metadataService.extractMetadataAsync(existing.id, filePath)
                 } catch (e: Exception) {
                     logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
                 }
                 
-                // 重新解析书籍内容
-                try {
-                    contentService.parseBookContentAsync(existing.id, filePath)
-                } catch (e: Exception) {
-                    logger.error("Failed to start content parsing for existing book: ${file.name}", e)
-                }
+                // 注意：不再自动解析内容，改为按需解析
+                // 用户打开书籍时才会触发解析
                 
                 return existing // 返回已存在的书籍，表示已处理
             } else {
@@ -231,13 +227,6 @@ class BookScanService(
                         metadataService.extractMetadataAsync(existing.id, filePath)
                     } catch (e: Exception) {
                         logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
-                    }
-                    
-                    // 同时触发内容解析
-                    try {
-                        contentService.parseBookContentAsync(existing.id, filePath)
-                    } catch (e: Exception) {
-                        logger.error("Failed to start content parsing for existing book: ${file.name}", e)
                     }
                 }
                 return null // 已存在，跳过
@@ -270,13 +259,9 @@ class BookScanService(
                 // 不影响主流程，继续
             }
             
-            // 异步解析书籍内容（章节、图片等）
-            try {
-                contentService.parseBookContentAsync(book.id, filePath)
-            } catch (e: Exception) {
-                logger.error("Failed to start content parsing for $fileName", e)
-                // 不影响主流程，继续
-            }
+            // 注意：不再自动解析内容，改为按需解析
+            // 用户打开书籍时才会触发解析
+            logger.info("Book created, chapters will be parsed on-demand: $fileName")
             
             book
         } catch (e: Exception) {

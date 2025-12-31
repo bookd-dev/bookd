@@ -28,6 +28,24 @@ fun Route.bookContentRoutes() {
             }
         }
         
+        // 重新解析书籍内容
+        post("/reparse") {
+            val contentService = get<BookContentService>(BookContentService::class.java)
+            val bookId = call.parameters["id"]?.toIntOrNull()
+            
+            if (bookId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                return@post
+            }
+            
+            val queued = contentService.queueForReparse(bookId)
+            if (queued) {
+                call.respond(mapOf("message" to "Book queued for reparse"))
+            } else {
+                call.respond(HttpStatusCode.Conflict, mapOf("error" to "Book is already being parsed or not found"))
+            }
+        }
+        
         // 获取章节内容
         get("/chapters/{index}") {
             val contentService = get<BookContentService>(BookContentService::class.java)

@@ -3,10 +3,8 @@ package com.bookd.domain.service
 import com.bookd.data.repository.BookChapterRepository
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.*
-import com.bookd.domain.service.parser.EpubParser
-import com.bookd.domain.service.parser.TxtParser
-import com.bookd.domain.service.parser.PdfParser
-import com.bookd.domain.service.parser.MobiParser
+import com.bookd.domain.service.parser.*
+import com.bookd.infrastructure.cache.BookCacheService
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -17,13 +15,13 @@ import java.util.concurrent.Executors
 class BookContentService(
     private val bookRepository: BookRepository,
     private val chapterRepository: BookChapterRepository,
-    private val txtParser: TxtParser
+    private val txtParser: TxtParser,
+    private val cacheService: BookCacheService?
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
-    private val epubParser = EpubParser()
-    private val pdfParser = PdfParser()
-    private val mobiParser = MobiParser()
+    // 解析器工厂
+    private val parserFactory = ParserFactory(txtParser)
     
     // 专用的内容解析线程池
     private val contentDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
@@ -48,10 +46,13 @@ class BookContentService(
             delay(1000) // 延迟以避免影响扫描流程
             try {
                 logger.info("Starting content parsing for book ID: $bookId")
+                // 更新状态为正在解析
+                bookRepository.updateParseStatus(bookId, "parsing", 0)
                 parseBookContent(bookId, filePath)
                 logger.info("Completed content parsing for book ID: $bookId")
             } catch (e: Exception) {
                 logger.error("Failed to parse book content for ID: $bookId", e)
+                bookRepository.updateParseStatus(bookId, "failed", 0)
             } finally {
                 synchronized(parsingBooks) {
                     parsingBooks.remove(bookId)
@@ -61,7 +62,101 @@ class BookContentService(
     }
     
     /**
-     * 解析书籍内容（同步）
+     * 按需解析：检查缓存和数据库，如果需要则同步解析
+     * 用于用户打开书籍时
+     */
+    suspend fun parseOnDemand(bookId: Int, filePath: String): Boolean {
+        // 1. 先检查 Redis 缓存
+        val cachedParsed = cacheService?.isBookParsed(bookId)
+        if (cachedParsed == true) {
+            logger.debug("Book $bookId already parsed (from cache)")
+            return true
+        }
+        
+        // 2. 检查数据库状态
+        val book = bookRepository.findById(bookId)
+        if (book == null) {
+            logger.warn("Book not found: $bookId")
+            return false
+        }
+        
+        if (book.chaptersParsed) {
+            // 更新缓存
+            cacheService?.setBookParsed(bookId, true)
+            logger.debug("Book $bookId already parsed (from database)")
+            return true
+        }
+        
+        // 3. 尝试获取分布式锁
+        val lockAcquired = cacheService?.tryAcquireParseLock(bookId) ?: true
+        if (!lockAcquired) {
+            logger.info("Book $bookId is being parsed by another process, waiting...")
+            // 等待一段时间后重新检查
+            delay(2000)
+            val recheckBook = bookRepository.findById(bookId)
+            return recheckBook?.chaptersParsed ?: false
+        }
+        
+        return try {
+            logger.info("Parsing book on-demand: $bookId")
+            
+            // 4. 更新状态为正在解析
+            bookRepository.updateParseStatus(bookId, "parsing", 0)
+            
+            // 5. 同步解析（用户等待）
+            parseBookContent(bookId, filePath)
+            
+            // 6. 更新数据库和缓存（这里可能不需要，因为解析方法内部已经更新了）
+            val chapterCount = chapterRepository.countByBookId(bookId)
+            cacheService?.setBookParsed(bookId, true)
+            
+            logger.info("Book $bookId parsed successfully, chapters: $chapterCount")
+            true
+        } catch (e: Exception) {
+            logger.error("Failed to parse book on-demand: $bookId", e)
+            bookRepository.updateParseStatus(bookId, "failed", 0)
+            false
+        } finally {
+            // 7. 释放锁
+            cacheService?.releaseParseLock(bookId)
+        }
+    }
+    
+    /**
+     * 强制重新解析：清除缓存和现有数据，重新解析书籍内容
+     * 用于用户手动触发重新解析
+     */
+    fun queueForReparse(bookId: Int): Boolean {
+        val book = bookRepository.findById(bookId)
+        if (book == null) {
+            logger.warn("Book not found for reparse: $bookId")
+            return false
+        }
+        
+        // 检查是否正在解析
+        synchronized(parsingBooks) {
+            if (parsingBooks.contains(bookId)) {
+                logger.info("Book $bookId is already being parsed")
+                return false
+            }
+        }
+        
+        // 清除所有相关缓存
+        cacheService?.clearBookCache(bookId)
+        
+        // 重置解析状态
+        bookRepository.updateParseStatus(bookId, "pending", 0)
+        bookRepository.updateChaptersParsed(bookId, 0)
+        
+        // 异步开始解析
+        parseBookContentAsync(bookId, book.filePath)
+        
+        logger.info("Book $bookId queued for reparse")
+        return true
+    }
+    
+    /**
+     * 解析书籍内容（同步）- 使用工厂模式统一处理
      */
     private suspend fun parseBookContent(bookId: Int, filePath: String) {
         val file = File(filePath)
@@ -70,46 +165,51 @@ class BookContentService(
             return
         }
         
-        val format = file.extension.lowercase()
+        // 使用工厂创建对应格式的解析器
+        val parser = parserFactory.createParser(file)
+        if (parser == null) {
+            logger.warn("Unsupported format: ${file.extension}")
+            bookRepository.updateParseStatus(bookId, "failed", 0)
+            return
+        }
         
         withContext(Dispatchers.IO) {
             try {
-                when (format) {
-                    "epub" -> parseEpubContent(bookId, file)
-                    "txt" -> parseTxtContent(bookId, file)
-                    "pdf" -> parsePdfContent(bookId, file)
-                    "mobi", "azw3" -> parseMobiContent(bookId, file)
-                    else -> {
-                        logger.warn("Unsupported format: $format")
-                    }
-                }
+                parseWithParser(bookId, file, parser)
             } catch (e: Exception) {
                 logger.error("Error parsing book content: ${file.name}", e)
+                bookRepository.updateParseStatus(bookId, "failed", 0)
             }
         }
     }
     
     /**
-     * 解析 EPUB 内容
+     * 使用解析器解析书籍内容（统一流程）
      */
-    private fun parseEpubContent(bookId: Int, file: File) {
-        logger.info("Parsing EPUB content for book ID: $bookId")
+    private suspend fun parseWithParser(bookId: Int, file: File, parser: BookParser) {
+        logger.info("Parsing ${file.extension.uppercase()} content for book ID: $bookId")
         
-        val structure = epubParser.parseStructure(file) ?: run {
-            logger.error("Failed to parse EPUB structure")
+        // 1. 解析书籍结构
+        val structure = parser.parseStructure(file) ?: run {
+            logger.error("Failed to parse book structure")
+            bookRepository.updateParseStatus(bookId, "failed", 0)
             return
         }
         
+        // 2. 清理旧数据并创建章节
         try {
-            // 使用单个事务处理删除和插入，避免并发冲突
+            // 在独立事务中清理旧章节数据
             transaction {
-                // 1. 清理旧章节数据（在同一事务中）
                 logger.info("Deleting old chapters for book ID: $bookId")
-                chapterRepository.deleteByBookId(bookId)
+                val count = chapterRepository.deleteByBookId(bookId)
+                logger.info("Deleted $count old chapters for book ID: $bookId")
                 chapterRepository.deleteResourcesByBookId(bookId)
-                
-                // 2. 批量保存章节信息（在同一事务中）
+            }
+            
+            // 批量保存章节信息（在新事务中）
+            val createdCount = transaction {
                 logger.info("Creating ${structure.chapters.size} chapters for book ID: $bookId")
+                var successCount = 0
                 structure.chapters.forEach { chapterInfo ->
                     chapterRepository.create(
                         bookId = bookId,
@@ -118,245 +218,115 @@ class BookContentService(
                         level = chapterInfo.level,
                         href = chapterInfo.href
                     )
+                    successCount++
                 }
+                successCount
             }
             
-            logger.info("Successfully created ${structure.chapters.size} chapters for book ID: $bookId")
+            logger.info("Successfully created $createdCount chapters for book ID: $bookId")
             
-            // 3. 解析章节内容（在事务外，避免长事务）
+            // 3. 解析并保存章节内容（在事务外，避免长事务）
             structure.chapters.forEach { chapterInfo ->
-                try {
-                    val chapter = chapterRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
-                    if (chapter == null) {
-                        logger.error("Chapter not found after creation: bookId=$bookId, index=${chapterInfo.index}")
-                        return@forEach
-                    }
-                    
-                    val elements = epubParser.parseChapterContent(file, chapterInfo.href) ?: emptyList()
-                    
-                    // 统计字数和图片数
-                    val wordCount = countWords(elements)
-                    val imageCount = countImages(elements)
-                    
-                    chapterRepository.saveChapterContent(chapter.id, elements)
-                    chapterRepository.updateStats(chapter.id, wordCount, imageCount)
-                    
-                    logger.debug("Saved chapter ${chapter.index}: ${chapter.title} ($wordCount words, $imageCount images)")
-                } catch (e: Exception) {
-                    logger.error("Failed to parse chapter ${chapterInfo.index}", e)
-                }
+                parseAndSaveChapterContent(bookId, file, parser, chapterInfo)
             }
             
-            // 4. 保存资源文件
-            val resourcesDir = File("book_resources/${bookId}")
-            resourcesDir.mkdirs()
-            
-            structure.resources.forEach { (path, bytes) ->
-                try {
-                    val extension = path.substringAfterLast(".")
-                    val storedFileName = "${UUID.randomUUID()}.$extension"
-                    val storedFile = File(resourcesDir, storedFileName)
-                    storedFile.writeBytes(bytes)
-                    
-                    val mediaType = detectMediaType(extension)
-                    chapterRepository.saveResource(
-                        bookId = bookId,
-                        path = path,
-                        storedPath = storedFile.absolutePath,
-                        mediaType = mediaType,
-                        size = bytes.size.toLong()
-                    )
-                    
-                    logger.debug("Saved resource: $path -> $storedFileName")
-                } catch (e: Exception) {
-                    logger.error("Failed to save resource: $path", e)
-                }
+            // 4. 保存资源文件（如果有）
+            if (structure.resources.isNotEmpty()) {
+                saveResources(bookId, structure.resources)
             }
             
-            logger.info("EPUB parsing completed for book ID: $bookId - ${structure.chapters.size} chapters, ${structure.resources.size} resources")
+            // 5. 特殊处理：PDF 图片提取
+            if (parser is PdfBookParser) {
+                extractAndSavePdfImages(bookId, file, parser)
+            }
+            
+            // 6. 更新书籍解析状态
+            bookRepository.updateChaptersParsed(bookId, structure.chapters.size)
+            
+            logger.info("Parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
         } catch (e: Exception) {
-            logger.error("Failed to parse EPUB content for book ID: $bookId", e)
+            logger.error("Failed to parse book content for book ID: $bookId", e)
+            bookRepository.updateParseStatus(bookId, "failed", 0)
         }
     }
     
     /**
-     * 解析 TXT 内容
+     * 解析并保存单个章节内容
      */
-    private suspend fun parseTxtContent(bookId: Int, file: File) {
-        logger.info("Parsing TXT content for book ID: $bookId")
-        
-        val structure = txtParser.parseStructure(file) ?: run {
-            logger.error("Failed to parse TXT structure")
-            return
-        }
-        
+    private suspend fun parseAndSaveChapterContent(
+        bookId: Int,
+        file: File,
+        parser: BookParser,
+        chapterInfo: BookParser.ChapterInfo
+    ) {
         try {
-            // 使用单个事务处理删除和插入，避免并发冲突
-            transaction {
-                // 1. 清理旧章节数据
-                logger.info("Deleting old chapters for book ID: $bookId")
-                chapterRepository.deleteByBookId(bookId)
+            val chapter = chapterRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
+            if (chapter == null) {
+                logger.error("Chapter not found after creation: bookId=$bookId, index=${chapterInfo.index}")
+                return
+            }
+            
+            // 解析章节内容
+            val elements = parser.parseChapterContent(file, chapterInfo)
+            
+            // 统计字数和图片数
+            val wordCount = parser.countWords(elements)
+            val imageCount = parser.countImages(elements)
+            
+            // 保存内容和统计信息
+            chapterRepository.saveChapterContent(chapter.id, elements)
+            chapterRepository.updateStats(chapter.id, wordCount, imageCount)
+            
+            logger.debug("Saved chapter ${chapter.index}: ${chapter.title} ($wordCount words, $imageCount images)")
+        } catch (e: Exception) {
+            logger.error("Failed to parse chapter ${chapterInfo.index}", e)
+        }
+    }
+    
+    /**
+     * 保存资源文件
+     */
+    private fun saveResources(bookId: Int, resources: Map<String, ByteArray>) {
+        val resourcesDir = File("book_resources/$bookId")
+        resourcesDir.mkdirs()
+        
+        resources.forEach { (path, bytes) ->
+            try {
+                val extension = path.substringAfterLast(".")
+                val storedFileName = "${UUID.randomUUID()}.$extension"
+                val storedFile = File(resourcesDir, storedFileName)
+                storedFile.writeBytes(bytes)
                 
-                // 2. 批量保存章节信息
-                logger.info("Creating ${structure.chapters.size} chapters for book ID: $bookId")
-                structure.chapters.forEach { chapterInfo ->
-                    chapterRepository.create(
-                        bookId = bookId,
-                        index = chapterInfo.index,
-                        title = chapterInfo.title,
-                        level = chapterInfo.level
-                    )
-                }
+                val mediaType = detectMediaType(extension)
+                chapterRepository.saveResource(
+                    bookId = bookId,
+                    path = path,
+                    storedPath = storedFile.absolutePath,
+                    mediaType = mediaType,
+                    size = bytes.size.toLong()
+                )
+                
+                logger.debug("Saved resource: $path -> $storedFileName")
+            } catch (e: Exception) {
+                logger.error("Failed to save resource: $path", e)
             }
-            
-            logger.info("Successfully created ${structure.chapters.size} chapters for book ID: $bookId")
-            
-            // 3. 提取并保存章节内容（在事务外）
-            structure.chapters.forEach { chapterInfo ->
-                try {
-                    val chapter = chapterRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
-                    if (chapter == null) {
-                        logger.error("Chapter not found after creation: bookId=$bookId, index=${chapterInfo.index}")
-                        return@forEach
-                    }
-                    
-                    val elements = txtParser.extractChapterContent(structure.fullText, chapterInfo)
-                    val chapterText = structure.fullText.substring(chapterInfo.startPos, chapterInfo.endPos)
-                    val wordCount = txtParser.countWords(chapterText)
-                    
-                    chapterRepository.saveChapterContent(chapter.id, elements)
-                    chapterRepository.updateStats(chapter.id, wordCount, 0)
-                    
-                    logger.debug("Saved chapter ${chapter.index}: ${chapter.title} ($wordCount words)")
-                } catch (e: Exception) {
-                    logger.error("Failed to parse chapter ${chapterInfo.index}", e)
-                }
-            }
-            
-            logger.info("TXT parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
-        } catch (e: Exception) {
-            logger.error("Failed to parse TXT content for book ID: $bookId", e)
         }
     }
     
     /**
-     * 解析 PDF 内容
+     * 提取并保存 PDF 图片
      */
-    private fun parsePdfContent(bookId: Int, file: File) {
-        logger.info("Parsing PDF content for book ID: $bookId")
-        
-        val structure = pdfParser.parseStructure(file, extractImages = false) ?: run {
-            logger.error("Failed to parse PDF structure")
-            return
-        }
-        
-        // 1. 清理旧章节数据和资源
-        chapterRepository.deleteByBookId(bookId)
-        chapterRepository.deleteResourcesByBookId(bookId)
-        
-        // 2. 提取并保存图片资源
+    private fun extractAndSavePdfImages(bookId: Int, file: File, parser: PdfBookParser) {
         try {
-            val images = pdfParser.extractImages(file)
+            val images = parser.extractImages(file)
             logger.info("Extracted ${images.size} images from PDF")
             
-            val resourcesDir = File("book_resources/${bookId}")
-            resourcesDir.mkdirs()
-            
-            images.forEach { (originalName, bytes) ->
-                try {
-                    val extension = originalName.substringAfterLast(".")
-                    val storedFileName = "${UUID.randomUUID()}.$extension"
-                    val storedFile = File(resourcesDir, storedFileName)
-                    storedFile.writeBytes(bytes)
-                    
-                    val mediaType = detectMediaType(extension)
-                    chapterRepository.saveResource(
-                        bookId = bookId,
-                        path = originalName,
-                        storedPath = storedFile.absolutePath,
-                        mediaType = mediaType,
-                        size = bytes.size.toLong()
-                    )
-                    
-                    logger.debug("Saved PDF image: $originalName -> $storedFileName")
-                } catch (e: Exception) {
-                    logger.error("Failed to save PDF image: $originalName", e)
-                }
+            if (images.isNotEmpty()) {
+                saveResources(bookId, images)
             }
         } catch (e: Exception) {
             logger.error("Failed to extract images from PDF", e)
         }
-        
-        // 3. 保存章节信息
-        structure.chapters.forEach { chapterInfo ->
-            val chapter = chapterRepository.create(
-                bookId = bookId,
-                index = chapterInfo.index,
-                title = chapterInfo.title,
-                level = chapterInfo.level
-            )
-            
-            // 4. 提取并保存章节内容
-            try {
-                val elements = pdfParser.extractChapterContent(file, chapterInfo) ?: emptyList()
-                
-                // 计算字数（从元素中提取文本）
-                val wordCount = countWords(elements)
-                val imageCount = countImages(elements)
-                
-                chapterRepository.saveChapterContent(chapter.id, elements)
-                chapterRepository.updateStats(chapter.id, wordCount, imageCount)
-                
-                logger.debug("Saved PDF chapter ${chapter.index}: ${chapter.title} ($wordCount words)")
-            } catch (e: Exception) {
-                logger.error("Failed to parse PDF chapter ${chapterInfo.index}", e)
-            }
-        }
-        
-        logger.info("PDF parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
-    }
-    
-    /**
-     * 解析 MOBI/AZW3 内容
-     */
-    private fun parseMobiContent(bookId: Int, file: File) {
-        logger.info("Parsing MOBI/AZW3 content for book ID: $bookId")
-        
-        val structure = mobiParser.parseStructure(file) ?: run {
-            logger.error("Failed to parse MOBI/AZW3 structure")
-            return
-        }
-        
-        // 1. 清理旧章节数据
-        chapterRepository.deleteByBookId(bookId)
-        
-        // 2. 保存章节信息
-        structure.chapters.forEach { chapterInfo ->
-            val chapter = chapterRepository.create(
-                bookId = bookId,
-                index = chapterInfo.index,
-                title = chapterInfo.title,
-                level = chapterInfo.level
-            )
-            
-            // 3. 提取并保存章节内容
-            try {
-                val elements = mobiParser.extractChapterContent(structure.htmlContent, chapterInfo) ?: emptyList()
-                
-                // 计算字数
-                val wordCount = countWords(elements)
-                val imageCount = countImages(elements)
-                
-                chapterRepository.saveChapterContent(chapter.id, elements)
-                chapterRepository.updateStats(chapter.id, wordCount, imageCount)
-                
-                logger.debug("Saved MOBI chapter ${chapter.index}: ${chapter.title} ($wordCount words)")
-            } catch (e: Exception) {
-                logger.error("Failed to parse MOBI chapter ${chapterInfo.index}", e)
-            }
-        }
-        
-        logger.info("MOBI/AZW3 parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
     }
     
     /**
@@ -468,51 +438,6 @@ class BookContentService(
         }
         
         return rootItems
-    }
-    
-    /**
-     * 统计内容元素中的字数
-     */
-    private fun countWords(elements: List<ContentElement>): Int {
-        var count = 0
-        
-        elements.forEach { element ->
-            when (element) {
-                is ContentElement.Paragraph -> {
-                    element.spans.forEach { span ->
-                        count += span.text.length
-                    }
-                }
-                is ContentElement.Heading -> {
-                    count += element.text.length
-                }
-                is ContentElement.Quote -> {
-                    element.spans.forEach { span ->
-                        count += span.text.length
-                    }
-                }
-                is ContentElement.Code -> {
-                    count += element.text.length
-                }
-                is ContentElement.ListBlock -> {
-                    element.items.forEach { item ->
-                        item.spans.forEach { span ->
-                            count += span.text.length
-                        }
-                    }
-                }
-                else -> {}
-            }
-        }
-        
-        return count
-    }
-    
-    /**
-     * 统计内容元素中的图片数量
-     */
-    private fun countImages(elements: List<ContentElement>): Int {
-        return elements.count { it is ContentElement.Image }
     }
     
     /**

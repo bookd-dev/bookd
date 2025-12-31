@@ -84,6 +84,11 @@ class BookRepository {
         publisher = row[Books.publisher],
         description = row[Books.description],
         sourceId = row[Books.sourceId]?.value,
+        chaptersParsed = row[Books.chaptersParsed],
+        chaptersCount = row[Books.chaptersCount],
+        lastParsedAt = row[Books.lastParsedAt],
+        parseStatus = row[Books.parseStatus],
+        parseProgress = row[Books.parseProgress],
         createdAt = row[Books.createdAt],
         updatedAt = row[Books.updatedAt]
     )
@@ -119,6 +124,61 @@ class BookRepository {
             if (isbn != null) it[Books.isbn] = isbn
             if (publisher != null) it[Books.publisher] = publisher
             if (description != null) it[Books.description] = description
+            it[updatedAt] = now
+        }
+    }
+    
+    /**
+     * 更新章节解析状态
+     */
+    fun updateChaptersParsed(id: Int, chaptersCount: Int): Int = transaction {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        Books.update({ Books.id eq id }) {
+            it[chaptersParsed] = true
+            it[Books.chaptersCount] = chaptersCount
+            it[lastParsedAt] = now
+            it[parseStatus] = "completed"
+            it[parseProgress] = 100
+            it[updatedAt] = now
+        }
+    }
+    
+    /**
+     * 获取未解析章节的书籍
+     */
+    fun findUnparsedBooks(limit: Int = 10): List<Book> = transaction {
+        Books.selectAll()
+            .where { 
+                (Books.chaptersParsed eq false) and 
+                ((Books.parseStatus eq "pending") or (Books.parseStatus.isNull()))
+            }
+            .limit(limit)
+            .map { toBook(it) }
+    }
+    
+    /**
+     * 更新书籍解析状态
+     */
+    fun updateParseStatus(id: Int, status: String, progress: Int = 0): Int = transaction {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        Books.update({ Books.id eq id }) {
+            it[parseStatus] = status
+            it[parseProgress] = progress
+            it[updatedAt] = now
+        }
+    }
+    
+    /**
+     * 重置章节解析状态（用于重新解析）
+     */
+    fun resetChaptersParsed(id: Int): Int = transaction {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        Books.update({ Books.id eq id }) {
+            it[chaptersParsed] = false
+            it[chaptersCount] = 0
+            it[lastParsedAt] = null
+            it[parseStatus] = "pending"
+            it[parseProgress] = 0
             it[updatedAt] = now
         }
     }

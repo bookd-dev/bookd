@@ -62,6 +62,10 @@ dependencies {
     implementation("org.apache.pdfbox:pdfbox:3.0.1")
     implementation("org.apache.pdfbox:pdfbox-io:3.0.1")
     
+    // Redis
+    implementation("io.lettuce:lettuce-core:6.3.1.RELEASE")
+    implementation("org.apache.commons:commons-pool2:2.12.0")
+    
     // Utilities
     implementation("ch.qos.logback:logback-classic:$logback_version")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")

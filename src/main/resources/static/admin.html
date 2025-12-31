@@ -98,6 +98,86 @@
         .stat-hint { color: #999; font-size: 12px; margin-top: 4px; font-style: italic; }
         .empty-state { padding: 60px 40px; text-align: center; color: #999; }
         .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+        
+        /* 状态徽章 */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .status-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-running {
+            background: #d4edda;
+            color: #155724 !important;
+            -webkit-text-fill-color: #155724 !important;
+        }
+        .status-running::before {
+            background: #28a745;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24 !important;
+            -webkit-text-fill-color: #721c24 !important;
+        }
+        .status-stopped::before {
+            background: #dc3545;
+        }
+        .status-checking {
+            background: #fff3cd;
+            color: #856404 !important;
+            -webkit-text-fill-color: #856404 !important;
+        }
+        .status-checking::before {
+            background: #ffc107;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .status-disabled {
+            background: #e2e3e5;
+            color: #6c757d !important;
+            -webkit-text-fill-color: #6c757d !important;
+        }
+        .status-disabled::before {
+            background: #6c757d;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(1.2);
+            }
+        }
+        
+        /* 按钮变体 */
+        button.danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+        }
+        button.danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(238, 90, 82, 0.4);
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+        
         .path-preview { font-size: 12px; color: #666; margin-top: 4px; font-style: italic; }
         .scan-all-btn { margin-bottom: 16px; }
         .source-books { 
@@ -810,6 +890,7 @@
                             <button class="nav-tab sub-tab" onclick="switchTab('book-manage')">📖 书籍管理</button>
                             <button class="nav-tab sub-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
                             <button class="nav-tab sub-tab" onclick="switchTab('txt-rules')">📝 TXT解析规则</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('background-parse')">🔄 后台解析</button>
                         </div>
                     </div>
                     
@@ -940,6 +1021,61 @@
             </ul>
         </div>
     </div>
+    
+    <div id="background-parse-tab" class="tab-pane">
+        <div class="section">
+            <h2>🔄 后台章节解析</h2>
+            <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+                自动解析未处理的书籍章节，提升用户体验
+            </p>
+            
+            <!-- 状态卡片 -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                <div class="stat-card">
+                    <div class="stat-label">服务状态</div>
+                    <div class="stat-value" id="parseStatus">
+                        <span class="status-badge status-checking">⏳ 检查中...</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">待解析书籍</div>
+                    <div class="stat-value" id="unparsedCount">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">解析间隔</div>
+                    <div class="stat-value" id="parseInterval">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">批次大小</div>
+                    <div class="stat-value" id="batchSize">-</div>
+                </div>
+            </div>
+            
+            <!-- 控制按钮 -->
+            <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                <button id="startParseBtn" onclick="startBackgroundParse()" disabled>
+                    ▶️ 启动服务
+                </button>
+                <button id="stopParseBtn" onclick="stopBackgroundParse()" class="danger" disabled>
+                    ⏸️ 停止服务
+                </button>
+                <button onclick="refreshParseStatus()" class="secondary">
+                    🔄 刷新状态
+                </button>
+            </div>
+            
+            <!-- 说明 -->
+            <div style="background: #f5f7fa; border-radius: 8px; padding: 16px; border-left: 4px solid #667eea;">
+                <h3 style="margin-bottom: 12px; font-size: 16px;">💡 工作原理</h3>
+                <ul style="list-style: none; padding: 0; line-height: 2;">
+                    <li>📖 <strong>按需解析</strong>：用户打开书籍时立即解析章节</li>
+                    <li>⏰ <strong>后台补全</strong>：定期自动解析未处理的书籍</li>
+                    <li>🚀 <strong>性能优化</strong>：扫描时不解析，大幅提升速度</li>
+                    <li>💾 <strong>智能缓存</strong>：已解析书籍快速响应</li>
+                </ul>
+            </div>
+        </div>
+    </div>
         </div>
     </div>
     
@@ -1045,6 +1181,7 @@
                 <div class="modal-header">
                     <div class="modal-title">📖 书籍详情</div>
                     <div class="modal-header-actions">
+                        <button id="reparseBookBtn" class="secondary" onclick="reparseBook()" style="display: none;" title="重新解析章节">🔄 重解析</button>
                         <button id="editBookBtn" class="edit-btn" onclick="toggleEditMode()" style="display: none;">✏️ 编辑</button>
                         <button id="chaptersBtn" class="chapters-btn" onclick="toggleChaptersPanel()" style="display: none;">📑 章节</button>
                         <button id="saveBookBtn" class="save-btn" onclick="saveBookDetail()" style="display: none;">💾 保存</button>
@@ -2084,6 +2221,15 @@
                                 <span class="book-detail-value">${createdTimeStr}</span>
                             </li>
                             <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📑 章节状态</span>
+                                <span class="book-detail-value">
+                                    ${book.chaptersParsed 
+                                        ? `<span style="color: #28a745;">✅ 已解析 (${book.chaptersCount || 0} 章)</span>` 
+                                        : '<span style="color: #ffc107;">⏳ 未解析</span>'}
+                                    ${book.lastParsedAt ? `<span style="color: #999; font-size: 11px; margin-left: 8px;">最后解析: ${formatDateTime(book.lastParsedAt)}</span>` : ''}
+                                </span>
+                            </li>
+                            <li class="book-detail-meta-item">
                                 <span class="book-detail-label">🆔 书籍ID</span>
                                 <span class="book-detail-value">${book.id}</span>
                             </li>
@@ -2116,7 +2262,8 @@
                 // Load and display tags
                 loadBookTagsDisplay(book.id);
                 
-                // 显示编辑按钮和章节按钮
+                // 显示编辑按钮、重解析按钮和章节按钮
+                document.getElementById('reparseBookBtn').style.display = 'inline-block';
                 document.getElementById('editBookBtn').style.display = 'inline-block';
                 document.getElementById('chaptersBtn').style.display = 'inline-block';
                 document.getElementById('saveBookBtn').style.display = 'none';
@@ -2125,6 +2272,43 @@
             } catch (e) {
                 console.error('Failed to load book detail:', e);
                 container.innerHTML = `<div style="color: #dc3545; text-align: center;">❌ 加载失败: ${e.message}</div>`;
+            }
+        }
+        
+        /**
+         * 重新解析书籍章节
+         */
+        async function reparseBook() {
+            if (!currentBookData) {
+                alert('❌ 请先打开书籍详情');
+                return;
+            }
+            
+            if (!confirm('确定要重新解析这本书的章节吗？\n\n这将清除现有章节数据并重新解析。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/books/${currentBookData.id}/reparse`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    alert('✅ 已加入重解析队列！\n\n书籍将在后台重新解析，请稍后刷新查看章节。');
+                    
+                    // 刷新书籍详情显示
+                    setTimeout(() => {
+                        loadBookDetail(currentBookData.id);
+                    }, 2000);
+                } else {
+                    const error = await res.json();
+                    alert('❌ 重解析失败: ' + (error.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('Failed to reparse book:', e);
+                alert('❌ 重解析失败: ' + e.message);
             }
         }
         
@@ -3613,6 +3797,131 @@
         function testTxtRules() {
             alert('测试功能开发中...\n\n您可以通过添加规则后扫描TXT书籍来测试效果。');
         }
+        
+        // ==================== 后台解析管理 ====================
+        
+        /**
+         * 刷新后台解析状态
+         */
+        async function refreshParseStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/background-parse/status`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const status = await res.json();
+                    updateParseStatusUI(status);
+                } else {
+                    console.error('Failed to fetch parse status');
+                }
+            } catch (error) {
+                console.error('Error fetching parse status:', error);
+            }
+        }
+        
+        /**
+         * 更新后台解析状态 UI
+         */
+        function updateParseStatusUI(status) {
+            // 更新状态徽章
+            const statusEl = document.getElementById('parseStatus');
+            if (!status.enabled) {
+                statusEl.innerHTML = '<span class="status-badge status-disabled">未启用</span>';
+            } else if (status.running) {
+                statusEl.innerHTML = '<span class="status-badge status-running">🟢 运行中</span>';
+            } else {
+                statusEl.innerHTML = '<span class="status-badge status-stopped">🔴 已停止</span>';
+            }
+            
+            // 更新统计数据
+            document.getElementById('unparsedCount').textContent = 
+                status.unparsedBooksCount >= 0 ? status.unparsedBooksCount : '-';
+            document.getElementById('parseInterval').textContent = 
+                `${status.intervalSeconds} 秒`;
+            document.getElementById('batchSize').textContent = status.batchSize;
+            
+            // 更新按钮状态
+            const startBtn = document.getElementById('startParseBtn');
+            const stopBtn = document.getElementById('stopParseBtn');
+            
+            if (!status.enabled) {
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+            } else if (status.running) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+        
+        /**
+         * 启动后台解析服务
+         */
+        async function startBackgroundParse() {
+            if (!confirm('确定要启动后台解析服务吗？')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/background-parse/start`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    alert('✅ 后台解析服务已启动');
+                    setTimeout(() => refreshParseStatus(), 1000);
+                } else {
+                    const error = await res.json();
+                    alert('❌ 启动失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to start background parse:', error);
+                alert('❌ 启动失败: ' + error.message);
+            }
+        }
+        
+        /**
+         * 停止后台解析服务
+         */
+        async function stopBackgroundParse() {
+            if (!confirm('确定要停止后台解析服务吗？\n\n正在进行的解析任务将被取消。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/background-parse/stop`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    alert('✅ 后台解析服务已停止');
+                    setTimeout(() => refreshParseStatus(), 1000);
+                } else {
+                    const error = await res.json();
+                    alert('❌ 停止失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to stop background parse:', error);
+                alert('❌ 停止失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载时自动刷新状态（如果在后台解析 tab）
+        document.addEventListener('DOMContentLoaded', () => {
+            // 监听 tab 切换
+            const originalSwitchTab = window.switchTab;
+            window.switchTab = function(tabId) {
+                originalSwitchTab(tabId);
+                if (tabId === 'background-parse') {
+                    refreshParseStatus();
+                }
+            };
+        });
         
         // Add modal click handlers for TXT rules
         document.getElementById('addTxtRuleModal')?.addEventListener('click', (e) => {

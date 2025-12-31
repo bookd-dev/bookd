@@ -164,19 +164,18 @@ class EpubParser {
         tocHref: String?,
         spineItems: List<String>
     ): List<ChapterInfo> {
-        val chapters = mutableListOf<ChapterInfo>()
-        
         // 如果没有 TOC，根据 spine 生成默认章节
         if (tocHref == null) {
-            spineItems.forEachIndexed { index, href ->
-                chapters.add(ChapterInfo(index, detectChapterTitle(href), href))
+            return spineItems.mapIndexed { index, href ->
+                ChapterInfo(index, detectChapterTitle(href), href)
             }
-            return chapters
         }
         
         // 解析 toc.ncx
         val tocPath = if (baseDir.isEmpty()) tocHref else "$baseDir/$tocHref"
-        val tocEntry = zipFile.getEntry(tocPath) ?: return chapters
+        val tocEntry = zipFile.getEntry(tocPath) ?: return spineItems.mapIndexed { index, href ->
+            ChapterInfo(index, detectChapterTitle(href), href)
+        }
         
         try {
             zipFile.getInputStream(tocEntry).use { stream ->
@@ -184,55 +183,100 @@ class EpubParser {
                 factory.isNamespaceAware = true
                 val doc = factory.newDocumentBuilder().parse(stream)
                 
-                val navPoints = doc.getElementsByTagName("navPoint")
                 val hrefToIndex = spineItems.withIndex().associate { it.value to it.index }
                 
-                parseNavPoints(navPoints, hrefToIndex, chapters, 0)
+                // 只获取 navMap 下的直接子 navPoint，然后递归处理
+                val navMap = doc.getElementsByTagName("navMap")
+                if (navMap.length == 0) {
+                    return spineItems.mapIndexed { index, href ->
+                        ChapterInfo(index, detectChapterTitle(href), href)
+                    }
+                }
+                
+                val chapters = mutableListOf<ChapterInfo>()
+                val navMapElement = navMap.item(0) as org.w3c.dom.Element
+                
+                // 只处理 navMap 的直接子 navPoint
+                val children = navMapElement.childNodes
+                for (i in 0 until children.length) {
+                    val child = children.item(i)
+                    if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && 
+                        child.nodeName == "navPoint") {
+                        parseNavPointRecursive(child as org.w3c.dom.Element, hrefToIndex, chapters, 0)
+                    }
+                }
+                
+                logger.info("Parsed ${chapters.size} chapters from TOC (before dedup)")
+                
+                // 去重：同一个 index 只保留第一个章节
+                val uniqueChapters = chapters
+                    .groupBy { it.index }
+                    .mapValues { it.value.first() }
+                    .values
+                    .sortedBy { it.index }
+                    .toList()
+                
+                logger.info("After dedup: ${uniqueChapters.size} unique chapters")
+                return uniqueChapters
             }
         } catch (e: Exception) {
             logger.warn("Failed to parse TOC, using spine items", e)
-            spineItems.forEachIndexed { index, href ->
-                chapters.add(ChapterInfo(index, detectChapterTitle(href), href))
+            return spineItems.mapIndexed { index, href ->
+                ChapterInfo(index, detectChapterTitle(href), href)
             }
         }
-        
-        return chapters.sortedBy { it.index }
     }
     
     /**
-     * 递归解析 navPoint
+     * 递归解析单个 navPoint 及其直接子 navPoint
      */
-    private fun parseNavPoints(
-        navPoints: org.w3c.dom.NodeList,
+    private fun parseNavPointRecursive(
+        navPoint: org.w3c.dom.Element,
         hrefToIndex: Map<String, Int>,
         chapters: MutableList<ChapterInfo>,
         level: Int
     ) {
-        for (i in 0 until navPoints.length) {
-            val navPoint = navPoints.item(i)
-            
-            // 获取标题
-            val navLabel = (navPoint as org.w3c.dom.Element).getElementsByTagName("navLabel")
-            val title = if (navLabel.length > 0) {
-                val text = navLabel.item(0).textContent?.trim()
-                text
-            } else null
-            
-            // 获取链接
-            val content = navPoint.getElementsByTagName("content")
-            if (content.length > 0) {
-                val src = content.item(0).attributes.getNamedItem("src")?.nodeValue
-                if (src != null) {
-                    val href = src.substringBefore("#")
-                    val index = hrefToIndex[href] ?: hrefToIndex.values.maxOrNull()?.plus(1) ?: 0
-                    chapters.add(ChapterInfo(index, title, href, level))
+        // 获取标题 - 只获取直接子元素的 text
+        var title: String? = null
+        val children = navPoint.childNodes
+        for (i in 0 until children.length) {
+            val child = children.item(i)
+            if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && child.nodeName == "navLabel") {
+                val navLabel = child as org.w3c.dom.Element
+                val textNodes = navLabel.getElementsByTagName("text")
+                if (textNodes.length > 0) {
+                    title = textNodes.item(0).textContent?.trim()
                 }
+                break
             }
-            
-            // 递归处理子 navPoint
-            val childNavPoints = navPoint.getElementsByTagName("navPoint")
-            if (childNavPoints.length > 0) {
-                parseNavPoints(childNavPoints, hrefToIndex, chapters, level + 1)
+        }
+        
+        // 获取链接 - 只获取直接子元素的 content
+        var href: String? = null
+        for (i in 0 until children.length) {
+            val child = children.item(i)
+            if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && child.nodeName == "content") {
+                val src = child.attributes.getNamedItem("src")?.nodeValue
+                if (src != null) {
+                    href = src.substringBefore("#")
+                }
+                break
+            }
+        }
+        
+        // 添加章节（如果在 spine 中存在）
+        if (href != null) {
+            val index = hrefToIndex[href]
+            if (index != null) {
+                chapters.add(ChapterInfo(index, title, href, level))
+            }
+        }
+        
+        // 递归处理直接子 navPoint
+        for (i in 0 until children.length) {
+            val child = children.item(i)
+            if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && child.nodeName == "navPoint") {
+                parseNavPointRecursive(child as org.w3c.dom.Element, hrefToIndex, chapters, level + 1)
             }
         }
     }

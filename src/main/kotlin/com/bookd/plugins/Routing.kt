@@ -24,6 +24,7 @@ fun Application.configureRouting() {
         scanRoutes()
         tagRoutes()
         txtParseRuleRoutes()
+        backgroundParseRoutes()
         fileSystemRoutes()
         webRoutes()
         readingRoutes()
