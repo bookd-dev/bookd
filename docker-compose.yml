@@ -23,6 +23,13 @@ services:
       DATABASE_URL: "jdbc:postgresql://postgres:5432/bookd"
       DATABASE_USER: "bookd"
       DATABASE_PASSWORD: "bookd"
+    # Memory and resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
     volumes:
       # 书籍封面持久化存储
       - covers_data:/app/covers

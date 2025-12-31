@@ -36,7 +36,10 @@ fun Application.module() {
             com.bookd.data.entity.Sessions,
             com.bookd.data.entity.InviteTokens,
             com.bookd.data.entity.Bookmarks,
-            com.bookd.data.entity.ReaderSettings
+            com.bookd.data.entity.ReaderSettings,
+            com.bookd.data.entity.BookChapters,
+            com.bookd.data.entity.ChapterContents,
+            com.bookd.data.entity.ChapterResources
         )
     }
     

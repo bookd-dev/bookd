@@ -58,6 +58,9 @@ dependencies {
     // E-book parsing
     implementation("org.apache.tika:tika-core:2.9.1")
     implementation("org.apache.tika:tika-parsers-standard-package:2.9.1")
+    implementation("org.jsoup:jsoup:1.17.2")
+    implementation("org.apache.pdfbox:pdfbox:3.0.1")
+    implementation("org.apache.pdfbox:pdfbox-io:3.0.1")
     
     // Utilities
     implementation("ch.qos.logback:logback-classic:$logback_version")

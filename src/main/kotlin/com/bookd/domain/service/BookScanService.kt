@@ -11,7 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BookScanService(
     private val bookRepository: BookRepository,
     private val bookSourceRepository: BookSourceRepository,
-    private val metadataService: BookMetadataService
+    private val metadataService: BookMetadataService,
+    private val contentService: BookContentService
 ) {
     private val logger = LoggerFactory.getLogger(BookScanService::class.java)
     private val supportedFormats = setOf("txt", "epub", "mobi", "azw3", "pdf")
@@ -206,13 +207,21 @@ class BookScanService(
         val existing = bookRepository.findByFilePath(filePath)
         if (existing != null) {
             if (fullScan) {
-                // 全量扫描模式：强制重新提取元数据
-                logger.info("Full scan mode: Re-extracting metadata for existing book: ${file.name}")
+                // 全量扫描模式：强制重新提取元数据和解析内容
+                logger.info("Full scan mode: Re-extracting metadata and content for existing book: ${file.name}")
                 try {
                     metadataService.extractMetadataAsync(existing.id, filePath)
                 } catch (e: Exception) {
                     logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
                 }
+                
+                // 重新解析书籍内容
+                try {
+                    contentService.parseBookContentAsync(existing.id, filePath)
+                } catch (e: Exception) {
+                    logger.error("Failed to start content parsing for existing book: ${file.name}", e)
+                }
+                
                 return existing // 返回已存在的书籍，表示已处理
             } else {
                 // 增量扫描模式：只对缺失元数据的书籍提取
@@ -222,6 +231,13 @@ class BookScanService(
                         metadataService.extractMetadataAsync(existing.id, filePath)
                     } catch (e: Exception) {
                         logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
+                    }
+                    
+                    // 同时触发内容解析
+                    try {
+                        contentService.parseBookContentAsync(existing.id, filePath)
+                    } catch (e: Exception) {
+                        logger.error("Failed to start content parsing for existing book: ${file.name}", e)
                     }
                 }
                 return null // 已存在，跳过
@@ -251,6 +267,14 @@ class BookScanService(
                 metadataService.extractMetadataAsync(book.id, filePath)
             } catch (e: Exception) {
                 logger.error("Failed to start metadata extraction for $fileName", e)
+                // 不影响主流程，继续
+            }
+            
+            // 异步解析书籍内容（章节、图片等）
+            try {
+                contentService.parseBookContentAsync(book.id, filePath)
+            } catch (e: Exception) {
+                logger.error("Failed to start content parsing for $fileName", e)
                 // 不影响主流程，继续
             }
             

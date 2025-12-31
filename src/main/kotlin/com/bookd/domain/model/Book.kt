@@ -16,6 +16,9 @@ data class Book(
     val publisher: String? = null,
     val description: String? = null,
     val sourceId: Int? = null,
+    val chapterCount: Int = 0,
+    val totalWordCount: Int = 0,
+    val totalImageCount: Int = 0,
     val createdAt: LocalDateTime? = null,
     val updatedAt: LocalDateTime? = null
 )

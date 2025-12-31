@@ -19,6 +19,7 @@ fun Application.configureRouting() {
         authRoutes(userService)
         userManagementRoutes(userService)
         bookRoutes()
+        bookContentRoutes()
         bookSourceRoutes()
         scanRoutes()
         tagRoutes()

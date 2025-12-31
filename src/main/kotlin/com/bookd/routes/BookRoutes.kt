@@ -22,6 +22,22 @@ data class BooksResponse(
 )
 
 @Serializable
+data class ChapterInfo(
+    val index: Int,
+    val title: String,
+    val wordCount: Int,
+    val imageCount: Int,
+    val level: Int
+)
+
+@Serializable
+data class ChaptersResponse(
+    val bookId: Int,
+    val total: Int,
+    val chapters: List<ChapterInfo>
+)
+
+@Serializable
 data class UpdateMetadataRequest(
     val author: String? = null,
     val coverPath: String? = null,
@@ -92,6 +108,35 @@ fun Route.bookRoutes() {
             } else {
                 call.respond(book)
             }
+        }
+        
+        // 获取书籍章节列表
+        get("/{id}/chapters") {
+            val chapterRepository = get<com.bookd.data.repository.BookChapterRepository>(
+                com.bookd.data.repository.BookChapterRepository::class.java
+            )
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                return@get
+            }
+            
+            val chapters = chapterRepository.findByBookId(id)
+            call.respond(
+                ChaptersResponse(
+                    bookId = id,
+                    total = chapters.size,
+                    chapters = chapters.map { chapter ->
+                        ChapterInfo(
+                            index = chapter.index,
+                            title = chapter.title ?: "第${chapter.index + 1}章",
+                            wordCount = chapter.wordCount,
+                            imageCount = chapter.imageCount,
+                            level = chapter.level
+                        )
+                    }
+                )
+            )
         }
         
         put("/{id}/metadata") {

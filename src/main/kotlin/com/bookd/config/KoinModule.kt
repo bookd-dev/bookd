@@ -7,6 +7,7 @@ import com.bookd.data.repository.TagRepository
 import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.data.repository.BookmarkRepository
 import com.bookd.data.repository.ReaderSettingsRepository
+import com.bookd.data.repository.BookChapterRepository
 import com.bookd.domain.service.BookMetadataService
 import com.bookd.domain.service.BookScanService
 import com.bookd.domain.service.BookService
@@ -15,6 +16,7 @@ import com.bookd.domain.service.UserService
 import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.domain.service.TagService
 import com.bookd.domain.service.ReadingService
+import com.bookd.domain.service.BookContentService
 import org.koin.dsl.module
 
 val appModule = module {
@@ -26,14 +28,16 @@ val appModule = module {
     single { ReadingProgressRepository() }
     single { BookmarkRepository() }
     single { ReaderSettingsRepository() }
+    single { BookChapterRepository() }
     
     // Services
     single { UserService(get()) }
-    single { BookService(get()) }
+    single { BookService(get(), get()) }
     single { BookSourceService(get()) }
     single { CoverGeneratorService() }
+    single { BookContentService(get(), get()) }
     single { BookMetadataService(get(), get()) }
-    single { BookScanService(get(), get(), get()) }
+    single { BookScanService(get(), get(), get(), get()) }
     single { TagService(get(), get()) }
     single { ReadingService(get(), get(), get()) }
 }
