@@ -13,20 +13,23 @@ class MetadataExtractorFactory {
     // 缓存提取器实例
     private val tikaExtractor = TikaMetadataExtractor()
     private val epubExtractor = EpubMetadataExtractor()
+    private val pdfExtractor = PdfMetadataExtractor()
+    private val mobiExtractor = MobiMetadataExtractor()
     private val txtExtractor = TxtMetadataExtractor()
     
     /**
      * 根据文件格式创建对应的元数据提取器
      * 策略:
-     * 1. EPUB/PDF/MOBI/AZW3: 先尝试格式特定提取器,失败则使用 Tika
-     * 2. TXT: 使用 TXT 提取器(当前返回 null,等待刮削器)
+     * 1. EPUB: EPUB专用提取器 → Tika备选
+     * 2. PDF: PDF专用提取器 → Tika备选
+     * 3. MOBI/AZW3: MOBI专用提取器 → Tika备选
+     * 4. TXT: 返回null,使用文件名(等待刮削器)
      */
     fun createExtractor(file: File): MetadataExtractor {
-        val format = file.extension.lowercase()
-        
-        return when (format) {
+        return when (val format = file.extension.lowercase()) {
             "epub" -> CompositeMetadataExtractor(listOf(epubExtractor, tikaExtractor))
-            "pdf", "mobi", "azw3", "azw" -> tikaExtractor
+            "pdf" -> CompositeMetadataExtractor(listOf(pdfExtractor, tikaExtractor))
+            "mobi", "azw3", "azw" -> CompositeMetadataExtractor(listOf(mobiExtractor, tikaExtractor))
             "txt" -> txtExtractor
             else -> {
                 logger.warn("Unsupported format: $format, using Tika as fallback")
