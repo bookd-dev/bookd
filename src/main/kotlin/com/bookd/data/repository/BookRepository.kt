@@ -114,6 +114,7 @@ class BookRepository {
     
     fun updateMetadata(
         id: Int,
+        title: String? = null,
         author: String? = null,
         coverPath: String? = null,
         isbn: String? = null,
@@ -122,6 +123,7 @@ class BookRepository {
     ): Int = transaction {
         val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
         Books.update({ Books.id eq id }) {
+            if (title != null) it[Books.title] = title
             if (author != null) it[Books.author] = author
             if (coverPath != null) it[Books.coverPath] = coverPath
             if (isbn != null) it[Books.isbn] = isbn

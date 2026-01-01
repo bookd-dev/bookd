@@ -36,8 +36,17 @@ class MobiParser {
      */
     fun parseStructure(file: File): MobiStructure? {
         return try {
-            // 使用 Tika 提取 HTML 内容
-            val htmlContent = extractHtmlContent(file)
+            // 方案1: 直接从MOBI记录提取HTML (更可靠)
+            val htmlFromRecords = extractHtmlFromRecords(file)
+            val htmlContent = if (htmlFromRecords.isNotEmpty() && htmlFromRecords.length > 1000) {
+                logger.info("Using HTML extracted from MOBI records (${htmlFromRecords.length} chars)")
+                htmlFromRecords
+            } else {
+                // 方案2: 回退到Tika提取
+                logger.info("Falling back to Tika extraction")
+                extractHtmlContent(file)
+            }
+            
             if (htmlContent.isEmpty()) {
                 logger.warn("No HTML content extracted from MOBI/AZW3 file")
                 return null
@@ -51,6 +60,78 @@ class MobiParser {
         } catch (e: Exception) {
             logger.error("Failed to parse MOBI/AZW3 structure: ${file.name}", e)
             null
+        }
+    }
+    
+    /**
+     * 直接从 MOBI 记录提取 HTML 内容
+     */
+    private fun extractHtmlFromRecords(file: File): String {
+        return try {
+            val htmlParts = mutableListOf<String>()
+            
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                // Read record count
+                raf.seek(76)
+                val recordCountBytes = ByteArray(2)
+                raf.read(recordCountBytes)
+                val recordCount = java.nio.ByteBuffer.wrap(recordCountBytes)
+                    .order(java.nio.ByteOrder.BIG_ENDIAN).short.toInt()
+                
+                if (recordCount < 1 || recordCount > 10000) {
+                    logger.warn("Invalid record count: $recordCount")
+                    return ""
+                }
+                
+                // Read record offsets
+                raf.seek(78)
+                val offsets = mutableListOf<Int>()
+                for (i in 0 until recordCount) {
+                    val offsetBytes = ByteArray(4)
+                    raf.read(offsetBytes)
+                    val offset = java.nio.ByteBuffer.wrap(offsetBytes)
+                        .order(java.nio.ByteOrder.BIG_ENDIAN).int
+                    offsets.add(offset)
+                    raf.skipBytes(4)  // Skip attributes
+                }
+                
+                // Extract text from records (usually records 1 to N contain text)
+                // Skip record 0 (MOBI header)
+                val maxRecords = minOf(recordCount, 100)  // Limit to first 100 records
+                for (i in 1 until maxRecords) {
+                    try {
+                        raf.seek(offsets[i].toLong())
+                        
+                        // Calculate record size
+                        val size = if (i + 1 < offsets.size) {
+                            offsets[i + 1] - offsets[i]
+                        } else {
+                            minOf(10000, (raf.length() - offsets[i]).toInt())
+                        }
+                        
+                        if (size <= 0 || size > 100000) continue
+                        
+                        val data = ByteArray(size)
+                        val bytesRead = raf.read(data)
+                        
+                        if (bytesRead > 0) {
+                            // Try to decode as UTF-8
+                            val text = String(data, 0, bytesRead, Charsets.UTF_8)
+                            htmlParts.add(text)
+                        }
+                    } catch (e: Exception) {
+                        logger.debug("Failed to read record $i: ${e.message}")
+                    }
+                }
+            }
+            
+            val fullHtml = htmlParts.joinToString("\n")
+            logger.debug("Extracted ${fullHtml.length} characters from MOBI records")
+            fullHtml
+            
+        } catch (e: Exception) {
+            logger.error("Failed to extract HTML from MOBI records", e)
+            ""
         }
     }
     
@@ -168,7 +249,35 @@ class MobiParser {
     private fun detectChaptersByPattern(plainText: String, htmlContent: String): List<ChapterInfo> {
         val chapters = mutableListOf<ChapterInfo>()
         
-        // 章节模式（与 TxtParser 类似）
+        // 方案1: 直接在HTML中搜索章节标记 (处理MOBI格式化的章节)
+        val htmlChapterPattern = """<[^>]*>(第[零一二三四五六七八九十百千万0-9]+[章节回][^<]{0,50})</[^>]*>""".toRegex()
+        val htmlMatches = htmlChapterPattern.findAll(htmlContent).toList()
+        
+        if (htmlMatches.isNotEmpty()) {
+            logger.info("Found ${htmlMatches.size} chapters in HTML tags")
+            htmlMatches.forEachIndexed { index, match ->
+                val title = match.groupValues[1].trim()
+                val startPos = match.range.first
+                val endPos = if (index < htmlMatches.size - 1) {
+                    htmlMatches[index + 1].range.first
+                } else {
+                    htmlContent.length
+                }
+                
+                chapters.add(
+                    ChapterInfo(
+                        index = index,
+                        title = title,
+                        startPos = startPos,
+                        endPos = endPos,
+                        level = 0
+                    )
+                )
+            }
+            return chapters
+        }
+        
+        // 方案2: 在纯文本中搜索章节模式 (原有逻辑)
         val chapterPatterns = listOf(
             """(?m)^(Chapter|CHAPTER|Ch\.)\s*([0-9]+|One|Two|Three|Four|Five).*$""".toRegex(),
             """(?m)^第([零一二三四五六七八九十百千万0-9]+)[章节回].*$""".toRegex(),
@@ -184,9 +293,16 @@ class MobiParser {
             }
         }
         
+        if (matches.isEmpty()) {
+            logger.debug("No chapter patterns found in plain text")
+            return chapters
+        }
+        
         // 按位置排序并去重
         matches.sortBy { it.first }
         val uniqueMatches = matches.distinctBy { it.first }
+        
+        logger.info("Found ${uniqueMatches.size} chapter patterns in plain text")
         
         // 创建章节
         uniqueMatches.forEachIndexed { index, (pos, title) ->

@@ -80,6 +80,7 @@ class BookMetadataService(
 
                 val updated = bookRepository.updateMetadata(
                     id = bookId,
+                    title = metadata.title,  // 更新标题
                     author = metadata.author,
                     coverPath = coverPath,
                     isbn = metadata.isbn,
