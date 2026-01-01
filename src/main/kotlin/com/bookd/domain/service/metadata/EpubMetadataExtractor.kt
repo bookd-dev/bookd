@@ -60,6 +60,13 @@ class EpubMetadataExtractor : MetadataExtractor {
     override fun extractCover(file: File, bookId: Int): String? {
         return try {
             ZipFile(file).use { zipFile ->
+                // 1. 先尝试从 OPF 的 manifest 中查找封面定义 (标准方式)
+                val coverFromOpf = findCoverFromOpf(zipFile)
+                if (coverFromOpf != null) {
+                    return saveCover(zipFile, coverFromOpf, bookId)
+                }
+                
+                // 2. 尝试预定义的路径模式
                 val coverPatterns = listOf(
                     "EPUB/cover.png", "EPUB/cover.jpg", "EPUB/cover.jpeg",
                     "cover.jpg", "cover.jpeg", "cover.png",
@@ -67,51 +74,133 @@ class EpubMetadataExtractor : MetadataExtractor {
                     "OPS/images/cover.jpg", "OPS/images/cover.png"
                 )
                 
-                var coverEntry: ZipEntry? = null
-                
-                // Try predefined patterns
                 for (pattern in coverPatterns) {
                     val entry = zipFile.getEntry(pattern)
                     if (entry != null) {
-                        coverEntry = entry
-                        break
+                        return saveCover(zipFile, pattern, bookId)
                     }
                 }
                 
-                // Search for any file with "cover" in name
-                if (coverEntry == null) {
-                    coverEntry = zipFile.entries().asSequence().find { entry ->
-                        entry.name.lowercase().contains("cover") &&
-                                (entry.name.endsWith(".jpg", true) ||
-                                        entry.name.endsWith(".jpeg", true) ||
-                                        entry.name.endsWith(".png", true))
-                    }
-                }
-                
-                if (coverEntry != null) {
-                    val coversDir = File("covers")
-                    if (!coversDir.exists()) {
-                        coversDir.mkdirs()
-                    }
-                    
-                    val extension = coverEntry.name.substringAfterLast(".").lowercase()
-                    val outputFile = File(coversDir, "book_${bookId}.$extension")
-                    
-                    zipFile.getInputStream(coverEntry).use { input ->
-                        outputFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    
-                    logger.info("Extracted EPUB cover for book $bookId")
-                    return "/covers/book_${bookId}.$extension"
-                }
-                
+                logger.debug("No cover image found in EPUB: ${file.name}")
                 null
             }
         } catch (e: Exception) {
             logger.error("Failed to extract EPUB cover from ${file.name}: ${e.message}")
             null
+        }
+    }
+    
+    /**
+     * 从 OPF manifest 中查找封面图片路径
+     */
+    private fun findCoverFromOpf(zipFile: ZipFile): String? {
+        try {
+            // 查找 content.opf 位置
+            val containerEntry = zipFile.getEntry("META-INF/container.xml")
+            var opfPath = "EPUB/content.opf"
+            
+            if (containerEntry != null) {
+                zipFile.getInputStream(containerEntry).use { stream ->
+                    val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                    factory.isNamespaceAware = true
+                    val doc = factory.newDocumentBuilder().parse(stream)
+                    val rootfiles = doc.getElementsByTagName("rootfile")
+                    if (rootfiles.length > 0) {
+                        opfPath = rootfiles.item(0).attributes.getNamedItem("full-path")?.nodeValue ?: opfPath
+                    }
+                }
+            }
+            
+            val opfEntry = zipFile.getEntry(opfPath) ?: return null
+            val opfBaseDir = opfPath.substringBeforeLast("/", "")
+            
+            // 解析 OPF 查找封面
+            zipFile.getInputStream(opfEntry).use { stream ->
+                val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                factory.isNamespaceAware = true
+                val doc = factory.newDocumentBuilder().parse(stream)
+                
+                // 方法1: 查找 metadata 中的 cover meta 标签
+                val metaTags = doc.getElementsByTagName("meta")
+                for (i in 0 until metaTags.length) {
+                    val meta = metaTags.item(i)
+                    val name = meta.attributes.getNamedItem("name")?.nodeValue
+                    val content = meta.attributes.getNamedItem("content")?.nodeValue
+                    
+                    if (name == "cover" && content != null) {
+                        // content 是 manifest 中的 id,需要查找对应的 href
+                        val coverHref = findManifestHref(doc, content)
+                        if (coverHref != null) {
+                            val fullPath = if (opfBaseDir.isEmpty()) coverHref else "$opfBaseDir/$coverHref"
+                            logger.debug("Found cover from OPF metadata: $fullPath")
+                            return fullPath
+                        }
+                    }
+                }
+                
+                // 方法2: 在 manifest 中查找 id 包含 "cover" 的图片项
+                val manifestItems = doc.getElementsByTagName("item")
+                for (i in 0 until manifestItems.length) {
+                    val item = manifestItems.item(i)
+                    val id = item.attributes.getNamedItem("id")?.nodeValue ?: ""
+                    val href = item.attributes.getNamedItem("href")?.nodeValue
+                    val mediaType = item.attributes.getNamedItem("media-type")?.nodeValue ?: ""
+                    
+                    if (id.lowercase().contains("cover") && mediaType.startsWith("image/") && href != null) {
+                        val fullPath = if (opfBaseDir.isEmpty()) href else "$opfBaseDir/$href"
+                        logger.debug("Found cover from OPF manifest: $fullPath")
+                        return fullPath
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.debug("Failed to parse OPF for cover: ${e.message}")
+        }
+        
+        return null
+    }
+    
+    /**
+     * 从 manifest 中查找指定 id 的 href
+     */
+    private fun findManifestHref(doc: org.w3c.dom.Document, id: String): String? {
+        val manifestItems = doc.getElementsByTagName("item")
+        for (i in 0 until manifestItems.length) {
+            val item = manifestItems.item(i)
+            val itemId = item.attributes.getNamedItem("id")?.nodeValue
+            if (itemId == id) {
+                return item.attributes.getNamedItem("href")?.nodeValue
+            }
+        }
+        return null
+    }
+    
+    /**
+     * 保存封面到本地
+     */
+    private fun saveCover(zipFile: ZipFile, entryPath: String, bookId: Int): String? {
+        try {
+            val entry = zipFile.getEntry(entryPath) ?: return null
+            
+            val coversDir = File("covers")
+            if (!coversDir.exists()) {
+                coversDir.mkdirs()
+            }
+            
+            val extension = entryPath.substringAfterLast(".").lowercase()
+            val outputFile = File(coversDir, "book_${bookId}.$extension")
+            
+            zipFile.getInputStream(entry).use { input ->
+                outputFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            
+            logger.info("Extracted EPUB cover for book $bookId from $entryPath")
+            return "/covers/book_${bookId}.$extension"
+        } catch (e: Exception) {
+            logger.error("Failed to save cover: ${e.message}")
+            return null
         }
     }
     
