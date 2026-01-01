@@ -25,11 +25,24 @@ class PdfMetadataExtractor : MetadataExtractor {
                     return null
                 }
                 
+                // 从 PDF Keywords 字段提取标签
+                val tags = info.keywords?.let { keywords ->
+                    keywords.split(';', ',', '/', '|')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && it.length <= 50 }
+                        .distinct()
+                } ?: emptyList()
+                
+                if (tags.isNotEmpty()) {
+                    logger.debug("Extracted ${tags.size} tags from PDF: ${tags.joinToString(", ")}")
+                }
+                
                 BookMetadata(
                     title = info.title?.trim()?.takeIf { it.isNotBlank() },
                     author = info.author?.trim()?.takeIf { it.isNotBlank() },
                     publisher = info.producer?.trim()?.takeIf { it.isNotBlank() },
-                    description = info.subject?.trim()?.takeIf { it.isNotBlank() }
+                    description = info.subject?.trim()?.takeIf { it.isNotBlank() },
+                    tags = tags
                 )
             }
         } catch (e: Exception) {

@@ -18,13 +18,22 @@ class TagRepository {
             .map { rowToTag(it) }
             .firstOrNull()
             ?: run {
-                // Create new tag
-                val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
-                val id = Tags.insertAndGetId {
-                    it[name] = tagName
-                    it[createdAt] = now
+                // Create new tag with conflict handling
+                try {
+                    val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                    val id = Tags.insertAndGetId {
+                        it[name] = tagName
+                        it[createdAt] = now
+                    }
+                    Tag(id.value, tagName, now)
+                } catch (e: Exception) {
+                    // If insert fails due to unique constraint (race condition),
+                    // try to find the tag again
+                    Tags.selectAll().where { Tags.name eq tagName }
+                        .map { rowToTag(it) }
+                        .firstOrNull()
+                        ?: throw e // Re-throw if still not found
                 }
-                Tag(id.value, tagName, now)
             }
     }
     

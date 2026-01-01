@@ -43,12 +43,46 @@ class HtmlMetadataExtractor : MetadataExtractor {
                 doc.select("meta[name=publisher]").attr("content")
             }
             
+            // 提取标签/关键词
+            val tags = mutableListOf<String>()
+            
+            // 从 keywords meta 标签提取
+            val keywords = doc.select("meta[name=keywords]").attr("content")
+            if (keywords.isNotEmpty()) {
+                keywords.split(',', ';', '/', '|')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && it.length <= 50 }
+                    .forEach { tags.add(it) }
+            }
+            
+            // 从 article:tag 提取 (Open Graph)
+            doc.select("meta[property=article:tag]").forEach { element ->
+                val tag = element.attr("content").trim()
+                if (tag.isNotEmpty() && tag.length <= 50) {
+                    tags.add(tag)
+                }
+            }
+            
+            // 从 og:article:tag 提取
+            doc.select("meta[property=og:article:tag]").forEach { element ->
+                val tag = element.attr("content").trim()
+                if (tag.isNotEmpty() && tag.length <= 50) {
+                    tags.add(tag)
+                }
+            }
+            
+            val distinctTags = tags.distinct()
+            if (distinctTags.isNotEmpty()) {
+                logger.debug("Extracted ${distinctTags.size} tags from HTML: ${distinctTags.joinToString(", ")}")
+            }
+            
             return BookMetadata(
                 title = title.takeIf { it.isNotEmpty() },
                 author = author.takeIf { it.isNotEmpty() },
                 publisher = publisher.takeIf { it.isNotEmpty() },
                 description = description.takeIf { it.isNotEmpty() },
-                isbn = null
+                isbn = null,
+                tags = distinctTags
             )
         } catch (e: Exception) {
             logger.error("Failed to extract HTML metadata: ${file.name}", e)

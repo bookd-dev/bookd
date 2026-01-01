@@ -47,7 +47,8 @@ class EpubMetadataExtractor : MetadataExtractor {
                         title = extractElement(doc, "http://purl.org/dc/elements/1.1/", "title", "dc:title"),
                         author = extractElement(doc, "http://purl.org/dc/elements/1.1/", "creator", "dc:creator"),
                         publisher = extractElement(doc, "http://purl.org/dc/elements/1.1/", "publisher", "dc:publisher"),
-                        description = extractElement(doc, "http://purl.org/dc/elements/1.1/", "description", "dc:description")
+                        description = extractElement(doc, "http://purl.org/dc/elements/1.1/", "description", "dc:description"),
+                        tags = extractTags(doc)
                     )
                 }
             }
@@ -214,5 +215,36 @@ class EpubMetadataExtractor : MetadataExtractor {
         }
         
         return value
+    }
+    
+    /**
+     * 提取标签 (dc:subject)
+     */
+    private fun extractTags(doc: org.w3c.dom.Document): List<String> {
+        val tags = mutableListOf<String>()
+        
+        // 尝试从 dc:subject 提取
+        val namespace = "http://purl.org/dc/elements/1.1/"
+        val subjectNodes = doc.getElementsByTagNameNS(namespace, "subject")
+        for (i in 0 until subjectNodes.length) {
+            val tag = subjectNodes.item(i)?.textContent?.trim()
+            if (!tag.isNullOrBlank() && tag.length <= 50) {
+                tags.add(tag)
+            }
+        }
+        
+        // 如果命名空间方式失败，尝试直接标签名
+        if (tags.isEmpty()) {
+            val fallbackNodes = doc.getElementsByTagName("dc:subject")
+            for (i in 0 until fallbackNodes.length) {
+                val tag = fallbackNodes.item(i)?.textContent?.trim()
+                if (!tag.isNullOrBlank() && tag.length <= 50) {
+                    tags.add(tag)
+                }
+            }
+        }
+        
+        logger.debug("Extracted ${tags.size} tags from EPUB: ${tags.joinToString(", ")}")
+        return tags.distinct()
     }
 }

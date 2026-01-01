@@ -25,5 +25,6 @@ data class BookMetadata(
     val author: String? = null,
     val publisher: String? = null,
     val description: String? = null,
-    val isbn: String? = null
+    val isbn: String? = null,
+    val tags: List<String> = emptyList()
 )

@@ -76,7 +76,7 @@ val appModule = module {
     single { TxtParseRuleService(get()) }
     single { TxtParser(get()) }
     single { BookContentService(get(), get(), get(), getOrNull<BookCacheService>()) }
-    single { BookMetadataService(get(), get()) }
+    single { BookMetadataService(get(), get(), get()) }
     single { BookScanService(get(), get(), get(), get()) }
     single { TagService(get(), get()) }
     single { ReadingService(get(), get(), get()) }

@@ -258,6 +258,7 @@ class MobiMetadataExtractor : MetadataExtractor {
             var author: String? = null
             var publisher: String? = null
             var description: String? = null
+            val tags = mutableListOf<String>()
             
             // EXTH 记录从 offset 12 开始
             var offset = 12
@@ -282,6 +283,12 @@ class MobiMetadataExtractor : MetadataExtractor {
                 
                 when (recordType) {
                     100 -> author = value  // Author
+                    101 -> {  // Subject/Keywords
+                        value.split(';', ',')
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() && it.length <= 50 }
+                            .forEach { tags.add(it) }
+                    }
                     105 -> description = value  // Description
                     106 -> publisher = value  // Publisher
                     503 -> title = value  // Title
@@ -290,8 +297,12 @@ class MobiMetadataExtractor : MetadataExtractor {
                 offset += recordLength
             }
             
+            if (tags.isNotEmpty()) {
+                logger.debug("Extracted ${tags.size} tags from MOBI: ${tags.joinToString(", ")}")
+            }
+            
             return if (title != null || author != null) {
-                BookMetadata(title, author, publisher, description)
+                BookMetadata(title, author, publisher, description, tags = tags.distinct())
             } else {
                 null
             }

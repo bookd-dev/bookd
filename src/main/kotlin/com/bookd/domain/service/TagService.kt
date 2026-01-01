@@ -3,12 +3,16 @@ package com.bookd.domain.service
 import com.bookd.data.repository.TagRepository
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.Tag
+import com.bookd.domain.service.metadata.MetadataExtractorFactory
+import org.slf4j.LoggerFactory
 import java.io.File
 
 class TagService(
     private val tagRepository: TagRepository,
     private val bookRepository: BookRepository
 ) {
+    private val logger = LoggerFactory.getLogger(TagService::class.java)
+    private val extractorFactory = MetadataExtractorFactory()
     
     /**
      * Extract tags from filename
@@ -42,9 +46,9 @@ class TagService(
     }
     
     /**
-     * Auto-tag a book based on its filename
+     * Auto-tag a book based on its filename (legacy method)
      */
-    fun autoTagBook(bookId: Int): List<Tag> {
+    fun autoTagBookFromFilename(bookId: Int): List<Tag> {
         val book = bookRepository.findById(bookId) ?: return emptyList()
         val filename = File(book.filePath).name
         val tagNames = extractTagsFromFilename(filename)
@@ -58,7 +62,7 @@ class TagService(
                 tagRepository.addTagToBook(bookId, tag.id)
                 tags.add(tag)
             } catch (e: Exception) {
-                println("⚠️ Failed to add tag '$tagName' to book $bookId: ${e.message}")
+                logger.warn("Failed to add tag '$tagName' to book $bookId: ${e.message}")
             }
         }
         
@@ -66,7 +70,63 @@ class TagService(
     }
     
     /**
-     * Auto-tag all books
+     * Auto-tag a book from metadata (new method)
+     */
+    fun autoTagBook(bookId: Int): List<Tag> {
+        val book = bookRepository.findById(bookId) ?: return emptyList()
+        val file = File(book.filePath)
+        
+        if (!file.exists() || !file.isFile) {
+            logger.warn("File does not exist: ${book.filePath}")
+            return emptyList()
+        }
+        
+        return try {
+            // 使用工厂创建对应格式的提取器
+            val extractor = extractorFactory.createExtractor(file)
+            
+            // 提取元数据
+            val metadata = extractor.extractMetadata(file)
+            
+            if (metadata == null || metadata.tags.isEmpty()) {
+                logger.debug("No tags found in metadata for book $bookId (${file.name})")
+                return emptyList()
+            }
+            
+            logger.info("Extracting ${metadata.tags.size} tags from metadata for book $bookId: ${metadata.tags.joinToString(", ")}")
+            
+            val tags = mutableListOf<Tag>()
+            var addedCount = 0
+            
+            for (tagName in metadata.tags) {
+                try {
+                    // 查找或创建标签
+                    val tag = tagRepository.findOrCreateTag(tagName)
+                    
+                    // 添加标签到书籍 (如果已存在会被忽略)
+                    val added = tagRepository.addTagToBook(bookId, tag.id)
+                    if (added) {
+                        addedCount++
+                        tags.add(tag)
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Failed to add tag '$tagName' to book $bookId: ${e.message}")
+                }
+            }
+            
+            if (addedCount > 0) {
+                logger.info("Successfully added $addedCount tags to book ID: $bookId")
+            }
+            
+            tags
+        } catch (e: Exception) {
+            logger.error("Failed to extract tags from metadata for book $bookId: ${e.message}")
+            emptyList()
+        }
+    }
+    
+    /**
+     * Auto-tag all books from metadata
      */
     fun autoTagAllBooks(): Map<String, Int> {
         val books = bookRepository.findAll()
@@ -74,15 +134,24 @@ class TagService(
         var tagsCreated = 0
         val initialTagCount = tagRepository.getAllTags().size
         
+        logger.info("Starting auto-tagging for ${books.size} books from metadata")
+        
         for (book in books) {
-            val tags = autoTagBook(book.id)
-            if (tags.isNotEmpty()) {
-                booksTagged++
+            try {
+                val tags = autoTagBook(book.id)
+                if (tags.isNotEmpty()) {
+                    booksTagged++
+                    logger.debug("Tagged book ${book.id} (${book.title}) with ${tags.size} tags")
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to auto-tag book ${book.id}: ${e.message}")
             }
         }
         
         val finalTagCount = tagRepository.getAllTags().size
         tagsCreated = finalTagCount - initialTagCount
+        
+        logger.info("Auto-tagging completed: $booksTagged books tagged, $tagsCreated new tags created")
         
         return mapOf(
             "booksTagged" to booksTagged,

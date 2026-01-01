@@ -33,12 +33,31 @@ class TikaMetadataExtractor : MetadataExtractor {
                 return null
             }
             
+            // 提取标签/关键词
+            val tags = mutableListOf<String>()
+            val keywordsFields = listOf("keywords", "meta:keyword", "Keywords", "subject", "dc:subject")
+            for (field in keywordsFields) {
+                val value = metadata.get(field)
+                if (!value.isNullOrBlank()) {
+                    value.split(',', ';', '/', '|')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && it.length <= 50 }
+                        .forEach { tags.add(it) }
+                }
+            }
+            
+            val distinctTags = tags.distinct()
+            if (distinctTags.isNotEmpty()) {
+                logger.debug("Tika extracted ${distinctTags.size} tags: ${distinctTags.joinToString(", ")}")
+            }
+            
             BookMetadata(
                 title = extractField(metadata, "title", "dc:title", "Title"),
                 author = extractField(metadata, "author", "creator", "dc:creator", "meta:author", "Author"),
                 publisher = extractField(metadata, "publisher", "dc:publisher", "Publisher"),
-                description = extractField(metadata, "description", "dc:description", "subject", "dc:subject", "Description"),
-                isbn = extractField(metadata, "isbn", "ISBN")
+                description = extractField(metadata, "description", "dc:description", "Description"),
+                isbn = extractField(metadata, "isbn", "ISBN"),
+                tags = distinctTags
             )
         } catch (e: Exception) {
             logger.error("Tika failed to extract metadata from ${file.name}: ${e.message}")

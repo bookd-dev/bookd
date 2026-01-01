@@ -1,6 +1,7 @@
 package com.bookd.domain.service
 
 import com.bookd.data.repository.BookRepository
+import com.bookd.data.repository.TagRepository
 import com.bookd.domain.service.metadata.BookMetadata
 import com.bookd.domain.service.metadata.MetadataExtractorFactory
 import kotlinx.coroutines.*
@@ -10,7 +11,8 @@ import java.util.concurrent.Executors
 
 class BookMetadataService(
     private val bookRepository: BookRepository,
-    private val coverGeneratorService: CoverGeneratorService
+    private val coverGeneratorService: CoverGeneratorService,
+    private val tagRepository: TagRepository
 ) {
     private val logger = LoggerFactory.getLogger(BookMetadataService::class.java)
     private val extractorFactory = MetadataExtractorFactory()
@@ -90,6 +92,11 @@ class BookMetadataService(
 
                 if (updated > 0) {
                     logger.info("Successfully updated metadata for book ID: $bookId (${file.name})")
+                    
+                    // 从元数据中提取并添加标签
+                    if (metadata.tags.isNotEmpty()) {
+                        processMetadataTags(bookId, metadata.tags)
+                    }
                 } else {
                     logger.warn("Failed to update database for book ID: $bookId (${file.name})")
                 }
@@ -97,6 +104,37 @@ class BookMetadataService(
                 logger.error("Error extracting metadata from file: ${file.name} - ${e.javaClass.simpleName}: ${e.message}")
                 e.printStackTrace()
             }
+        }
+    }
+    
+    /**
+     * 处理从元数据中提取的标签
+     */
+    private fun processMetadataTags(bookId: Int, tags: List<String>) {
+        try {
+            logger.info("Processing ${tags.size} tags for book ID: $bookId - ${tags.joinToString(", ")}")
+            
+            var addedCount = 0
+            for (tagName in tags) {
+                try {
+                    // 查找或创建标签
+                    val tag = tagRepository.findOrCreateTag(tagName)
+                    
+                    // 添加标签到书籍 (如果已存在会被忽略)
+                    val added = tagRepository.addTagToBook(bookId, tag.id)
+                    if (added) {
+                        addedCount++
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Failed to add tag '$tagName' to book $bookId: ${e.message}")
+                }
+            }
+            
+            if (addedCount > 0) {
+                logger.info("Successfully added $addedCount tags to book ID: $bookId")
+            }
+        } catch (e: Exception) {
+            logger.error("Error processing metadata tags for book ID: $bookId", e)
         }
     }
     
