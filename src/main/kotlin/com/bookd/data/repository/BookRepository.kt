@@ -20,6 +20,7 @@ class BookRepository {
     
     fun findAll(limit: Int = 100, offset: Long = 0): List<Book> = transaction {
         Books.selectAll()
+            .orderBy(Books.title to SortOrder.ASC)
             .limit(limit, offset)
             .map { toBook(it) }
     }
@@ -37,7 +38,9 @@ class BookRepository {
     }
     
     fun findBySourceId(sourceId: Int): List<Book> = transaction {
-        Books.selectAll().where { Books.sourceId eq sourceId }
+        Books.selectAll()
+            .where { Books.sourceId eq sourceId }
+            .orderBy(Books.title to SortOrder.ASC)
             .map { toBook(it) }
     }
     
