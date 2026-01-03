@@ -1,10 +1,8 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.TxtParseRules
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.toInstant
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
@@ -52,7 +50,7 @@ class TxtParseRuleRepository {
     
     suspend fun createRule(dto: CreateTxtParseRuleDTO): TxtParseRuleDTO =
         org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction {
-            val now = Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+            val now = TimeProvider.now()
             val id = TxtParseRules.insertAndGetId {
                 it[name] = dto.name
                 it[rule] = dto.rule
@@ -75,7 +73,7 @@ class TxtParseRuleRepository {
                 it[example] = dto.example
                 it[enabled] = dto.enabled
                 it[priority] = dto.priority
-                it[updatedAt] = Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+                it[updatedAt] = TimeProvider.now()
             } > 0
         }
     
@@ -92,7 +90,7 @@ class TxtParseRuleRepository {
             
             TxtParseRules.update({ TxtParseRules.id eq id }) {
                 it[enabled] = !currentEnabled
-                it[updatedAt] = Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+                it[updatedAt] = TimeProvider.now()
             } > 0
         }
     
@@ -101,7 +99,7 @@ class TxtParseRuleRepository {
             priorities.forEach { (id, priority) ->
                 TxtParseRules.update({ TxtParseRules.id eq id }) {
                     it[TxtParseRules.priority] = priority
-                    it[updatedAt] = Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+                    it[updatedAt] = TimeProvider.now()
                 }
             }
             true
@@ -114,7 +112,7 @@ class TxtParseRuleRepository {
         example = this[TxtParseRules.example],
         enabled = this[TxtParseRules.enabled],
         priority = this[TxtParseRules.priority],
-        createdAt = this[TxtParseRules.createdAt].toInstant(kotlinx.datetime.TimeZone.UTC),
-        updatedAt = this[TxtParseRules.updatedAt].toInstant(kotlinx.datetime.TimeZone.UTC)
+        createdAt = this[TxtParseRules.createdAt].toInstant(TimeProvider.timeZone),
+        updatedAt = this[TxtParseRules.updatedAt].toInstant(TimeProvider.timeZone)
     )
 }

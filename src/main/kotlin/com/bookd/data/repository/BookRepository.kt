@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.domain.model.Book
 import kotlinx.datetime.Clock
@@ -52,7 +53,7 @@ class BookRepository {
         fileSize: Long,
         sourceId: Int? = null
     ): Book = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         val id = Books.insert {
             it[Books.title] = title
             it[Books.author] = author
@@ -121,7 +122,7 @@ class BookRepository {
         publisher: String? = null,
         description: String? = null
     ): Int = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         Books.update({ Books.id eq id }) {
             if (title != null) it[Books.title] = title
             if (author != null) it[Books.author] = author
@@ -137,7 +138,7 @@ class BookRepository {
      * 更新章节解析状态
      */
     fun updateChaptersParsed(id: Int, chaptersCount: Int): Int = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         Books.update({ Books.id eq id }) {
             it[chaptersParsed] = true
             it[Books.chaptersCount] = chaptersCount
@@ -165,7 +166,7 @@ class BookRepository {
      * 更新书籍解析状态
      */
     fun updateParseStatus(id: Int, status: String, progress: Int = 0): Int = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         Books.update({ Books.id eq id }) {
             it[parseStatus] = status
             it[parseProgress] = progress
@@ -177,7 +178,7 @@ class BookRepository {
      * 重置章节解析状态（用于重新解析）
      */
     fun resetChaptersParsed(id: Int): Int = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         Books.update({ Books.id eq id }) {
             it[chaptersParsed] = false
             it[chaptersCount] = 0

@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Bookmarks
 import com.bookd.domain.model.BookmarkResponse
 import kotlinx.datetime.Clock
@@ -50,7 +51,7 @@ class BookmarkRepository {
         note: String?,
         color: String
     ): BookmarkResponse = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         
         val id = Bookmarks.insert {
             it[Bookmarks.userId] = userId

@@ -40,6 +40,7 @@ services:
       REDIS_ENABLED: "true"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
+      TZ: "Asia/Shanghai"  # 时区设置，可根据需要修改为其他时区
       PARSE_AUTO_ON_SCAN: "false"
       PARSE_BACKGROUND_ENABLED: "true"
       PARSE_BACKGROUND_INTERVAL: "60"

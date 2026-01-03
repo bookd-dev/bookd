@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.BookSources
 import com.bookd.domain.model.BookSource
 import kotlinx.datetime.Clock
@@ -21,7 +22,7 @@ class BookSourceRepository {
     }
     
     fun create(name: String, path: String): BookSource = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         val id = BookSources.insert {
             it[BookSources.name] = name
             it[BookSources.path] = path
@@ -42,7 +43,7 @@ class BookSourceRepository {
         if (current != null) {
             BookSources.update({ BookSources.id eq id }) {
                 it[enabled] = !current.enabled
-                it[updatedAt] = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                it[updatedAt] = TimeProvider.now()
             }
             true
         } else {

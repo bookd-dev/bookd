@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Tags
 import com.bookd.data.entity.BookTags
 import com.bookd.domain.model.Tag
@@ -20,7 +21,7 @@ class TagRepository {
             ?: run {
                 // Create new tag with conflict handling
                 try {
-                    val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                    val now = TimeProvider.now()
                     val id = Tags.insertAndGetId {
                         it[name] = tagName
                         it[createdAt] = now
@@ -59,7 +60,7 @@ class TagRepository {
     
     fun addTagToBook(bookId: Int, tagId: Int): Boolean = transaction {
         try {
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = TimeProvider.now()
             BookTags.insert {
                 it[BookTags.bookId] = bookId
                 it[BookTags.tagId] = tagId

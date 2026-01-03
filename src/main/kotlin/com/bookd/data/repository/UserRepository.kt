@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.InviteTokens
 import com.bookd.data.entity.Sessions
 import com.bookd.data.entity.Users
@@ -29,7 +30,7 @@ class UserRepository {
     }
     
     fun create(username: String, hashedPassword: String, email: String?, role: String = "user"): User = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         val id = Users.insert {
             it[Users.username] = username
             it[password] = hashedPassword
@@ -48,13 +49,13 @@ class UserRepository {
     
     fun createSession(userId: Int): String = transaction {
         val token = UUID.randomUUID().toString()
-        val now = Clock.System.now()
-        val expiresAt = now.plus(30, DateTimeUnit.DAY, TimeZone.UTC).toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.nowInstant()
+        val expiresAt = now.plus(30, DateTimeUnit.DAY, TimeProvider.timeZone).toLocalDateTime(TimeProvider.timeZone)
         
         Sessions.insert {
             it[Sessions.token] = token
             it[Sessions.userId] = userId
-            it[createdAt] = now.toLocalDateTime(TimeZone.UTC)
+            it[createdAt] = TimeProvider.now()
             it[Sessions.expiresAt] = expiresAt
         }
         
@@ -62,7 +63,7 @@ class UserRepository {
     }
     
     fun findUserByToken(token: String): User? = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         Sessions.innerJoin(Users)
             .selectAll()
             .where { (Sessions.token eq token) and (Sessions.expiresAt greater now) }
@@ -76,7 +77,7 @@ class UserRepository {
     
     fun createInviteToken(createdBy: Int): InviteToken = transaction {
         val token = UUID.randomUUID().toString()
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         
         val id = InviteTokens.insert {
             it[InviteTokens.token] = token
@@ -101,7 +102,7 @@ class UserRepository {
     }
     
     fun markInviteTokenUsed(token: String, userId: Int): Boolean = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         InviteTokens.update({ InviteTokens.token eq token }) {
             it[used] = true
             it[usedBy] = userId

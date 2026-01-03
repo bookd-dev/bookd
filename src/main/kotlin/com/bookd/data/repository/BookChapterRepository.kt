@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.BookChapters
 import com.bookd.data.entity.ChapterContents
 import com.bookd.data.entity.ChapterResources
@@ -48,7 +49,7 @@ class BookChapterRepository {
         imageCount: Int = 0,
         href: String? = null
     ): BookChapter = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         val id = BookChapters.insert {
             it[BookChapters.bookId] = bookId
             it[BookChapters.index] = index
@@ -76,7 +77,7 @@ class BookChapterRepository {
     }
     
     fun updateStats(chapterId: Int, wordCount: Int, imageCount: Int): Int = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         BookChapters.update({ BookChapters.id eq chapterId }) {
             it[BookChapters.wordCount] = wordCount
             it[BookChapters.imageCount] = imageCount
