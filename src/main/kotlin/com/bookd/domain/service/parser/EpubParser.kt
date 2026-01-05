@@ -74,7 +74,8 @@ class EpubParser {
                 val entry = zipFile.getEntry(fullPath) ?: return null
                 val html = zipFile.getInputStream(entry).bufferedReader().use { it.readText() }
                 
-                return parseHtmlToElements(html, baseDir)
+                // Pass chapter href to resolve relative image paths
+                return parseHtmlToElements(html, baseDir, href)
             }
         } catch (e: Exception) {
             logger.error("Failed to parse chapter content: $href", e)
@@ -193,7 +194,7 @@ class EpubParser {
                     }
                 }
                 
-                val chapters = mutableListOf<ChapterInfo>()
+                val tocChapters = mutableListOf<ChapterInfo>()
                 val navMapElement = navMap.item(0) as org.w3c.dom.Element
                 
                 // 只处理 navMap 的直接子 navPoint
@@ -202,22 +203,39 @@ class EpubParser {
                     val child = children.item(i)
                     if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && 
                         child.nodeName == "navPoint") {
-                        parseNavPointRecursive(child as org.w3c.dom.Element, hrefToIndex, chapters, 0)
+                        parseNavPointRecursive(child as org.w3c.dom.Element, hrefToIndex, tocChapters, 0)
                     }
                 }
                 
-                logger.info("Parsed ${chapters.size} chapters from TOC (before dedup)")
+                logger.info("Parsed ${tocChapters.size} chapters from TOC (before dedup)")
                 
                 // 去重：同一个 index 只保留第一个章节
-                val uniqueChapters = chapters
+                val uniqueTocChapters = tocChapters
                     .groupBy { it.index }
                     .mapValues { it.value.first() }
-                    .values
-                    .sortedBy { it.index }
-                    .toList()
                 
-                logger.info("After dedup: ${uniqueChapters.size} unique chapters")
-                return uniqueChapters
+                // Create a map of spine index to TOC chapter info
+                val tocInfoMap = uniqueTocChapters.toMap()
+                
+                logger.info("TOC info map has ${tocInfoMap.size} entries for indices: ${tocInfoMap.keys.sorted()}")
+                logger.info("Spine has ${spineItems.size} items")
+                
+                // Include ALL spine items, using TOC info when available
+                val allChapters = spineItems.mapIndexed { index, href ->
+                    val tocInfo = tocInfoMap[index]
+                    if (tocInfo != null) {
+                        // Use TOC information
+                        logger.debug("Using TOC info for index $index")
+                        tocInfo
+                    } else {
+                        // Spine item not in TOC - use detected title
+                        logger.debug("No TOC info for index $index, href=$href")
+                        ChapterInfo(index, detectChapterTitle(href), href, 0)
+                    }
+                }
+                
+                logger.info("After including all spine items: ${allChapters.size} chapters")
+                return allChapters
             }
         } catch (e: Exception) {
             logger.warn("Failed to parse TOC, using spine items", e)
@@ -338,7 +356,7 @@ class EpubParser {
     /**
      * 将 HTML 解析为结构化内容元素
      */
-    private fun parseHtmlToElements(html: String, baseDir: String): List<ContentElement> {
+    private fun parseHtmlToElements(html: String, baseDir: String, chapterHref: String): List<ContentElement> {
         val elements = mutableListOf<ContentElement>()
         
         try {
@@ -346,7 +364,7 @@ class EpubParser {
             val body = doc.body()
             
             body.children().forEach { element ->
-                parseElement(element, elements, baseDir)
+                parseElement(element, elements, baseDir, chapterHref)
             }
         } catch (e: Exception) {
             logger.error("Failed to parse HTML to elements", e)
@@ -358,13 +376,28 @@ class EpubParser {
     /**
      * 递归解析 HTML 元素
      */
-    private fun parseElement(element: Element, elements: MutableList<ContentElement>, baseDir: String) {
+    private fun parseElement(element: Element, elements: MutableList<ContentElement>, baseDir: String, chapterHref: String) {
         when (element.tagName().lowercase()) {
             "h1", "h2", "h3", "h4", "h5", "h6" -> {
                 val level = element.tagName().substring(1).toIntOrNull() ?: 1
                 elements.add(ContentElement.Heading(level, element.text()))
             }
             "p" -> {
+                // Check if paragraph contains images
+                val images = element.select("img")
+                if (images.isNotEmpty()) {
+                    // If paragraph has images, extract them as separate Image elements
+                    images.forEach { img ->
+                        val src = img.attr("src")
+                        val alt = img.attr("alt")
+                        if (src.isNotEmpty()) {
+                            val normalizedSrc = normalizeImagePath(src, chapterHref)
+                            elements.add(ContentElement.Image(normalizedSrc, alt))
+                        }
+                    }
+                }
+                
+                // Parse text content (excluding images)
                 val spans = parseInlineElements(element)
                 if (spans.isNotEmpty()) {
                     elements.add(ContentElement.Paragraph(spans))
@@ -374,7 +407,9 @@ class EpubParser {
                 val src = element.attr("src")
                 val alt = element.attr("alt")
                 if (src.isNotEmpty()) {
-                    elements.add(ContentElement.Image(src, alt))
+                    // Normalize image path relative to chapter location
+                    val normalizedSrc = normalizeImagePath(src, chapterHref)
+                    elements.add(ContentElement.Image(normalizedSrc, alt))
                 }
             }
             "blockquote" -> {
@@ -402,7 +437,7 @@ class EpubParser {
             "div", "section", "article" -> {
                 // 递归处理容器元素
                 element.children().forEach { child ->
-                    parseElement(child, elements, baseDir)
+                    parseElement(child, elements, baseDir, chapterHref)
                 }
             }
         }
@@ -447,5 +482,40 @@ class EpubParser {
         }
         
         return spans
+    }
+    
+    /**
+     * Normalize image path relative to chapter location
+     * Converts relative paths like "../Images/xxx.jpg" to "Images/xxx.jpg"
+     */
+    private fun normalizeImagePath(src: String, chapterHref: String): String {
+        // If already absolute or has protocol, return as is
+        if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("/")) {
+            return src
+        }
+        
+        // Get the directory of the chapter
+        val chapterDir = if (chapterHref.contains("/")) {
+            chapterHref.substringBeforeLast("/")
+        } else {
+            ""
+        }
+        
+        // Resolve relative path
+        val parts = mutableListOf<String>()
+        if (chapterDir.isNotEmpty()) {
+            parts.addAll(chapterDir.split("/"))
+        }
+        
+        src.split("/").forEach { part ->
+            when (part) {
+                "." -> {} // current directory, skip
+                ".." -> if (parts.isNotEmpty()) parts.removeAt(parts.size - 1) // parent directory
+                "" -> {} // empty part, skip
+                else -> parts.add(part)
+            }
+        }
+        
+        return parts.joinToString("/")
     }
 }
