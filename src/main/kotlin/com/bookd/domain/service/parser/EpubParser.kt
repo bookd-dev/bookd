@@ -377,9 +377,11 @@ class EpubParser {
      * 递归解析 HTML 元素
      */
     private fun parseElement(element: Element, elements: MutableList<ContentElement>, baseDir: String, chapterHref: String) {
-        when (element.tagName().lowercase()) {
+        val tagName = element.tagName().lowercase()
+        
+        when (tagName) {
             "h1", "h2", "h3", "h4", "h5", "h6" -> {
-                val level = element.tagName().substring(1).toIntOrNull() ?: 1
+                val level = tagName.substring(1).toIntOrNull() ?: 1
                 elements.add(ContentElement.Heading(level, element.text()))
             }
             "p" -> {
@@ -435,9 +437,61 @@ class EpubParser {
                 elements.add(ContentElement.Divider)
             }
             "div", "section", "article" -> {
-                // 递归处理容器元素
-                element.children().forEach { child ->
-                    parseElement(child, elements, baseDir, chapterHref)
+                // Check if this div has direct text content (mixed text and br tags)
+                val hasDirectText = element.childNodes().any { it is TextNode && it.text().trim().isNotEmpty() }
+                val hasBrTags = element.select("br").isNotEmpty()
+                
+                if (hasDirectText && hasBrTags) {
+                    // This div contains text mixed with <br/> tags
+                    // Process line by line, treating <br/> as paragraph separator
+                    var currentLineText = StringBuilder()
+                    
+                    element.childNodes().forEach { node ->
+                        when {
+                            node is TextNode -> {
+                                val text = node.text()
+                                currentLineText.append(text)
+                            }
+                            node is Element && node.tagName().lowercase() == "br" -> {
+                                // <br/> marks end of line, flush current text as paragraph
+                                val text = currentLineText.toString().trim()
+                                if (text.isNotEmpty()) {
+                                    elements.add(ContentElement.Paragraph(listOf(TextSpan(text))))
+                                }
+                                currentLineText.clear()
+                            }
+                            node is Element && node.tagName().lowercase() == "img" -> {
+                                // Flush any text before image
+                                val text = currentLineText.toString().trim()
+                                if (text.isNotEmpty()) {
+                                    elements.add(ContentElement.Paragraph(listOf(TextSpan(text))))
+                                    currentLineText.clear()
+                                }
+                                // Add image
+                                val src = node.attr("src")
+                                val alt = node.attr("alt")
+                                if (src.isNotEmpty()) {
+                                    val normalizedSrc = normalizeImagePath(src, chapterHref)
+                                    elements.add(ContentElement.Image(normalizedSrc, alt))
+                                }
+                            }
+                            node is Element -> {
+                                // Other inline elements like <strong>, <em> etc
+                                currentLineText.append(node.text())
+                            }
+                        }
+                    }
+                    
+                    // Flush remaining text
+                    val text = currentLineText.toString().trim()
+                    if (text.isNotEmpty()) {
+                        elements.add(ContentElement.Paragraph(listOf(TextSpan(text))))
+                    }
+                } else {
+                    // 递归处理容器元素
+                    element.children().forEach { child ->
+                        parseElement(child, elements, baseDir, chapterHref)
+                    }
                 }
             }
         }
