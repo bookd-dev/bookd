@@ -961,10 +961,15 @@
             <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
                 管理书籍标签。标签会从电子书元数据（EPUB/MOBI/PDF/HTML 的 subject/keywords 字段）自动提取
             </p>
-            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
                 <button onclick="autoTagAllBooks()">🤖 自动提取所有书籍标签</button>
                 <button onclick="showCreateTagDialog()" class="secondary">➕ 手动创建标签</button>
                 <button onclick="showMergeTagsDialog()" class="secondary">🔀 合并标签</button>
+                <button id="batchDeleteTagBtn" onclick="batchDeleteTags()" class="danger" style="display: none;">🗑️ 批量删除</button>
+                <div id="selectAllContainer" style="display: none; margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 6px;">
+                    <input type="checkbox" id="selectAllTags" onchange="toggleSelectAllTags()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="selectAllTags" style="cursor: pointer; font-size: 14px; font-weight: 600; color: #666;">全选</label>
+                </div>
             </div>
             <ul class="tag-list" id="tagList">
                 <li class="empty-state">
@@ -1125,23 +1130,28 @@
                 <div class="book-source-filter" id="bookSourceFilter">
                     <button class="source-filter-btn active" onclick="filterBooksBySource(null)">所有</button>
                 </div>
-                <div id="bookTagFilterSection" style="display: none; background: #f5f7fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div id="bookTagFilterSection" style="background: #f5f7fa; padding: 0; border-radius: 8px; margin-bottom: 16px; overflow: hidden;">
+                    <div style="padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="toggleTagFilterPanel()">
                         <div style="font-weight: 600; color: #333;">🏷️ 标签筛选（可多选）</div>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="secondary" onclick="clearTagFilters()" style="font-size: 13px; padding: 6px 12px;">清除筛选</button>
-                            <button class="secondary" onclick="toggleTagFilterMode()" style="font-size: 13px; padding: 6px 12px;">
-                                <span id="tagFilterModeText">AND 模式</span>
-                            </button>
+                        <span class="expand-icon" id="tagFilterExpandIcon" style="font-size: 14px;">▼</span>
+                    </div>
+                    <div id="bookTagFilterContent" style="display: none; padding: 0 16px 16px 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="color: #666; font-size: 12px;">
+                                <span id="tagFilterDescription">AND 模式：书籍必须包含所有选中的标签</span>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="secondary" onclick="clearTagFilters()" style="font-size: 13px; padding: 6px 12px;">清除筛选</button>
+                                <button class="secondary" onclick="toggleTagFilterMode()" style="font-size: 13px; padding: 6px 12px;">
+                                    <span id="tagFilterModeText">AND 模式</span>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div style="color: #666; font-size: 12px; margin-bottom: 8px;">
-                        <span id="tagFilterDescription">AND 模式：书籍必须包含所有选中的标签</span>
-                    </div>
-                    <div class="book-source-filter" id="bookTagFilter">
-                        <button class="source-filter-btn" onclick="toggleTagFilter(null)">加载中...</button>
-                    </div>
-                    <div id="selectedTagsInfo" style="margin-top: 8px; color: #667eea; font-size: 13px; font-weight: 600;">
+                        <div class="book-source-filter" id="bookTagFilter">
+                            <button class="source-filter-btn" onclick="toggleTagFilter(null)">加载中...</button>
+                        </div>
+                        <div id="selectedTagsInfo" style="margin-top: 8px; color: #667eea; font-size: 13px; font-weight: 600;">
+                        </div>
                     </div>
                 </div>
                 <div class="book-grid" id="bookGridContainer">
@@ -1847,6 +1857,19 @@
                 console.error('Failed to load book sources:', e);
                 // Still load books even if sources fail
                 await loadAllBooksGrid(currentSourceFilter);
+            }
+        }
+        
+        function toggleTagFilterPanel() {
+            const content = document.getElementById('bookTagFilterContent');
+            const icon = document.getElementById('tagFilterExpandIcon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▼';
             }
         }
         
@@ -3216,6 +3239,9 @@
         
         // ============ Tag Management Functions ============
         
+        let selectedTagIdsForBatch = new Set();
+        let allTagIds = [];
+        
         async function loadTags() {
             try {
                 const res = await fetch(`${API_BASE}/tags`, {
@@ -3224,24 +3250,134 @@
                 const tags = await res.json();
                 
                 const list = document.getElementById('tagList');
+                const selectAllContainer = document.getElementById('selectAllContainer');
+                
                 if (tags.length === 0) {
                     list.innerHTML = '<li class="empty-state"><div class="empty-state-icon">📭</div><div>暂无标签，请扫描书籍或点击"自动提取所有书籍标签"按钮</div></li>';
+                    document.getElementById('batchDeleteTagBtn').style.display = 'none';
+                    selectAllContainer.style.display = 'none';
                     return;
                 }
                 
+                allTagIds = tags.map(tag => tag.id);
+                selectAllContainer.style.display = 'flex';
+                
                 list.innerHTML = tags.map(tag => `
                     <li class="tag-list-item">
-                        <div>
-                            <span class="tag-name">🏷️ ${escapeHtml(tag.name)}</span>
-                            <span class="tag-count">(${tag.bookCount} 本书籍)</span>
+                        <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                            <input type="checkbox" id="tagCheck-${tag.id}" onchange="toggleTagForBatchDelete(${tag.id})" style="width: 18px; height: 18px; cursor: pointer;">
+                            <label for="tagCheck-${tag.id}" style="cursor: pointer; flex: 1; display: flex; align-items: center;">
+                                <span class="tag-name">🏷️ ${escapeHtml(tag.name)}</span>
+                                <span class="tag-count">(${tag.bookCount} 本书籍)</span>
+                            </label>
                         </div>
                         <button class="danger" onclick="deleteTag(${tag.id}, '${escapeHtml(tag.name)}')">删除</button>
                     </li>
                 `).join('');
+                
+                selectedTagIdsForBatch.clear();
+                updateBatchDeleteButton();
+                updateSelectAllCheckbox();
             } catch (error) {
                 console.error('Failed to load tags:', error);
                 const list = document.getElementById('tagList');
                 list.innerHTML = '<li class="empty-state"><div style="color: #dc3545;">❌ 加载失败</div></li>';
+            }
+        }
+        
+        function toggleTagForBatchDelete(tagId) {
+            if (selectedTagIdsForBatch.has(tagId)) {
+                selectedTagIdsForBatch.delete(tagId);
+            } else {
+                selectedTagIdsForBatch.add(tagId);
+            }
+            updateBatchDeleteButton();
+            updateSelectAllCheckbox();
+        }
+        
+        function toggleSelectAllTags() {
+            const selectAllCheckbox = document.getElementById('selectAllTags');
+            
+            if (selectAllCheckbox.checked) {
+                // Select all
+                allTagIds.forEach(tagId => {
+                    selectedTagIdsForBatch.add(tagId);
+                    const checkbox = document.getElementById(`tagCheck-${tagId}`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            } else {
+                // Deselect all
+                selectedTagIdsForBatch.clear();
+                allTagIds.forEach(tagId => {
+                    const checkbox = document.getElementById(`tagCheck-${tagId}`);
+                    if (checkbox) checkbox.checked = false;
+                });
+            }
+            
+            updateBatchDeleteButton();
+        }
+        
+        function updateSelectAllCheckbox() {
+            const selectAllCheckbox = document.getElementById('selectAllTags');
+            if (selectAllCheckbox && allTagIds.length > 0) {
+                selectAllCheckbox.checked = selectedTagIdsForBatch.size === allTagIds.length;
+                selectAllCheckbox.indeterminate = selectedTagIdsForBatch.size > 0 && selectedTagIdsForBatch.size < allTagIds.length;
+            }
+        }
+        
+        function updateBatchDeleteButton() {
+            const btn = document.getElementById('batchDeleteTagBtn');
+            if (selectedTagIdsForBatch.size > 0) {
+                btn.style.display = 'inline-block';
+                btn.textContent = `🗑️ 批量删除 (${selectedTagIdsForBatch.size})`;
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+        
+        async function batchDeleteTags() {
+            if (selectedTagIdsForBatch.size === 0) {
+                alert('请至少选择一个标签');
+                return;
+            }
+            
+            if (!confirm(`确定要删除选中的 ${selectedTagIdsForBatch.size} 个标签吗？\n\n这将从所有书籍中移除这些标签。`)) {
+                return;
+            }
+            
+            try {
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const tagId of selectedTagIdsForBatch) {
+                    try {
+                        const res = await fetch(`${API_BASE}/tags/${tagId}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${authToken}` }
+                        });
+                        
+                        if (res.ok || res.status === 204) {
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } catch (e) {
+                        console.error('Failed to delete tag:', tagId, e);
+                        failCount++;
+                    }
+                }
+                
+                if (failCount === 0) {
+                    alert(`✅ 批量删除成功！\n\n共删除 ${successCount} 个标签`);
+                } else {
+                    alert(`⚠️ 批量删除完成\n\n成功: ${successCount} 个\n失败: ${failCount} 个`);
+                }
+                
+                selectedTagIdsForBatch.clear();
+                loadTags();
+            } catch (error) {
+                console.error('Failed to batch delete tags:', error);
+                alert('❌ 批量删除失败: ' + error.message);
             }
         }
         
