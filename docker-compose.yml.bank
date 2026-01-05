@@ -55,6 +55,8 @@ services:
     volumes:
       # 书籍封面持久化存储
       - covers_data:/app/covers
+      # 书籍内部图片持久化存储
+      - book_images_data:/app/book_images
       - /volume1:/volume1:ro
     depends_on:
       - postgres
