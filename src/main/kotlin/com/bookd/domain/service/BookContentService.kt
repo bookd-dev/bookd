@@ -5,6 +5,7 @@ import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.*
 import com.bookd.domain.service.parser.*
 import com.bookd.infrastructure.cache.BookCacheService
+import com.bookd.infrastructure.storage.BookImageStorage
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -16,6 +17,7 @@ class BookContentService(
     private val bookRepository: BookRepository,
     private val chapterRepository: BookChapterRepository,
     private val txtParser: TxtParser,
+    private val imageStorage: BookImageStorage,
     private val cacheService: BookCacheService?
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
@@ -284,29 +286,26 @@ class BookContentService(
     }
     
     /**
-     * 保存资源文件
+     * 保存资源文件（使用新的图片存储服务）
      */
     private fun saveResources(bookId: Int, resources: Map<String, ByteArray>) {
-        val resourcesDir = File("book_resources/$bookId")
-        resourcesDir.mkdirs()
-        
         resources.forEach { (path, bytes) ->
             try {
+                // 使用 BookImageStorage 保存图片
+                val storedPath = imageStorage.saveImage(bookId, path, bytes)
                 val extension = path.substringAfterLast(".")
-                val storedFileName = "${UUID.randomUUID()}.$extension"
-                val storedFile = File(resourcesDir, storedFileName)
-                storedFile.writeBytes(bytes)
+                val mediaType = imageStorage.detectMediaType(extension)
                 
-                val mediaType = detectMediaType(extension)
+                // 保存到数据库，记录原始路径和存储路径的映射
                 chapterRepository.saveResource(
                     bookId = bookId,
                     path = path,
-                    storedPath = storedFile.absolutePath,
+                    storedPath = storedPath,  // 存储相对路径，如 "14/abc123.jpg"
                     mediaType = mediaType,
                     size = bytes.size.toLong()
                 )
                 
-                logger.debug("Saved resource: $path -> $storedFileName")
+                logger.debug("Saved resource: $path -> $storedPath")
             } catch (e: Exception) {
                 logger.error("Failed to save resource: $path", e)
             }
@@ -364,10 +363,31 @@ class BookContentService(
     
     /**
      * 获取章节内容
+     * @param baseUrl 可选的基础 URL，用于构建完整的图片 URL
      */
-    fun getChapterContent(bookId: Int, index: Int): ChapterContent? {
+    fun getChapterContent(bookId: Int, index: Int, baseUrl: String? = null): ChapterContent? {
         val chapter = chapterRepository.findByBookIdAndIndex(bookId, index) ?: return null
         val elements = chapterRepository.getChapterContent(chapter.id) ?: emptyList()
+        
+        // 转换图片路径为可访问的URL
+        val transformedElements = elements.map { element ->
+            when (element) {
+                is ContentElement.Image -> {
+                    // 从数据库获取图片的存储路径
+                    val resource = chapterRepository.findResource(bookId, element.src)
+                    if (resource != null) {
+                        val (storedPath, _) = resource
+                        // 转换为 HTTP 可访问的路径
+                        val imagePath = "/book_images/$storedPath"
+                        val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+                        element.copy(src = fullPath)
+                    } else {
+                        element
+                    }
+                }
+                else -> element
+            }
+        }
         
         val allChapters = chapterRepository.findByBookId(bookId)
         val prevIndex = allChapters.find { it.index == index - 1 }?.index
@@ -376,25 +396,10 @@ class BookContentService(
         return ChapterContent(
             index = index,
             title = chapter.title,
-            elements = elements,
+            elements = transformedElements,
             prevIndex = prevIndex,
             nextIndex = nextIndex
         )
-    }
-    
-    /**
-     * 获取资源文件
-     */
-    fun getResource(bookId: Int, path: String): Pair<File, String>? {
-        val (storedPath, mediaType) = chapterRepository.findResource(bookId, path) ?: return null
-        val file = File(storedPath)
-        
-        if (!file.exists()) {
-            logger.warn("Resource file not found: $storedPath")
-            return null
-        }
-        
-        return file to mediaType
     }
     
     /**
@@ -438,20 +443,6 @@ class BookContentService(
         }
         
         return rootItems
-    }
-    
-    /**
-     * 检测媒体类型
-     */
-    private fun detectMediaType(extension: String): String {
-        return when (extension.lowercase()) {
-            "jpg", "jpeg" -> "image/jpeg"
-            "png" -> "image/png"
-            "gif" -> "image/gif"
-            "svg" -> "image/svg+xml"
-            "webp" -> "image/webp"
-            else -> "application/octet-stream"
-        }
     }
     
     /**

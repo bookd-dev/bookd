@@ -6,14 +6,18 @@ import com.bookd.data.repository.BookRepository
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.serialization.Serializable
 import org.koin.java.KoinJavaComponent.get
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
+
+private val logger = LoggerFactory.getLogger("BookRoutes")
 
 @Serializable
 data class BooksResponse(
@@ -57,6 +61,23 @@ data class CoverUploadResponse(
     val success: Boolean,
     val coverPath: String
 )
+
+/**
+ * 构建基础 URL（协议 + 域名 + 端口）
+ */
+private fun buildBaseUrl(call: ApplicationCall): String {
+    val request = call.request
+    val scheme = request.origin.scheme
+    val host = request.origin.serverHost
+    val port = request.origin.serverPort
+    
+    return when {
+        (scheme == "http" && port == 80) || (scheme == "https" && port == 443) -> {
+            "$scheme://$host"
+        }
+        else -> "$scheme://$host:$port"
+    }
+}
 
 fun Route.bookRoutes() {
     route("/api/books") {
@@ -106,7 +127,14 @@ fun Route.bookRoutes() {
             if (book == null) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "Book not found"))
             } else {
-                call.respond(book)
+                // 构建完整的 URL
+                val baseUrl = buildBaseUrl(call)
+                val bookWithFullUrls = book.copy(
+                    coverPath = book.coverPath?.let { path ->
+                        if (path.startsWith("http")) path else "$baseUrl$path"
+                    }
+                )
+                call.respond(bookWithFullUrls)
             }
         }
         
@@ -205,6 +233,9 @@ fun Route.bookRoutes() {
         
         post("/{id}/cover") {
             val bookRepository = get<BookRepository>(BookRepository::class.java)
+            val imageStorage = get<com.bookd.infrastructure.storage.BookImageStorage>(
+                com.bookd.infrastructure.storage.BookImageStorage::class.java
+            )
             
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -228,37 +259,16 @@ fun Route.bookRoutes() {
                         is PartData.FileItem -> {
                             if (part.name == "cover") {
                                 try {
-                                    println("📷 Uploading cover for book $id")
-                                    println("📄 Original filename: ${part.originalFileName}")
-                                    
-                                    val fileBytes = part. provider().toInputStream().readBytes()
-                                    println("📦 File size: ${fileBytes.size} bytes")
-                                    
+                                    val fileBytes = part.provider().toInputStream().readBytes()
                                     val ext = part.originalFileName?.substringAfterLast('.') ?: "jpg"
-                                    val fileName = "${UUID.randomUUID()}.$ext"
                                     
-                                    // 使用covers目录（Docker中为/app/covers，本地为./covers）
-                                    val coversDir = File("covers").absoluteFile
-                                    println("📁 Creating directory: ${coversDir.absolutePath}")
-                                    val dirCreated = coversDir.mkdirs()
-                                    println("📁 Directory created: $dirCreated, exists: ${coversDir.exists()}")
+                                    // 使用 BookImageStorage 保存封面
+                                    coverPath = imageStorage.saveCover(id, "cover.$ext", fileBytes, isGenerated = false)
                                     
-                                    val file = File(coversDir, fileName)
-                                    println("💾 Saving to: ${file.absolutePath}")
-                                    
-                                    file.writeBytes(fileBytes)
-                                    
-                                    if (file.exists()) {
-                                        println("✅ File saved successfully: ${file.absolutePath}")
-                                        coverPath = "/covers/$fileName"
-                                    } else {
-                                        uploadError = "File was not saved"
-                                        println("❌ File not found after save!")
-                                    }
+                                    logger.info("Uploaded cover for book $id: $coverPath")
                                 } catch (e: Exception) {
                                     uploadError = "Failed to save file: ${e.message}"
-                                    println("❌ Error saving file: ${e.message}")
-                                    e.printStackTrace()
+                                    logger.error("Error saving cover for book $id", e)
                                 }
                             }
                         }
@@ -268,18 +278,15 @@ fun Route.bookRoutes() {
                 }
             } catch (e: Exception) {
                 uploadError = "Failed to process multipart: ${e.message}"
-                println("❌ Error processing multipart: ${e.message}")
-                e.printStackTrace()
+                logger.error("Error processing multipart for book $id", e)
             }
             
             val finalCoverPath = coverPath
             if (finalCoverPath != null) {
                 bookRepository.updateMetadata(id, coverPath = finalCoverPath)
-                println("✅ Updated book metadata with cover path: $finalCoverPath")
                 call.respond(CoverUploadResponse(success = true, coverPath = finalCoverPath))
             } else {
                 val errorMsg = uploadError ?: "No cover file provided"
-                println("❌ Cover upload failed: $errorMsg")
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to errorMsg))
             }
         }

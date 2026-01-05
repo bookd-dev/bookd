@@ -23,6 +23,7 @@ import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.parser.TxtParser
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
+import com.bookd.infrastructure.storage.BookImageStorage
 import org.koin.dsl.module
 
 val appModule = module {
@@ -36,6 +37,9 @@ val appModule = module {
     single { ReaderSettingsRepository() }
     single { BookChapterRepository() }
     single { TxtParseRuleRepository() }
+    
+    // Storage
+    single { BookImageStorage() }
     
     // Redis (optional, graceful degradation if not available)
     single<RedisService?> {
@@ -72,10 +76,10 @@ val appModule = module {
     single { UserService(get()) }
     single { BookService(get(), get()) }
     single { BookSourceService(get()) }
-    single { CoverGeneratorService() }
+    single { CoverGeneratorService(get()) }
     single { TxtParseRuleService(get()) }
     single { TxtParser(get()) }
-    single { BookContentService(get(), get(), get(), getOrNull<BookCacheService>()) }
+    single { BookContentService(get(), get(), get(), get(), getOrNull<BookCacheService>()) }
     single { BookMetadataService(get(), get(), get()) }
     single { BookScanService(get(), get(), get(), get()) }
     single { TagService(get(), get()) }

@@ -50,6 +50,9 @@ fun Route.webRoutes() {
     // Serve covers directory
     staticFiles("/covers", File("covers"))
     
+    // Serve book images directory
+    staticFiles("/book_images", File("book_images"))
+    
     // Serve other static resources
     staticResources("/", "static")
 }

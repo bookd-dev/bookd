@@ -3,9 +3,27 @@ package com.bookd.routes
 import com.bookd.domain.service.BookContentService
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.origin
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.java.KoinJavaComponent.get
+
+/**
+ * 构建基础 URL（协议 + 域名 + 端口）
+ */
+private fun buildBaseUrl(call: ApplicationCall): String {
+    val request = call.request
+    val scheme = request.origin.scheme
+    val host = request.origin.serverHost
+    val port = request.origin.serverPort
+    
+    return when {
+        (scheme == "http" && port == 80) || (scheme == "https" && port == 443) -> {
+            "$scheme://$host"
+        }
+        else -> "$scheme://$host:$port"
+    }
+}
 
 fun Route.bookContentRoutes() {
     route("/api/books/{id}") {
@@ -57,32 +75,14 @@ fun Route.bookContentRoutes() {
                 return@get
             }
             
-            val chapterContent = contentService.getChapterContent(bookId, chapterIndex)
+            // 构建完整的 URL
+            val baseUrl = buildBaseUrl(call)
+            
+            val chapterContent = contentService.getChapterContent(bookId, chapterIndex, baseUrl)
             if (chapterContent == null) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "Chapter not found"))
             } else {
                 call.respond(chapterContent)
-            }
-        }
-        
-        // 获取资源文件（图片等）
-        get("/resources") {
-            val contentService = get<BookContentService>(BookContentService::class.java)
-            val bookId = call.parameters["id"]?.toIntOrNull()
-            val path = call.request.queryParameters["path"]
-            
-            if (bookId == null || path == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid parameters"))
-                return@get
-            }
-            
-            val resource = contentService.getResource(bookId, path)
-            if (resource == null) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Resource not found"))
-            } else {
-                val (file, mediaType) = resource
-                call.response.header(HttpHeaders.ContentType, mediaType)
-                call.respondFile(file)
             }
         }
     }
