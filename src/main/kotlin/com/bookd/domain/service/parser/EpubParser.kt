@@ -199,13 +199,22 @@ class EpubParser {
                 val tocChapters = mutableListOf<ChapterInfo>()
                 val navMapElement = navMap.item(0) as DomElement
                 
+                // 创建访问节点集合，用于防止循环引用
+                val visitedNodes = mutableSetOf<DomElement>()
+                
                 // 只处理 navMap 的直接子 navPoint
                 val children = navMapElement.childNodes
                 for (i in 0 until children.length) {
                     val child = children.item(i)
                     if (child.nodeType == ELEMENT_NODE &&
                         child.nodeName == "navPoint") {
-                        parseNavPointRecursive(child as DomElement, hrefToIndex, tocChapters, 0)
+                        parseNavPointRecursive(
+                            child as DomElement, 
+                            hrefToIndex, 
+                            tocChapters, 
+                            0,
+                            visitedNodes
+                        )
                     }
                 }
                 
@@ -254,8 +263,22 @@ class EpubParser {
         navPoint: DomElement,
         hrefToIndex: Map<String, Int>,
         chapters: MutableList<ChapterInfo>,
-        level: Int
+        level: Int,
+        visitedNodes: MutableSet<DomElement> = mutableSetOf(),
+        maxDepth: Int = 50
     ) {
+        // 防止无限递归：检查最大深度
+        if (level > maxDepth) {
+            logger.warn("Reached maximum recursion depth ($maxDepth) while parsing TOC, stopping recursion")
+            return
+        }
+        
+        // 防止循环引用：检查是否已访问过此节点
+        if (!visitedNodes.add(navPoint)) {
+            logger.warn("Detected circular reference in TOC structure, skipping node")
+            return
+        }
+        
         // 获取标题 - 只获取直接子元素的 text
         var title: String? = null
         val children = navPoint.childNodes
@@ -296,7 +319,14 @@ class EpubParser {
         for (i in 0 until children.length) {
             val child = children.item(i)
             if (child.nodeType == ELEMENT_NODE && child.nodeName == "navPoint") {
-                parseNavPointRecursive(child as DomElement, hrefToIndex, chapters, level + 1)
+                parseNavPointRecursive(
+                    child as DomElement, 
+                    hrefToIndex, 
+                    chapters, 
+                    level + 1,
+                    visitedNodes,
+                    maxDepth
+                )
             }
         }
     }
