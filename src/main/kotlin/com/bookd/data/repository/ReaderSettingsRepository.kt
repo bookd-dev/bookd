@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.ReaderSettings
 import com.bookd.domain.model.ReaderSettingsResponse
 import kotlinx.datetime.Clock
@@ -36,7 +37,7 @@ class ReaderSettingsRepository {
         marginHorizontal: Int?,
         marginVertical: Int?
     ): ReaderSettingsResponse = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         
         val existing = ReaderSettings.selectAll()
             .where { ReaderSettings.userId eq userId }

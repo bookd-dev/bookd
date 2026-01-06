@@ -1,5 +1,6 @@
 package com.bookd.data.repository
 
+import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.data.entity.ReadingProgress
 import com.bookd.domain.model.ReadingProgressResponse
@@ -38,7 +39,7 @@ class ReadingProgressRepository {
         chapterId: String?,
         deviceId: String?
     ): ReadingProgressResponse = transaction {
-        val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+        val now = TimeProvider.now()
         
         val existing = ReadingProgress.selectAll()
             .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) }

@@ -12,4 +12,5 @@ EXPOSE 8080
 
 ENV TZ=Asia/Shanghai
 
-CMD ["java", "-jar", "app.jar"]
+# JVM memory settings: 512MB initial, 4GB max
+CMD ["java", "-Xms512m", "-Xmx4g", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200", "-jar", "app.jar"]

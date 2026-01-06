@@ -16,6 +16,14 @@ object Books : IntIdTable("books") {
     val publishDate = varchar("publish_date", 20).nullable()
     val description = text("description").nullable()
     val sourceId = reference("source_id", BookSources, onDelete = ReferenceOption.CASCADE).nullable()
+    
+    // 章节解析相关字段
+    val chaptersParsed = bool("chapters_parsed").default(false)
+    val chaptersCount = integer("chapters_count").default(0)
+    val lastParsedAt = datetime("last_parsed_at").nullable()
+    val parseStatus = varchar("parse_status", 20).nullable() // pending, parsing, completed, failed
+    val parseProgress = integer("parse_progress").default(0) // 0-100
+    
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
 }

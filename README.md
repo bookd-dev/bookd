@@ -260,6 +260,7 @@ docker manifest inspect yourusername/bookd:latest
 |--------|------|------|
 | GET | `/api/books` | 获取书籍列表 |
 | GET | `/api/books/{id}` | 获取书籍详情 |
+| GET | `/api/books/{id}/chapters` | 获取书籍章节列表 ✨ |
 | GET | `/api/books/count` | 获取书籍总数 |
 | PUT | `/api/books/{id}/metadata` | 更新书籍元数据 |
 | POST | `/api/books/{id}/cover` | 上传书籍封面 |

@@ -98,6 +98,86 @@
         .stat-hint { color: #999; font-size: 12px; margin-top: 4px; font-style: italic; }
         .empty-state { padding: 60px 40px; text-align: center; color: #999; }
         .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+        
+        /* 状态徽章 */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .status-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-running {
+            background: #d4edda;
+            color: #155724 !important;
+            -webkit-text-fill-color: #155724 !important;
+        }
+        .status-running::before {
+            background: #28a745;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24 !important;
+            -webkit-text-fill-color: #721c24 !important;
+        }
+        .status-stopped::before {
+            background: #dc3545;
+        }
+        .status-checking {
+            background: #fff3cd;
+            color: #856404 !important;
+            -webkit-text-fill-color: #856404 !important;
+        }
+        .status-checking::before {
+            background: #ffc107;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .status-disabled {
+            background: #e2e3e5;
+            color: #6c757d !important;
+            -webkit-text-fill-color: #6c757d !important;
+        }
+        .status-disabled::before {
+            background: #6c757d;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(1.2);
+            }
+        }
+        
+        /* 按钮变体 */
+        button.danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+        }
+        button.danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(238, 90, 82, 0.4);
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+        
         .path-preview { font-size: 12px; color: #666; margin-top: 4px; font-style: italic; }
         .scan-all-btn { margin-bottom: 16px; }
         .source-books { 
@@ -139,9 +219,20 @@
         .loading { text-align: center; padding: 40px; color: #999; }
         
         /* User management styles */
-        .nav-tabs { display: flex; gap: 8px; margin-bottom: 24px; background: white; padding: 8px; border-radius: 12px; }
-        .nav-tab { flex: 1; padding: 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #666; transition: all 0.3s; }
+        .layout { display: flex; gap: 24px; }
+        .sidebar { width: 220px; flex-shrink: 0; }
+        .main-content { flex: 1; }
+        .nav-tabs { display: flex; flex-direction: column; gap: 2px; background: white; padding: 12px; border-radius: 12px; }
+        .nav-group { display: flex; flex-direction: column; gap: 2px; }
+        .nav-tab { padding: 12px 16px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #666; transition: all 0.3s; text-align: left; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
         .nav-tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3); }
+        .nav-tab.parent { font-weight: 700; }
+        .nav-tab.sub-tab { padding-left: 36px; font-size: 13px; font-weight: 500; }
+        .nav-tab:hover:not(.active) { background: #f5f7fa; }
+        .nav-tab .expand-arrow { font-size: 12px; transition: transform 0.3s; display: inline-block; }
+        .nav-tab .expand-arrow.expanded { transform: rotate(90deg); }
+        .sub-tabs { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .sub-tabs.expanded { max-height: 200px; }
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
         .user-list { list-style: none; }
@@ -467,6 +558,169 @@
         .cancel-btn:hover {
             background: #5a6268;
         }
+        .chapters-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .chapters-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(245, 87, 108, 0.4);
+        }
+        .chapters-panel {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 350px;
+            background: white;
+            border-left: 2px solid #e1e8ed;
+            display: flex;
+            flex-direction: column;
+            animation: slideIn 0.3s ease;
+            z-index: 10;
+        }
+        .chapters-panel-external {
+            width: 400px;
+            max-height: 80vh;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            animation: slideInRight 0.3s ease;
+            margin-left: 20px;
+            overflow: hidden;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideInRight {
+            from {
+                transform: translateX(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .chapters-panel-header {
+            padding: 20px;
+            border-bottom: 2px solid #f0f2f5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .chapters-panel-header h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0;
+        }
+        .chapters-panel-close {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            font-size: 24px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        .chapters-panel-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
+        }
+        .chapters-panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        .chapters-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .chapter-item {
+            padding: 12px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: white;
+        }
+        .chapter-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+            transform: translateX(-2px);
+        }
+        .chapter-item-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .chapter-index {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            min-width: 32px;
+            text-align: center;
+        }
+        .chapter-title {
+            flex: 1;
+            font-weight: 600;
+            font-size: 14px;
+            color: #1a1a1a;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chapter-stats {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: #666;
+        }
+        .chapter-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .chapter-stat-icon {
+            font-size: 14px;
+        }
+        .chapters-empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: #999;
+        }
+        .chapters-empty-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
         
         /* Tag Styles */
         .tag-badge {
@@ -597,6 +851,13 @@
         }
         
         @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar { width: 100%; }
+            .nav-tabs { gap: 4px; }
+            .nav-group { margin-bottom: 8px; }
+            .nav-tab { font-size: 13px; padding: 10px 14px; }
+            .nav-tab.sub-tab { padding-left: 28px; font-size: 12px; }
+            .sidebar { width: 200px; }
             .source-item { flex-direction: column; gap: 16px; align-items: flex-start; }
             .source-actions { width: 100%; justify-content: flex-end; }
             .book-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -615,27 +876,61 @@
             </div>
         </header>
         
-        <div class="nav-tabs">
-            <button class="nav-tab active" onclick="switchTab('books')">📚 书籍管理</button>
-            <button class="nav-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
-            <button class="nav-tab" onclick="switchTab('users')">👥 用户管理</button>
-        </div>
-        
-        <div id="books-tab" class="tab-pane active">
-            <div class="stats">
-                <div class="stat-card clickable" onclick="showAllBooks()">
-                    <div class="stat-value" id="totalBooks">0</div>
-                    <div class="stat-label">📖 图书总数</div>
-                    <div class="stat-hint">点击查看所有书籍</div>
-                </div>
-                <div class="stat-card clickable" onclick="showBookSources()">
-                    <div class="stat-value" id="totalSources">0</div>
-                    <div class="stat-label">📁 书籍源</div>
-                    <div class="stat-hint">点击管理书籍源</div>
+        <div class="layout">
+            <div class="sidebar">
+                <div class="nav-tabs">
+                    <button class="nav-tab active" onclick="switchTab('home')">🏠 首页</button>
+                    
+                    <div class="nav-group">
+                        <button class="nav-tab parent" onclick="toggleNavGroup('books-group')">
+                            <span>📚 书籍</span>
+                            <span class="expand-arrow" id="books-arrow">▶</span>
+                        </button>
+                        <div class="sub-tabs" id="books-group">
+                            <button class="nav-tab sub-tab" onclick="switchTab('book-manage')">📖 书籍管理</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('tags')">🏷️ 标签管理</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('txt-rules')">📝 TXT解析规则</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('background-parse')">🔄 后台解析</button>
+                        </div>
+                    </div>
+                    
+                    <div class="nav-group">
+                        <button class="nav-tab parent" onclick="toggleNavGroup('users-group')">
+                            <span>👥 用户</span>
+                            <span class="expand-arrow" id="users-arrow">▶</span>
+                        </button>
+                        <div class="sub-tabs" id="users-group">
+                            <button class="nav-tab sub-tab" onclick="switchTab('user-manage')">👤 用户管理</button>
+                            <button class="nav-tab sub-tab" onclick="switchTab('invite-tokens')">🎫 邀请码管理</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-        
-        <div class="section">
+            
+            <div class="main-content">
+                <div id="home-tab" class="tab-pane active">
+                    <div class="section">
+                        <h2>🏠 欢迎使用 Bookd 电子书管理系统</h2>
+                        <p style="color: #666; font-size: 14px; line-height: 1.8;">
+                            这是您的管理后台首页。请使用左侧导航菜单管理您的电子书库、标签和用户。
+                        </p>
+                    </div>
+                </div>
+                
+                <div id="book-manage-tab" class="tab-pane">
+                    <div class="stats">
+                        <div class="stat-card clickable" onclick="showAllBooks()">
+                            <div class="stat-value" id="totalBooks">0</div>
+                            <div class="stat-label">📖 图书总数</div>
+                            <div class="stat-hint">点击查看所有书籍</div>
+                        </div>
+                        <div class="stat-card clickable" onclick="showBookSources()">
+                            <div class="stat-value" id="totalSources">0</div>
+                            <div class="stat-label">📁 书籍源</div>
+                            <div class="stat-hint">点击管理书籍源</div>
+                        </div>
+                    </div>
+                    <div class="section">
             <h2>📁 添加书籍源</h2>
             <form id="addSourceForm">
                 <div class="form-group">
@@ -664,12 +959,17 @@
         <div class="section">
             <h2>🏷️ 标签管理</h2>
             <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
-                管理书籍标签。标签会从文件名自动提取（格式：书名-数字-作者-标签1,标签2.ext）
+                管理书籍标签。标签会从电子书元数据（EPUB/MOBI/PDF/HTML 的 subject/keywords 字段）自动提取
             </p>
-            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
                 <button onclick="autoTagAllBooks()">🤖 自动提取所有书籍标签</button>
                 <button onclick="showCreateTagDialog()" class="secondary">➕ 手动创建标签</button>
                 <button onclick="showMergeTagsDialog()" class="secondary">🔀 合并标签</button>
+                <button id="batchDeleteTagBtn" onclick="batchDeleteTags()" class="danger" style="display: none;">🗑️ 批量删除</button>
+                <div id="selectAllContainer" style="display: none; margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 6px;">
+                    <input type="checkbox" id="selectAllTags" onchange="toggleSelectAllTags()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="selectAllTags" style="cursor: pointer; font-size: 14px; font-weight: 600; color: #666;">全选</label>
+                </div>
             </div>
             <ul class="tag-list" id="tagList">
                 <li class="empty-state">
@@ -680,7 +980,27 @@
         </div>
     </div>
     
-    <div id="users-tab" class="tab-pane">
+    <div id="txt-rules-tab" class="tab-pane">
+        <div class="section">
+            <h2>📝 TXT 解析规则管理</h2>
+            <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+                管理 TXT 书籍的章节识别规则，规则按优先级顺序应用（数字越小优先级越高）
+            </p>
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button onclick="showAddTxtRuleDialog()">➕ 添加规则</button>
+                <button onclick="importTxtRulesFromJson()" class="browse-btn">📥 从 JSON 导入</button>
+                <button onclick="testTxtRules()" class="secondary">🧪 测试规则</button>
+            </div>
+            <ul class="tag-list" id="txtRuleList">
+                <li class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div>加载中...</div>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="user-manage-tab" class="tab-pane">
         <div class="section">
             <h2>👥 用户列表</h2>
             <ul class="user-list" id="userList">
@@ -690,7 +1010,9 @@
                 </li>
             </ul>
         </div>
-        
+    </div>
+    
+    <div id="invite-tokens-tab" class="tab-pane">
         <div class="section">
             <h2>🎫 邀请码管理</h2>
             <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
@@ -704,7 +1026,63 @@
             </ul>
         </div>
     </div>
-</div>
+    
+    <div id="background-parse-tab" class="tab-pane">
+        <div class="section">
+            <h2>🔄 后台章节解析</h2>
+            <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+                自动解析未处理的书籍章节，提升用户体验
+            </p>
+            
+            <!-- 状态卡片 -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                <div class="stat-card">
+                    <div class="stat-label">服务状态</div>
+                    <div class="stat-value" id="parseStatus">
+                        <span class="status-badge status-checking">⏳ 检查中...</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">待解析书籍</div>
+                    <div class="stat-value" id="unparsedCount">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">解析间隔</div>
+                    <div class="stat-value" id="parseInterval">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">批次大小</div>
+                    <div class="stat-value" id="batchSize">-</div>
+                </div>
+            </div>
+            
+            <!-- 控制按钮 -->
+            <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                <button id="startParseBtn" onclick="startBackgroundParse()" disabled>
+                    ▶️ 启动服务
+                </button>
+                <button id="stopParseBtn" onclick="stopBackgroundParse()" class="danger" disabled>
+                    ⏸️ 停止服务
+                </button>
+                <button onclick="refreshParseStatus()" class="secondary">
+                    🔄 刷新状态
+                </button>
+            </div>
+            
+            <!-- 说明 -->
+            <div style="background: #f5f7fa; border-radius: 8px; padding: 16px; border-left: 4px solid #667eea;">
+                <h3 style="margin-bottom: 12px; font-size: 16px;">💡 工作原理</h3>
+                <ul style="list-style: none; padding: 0; line-height: 2;">
+                    <li>📖 <strong>按需解析</strong>：用户打开书籍时立即解析章节</li>
+                    <li>⏰ <strong>后台补全</strong>：定期自动解析未处理的书籍</li>
+                    <li>🚀 <strong>性能优化</strong>：扫描时不解析，大幅提升速度</li>
+                    <li>💾 <strong>智能缓存</strong>：已解析书籍快速响应</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
     
     <!-- 文件浏览器模态框 -->
     <div id="fileBrowserModal" class="modal">
@@ -752,23 +1130,28 @@
                 <div class="book-source-filter" id="bookSourceFilter">
                     <button class="source-filter-btn active" onclick="filterBooksBySource(null)">所有</button>
                 </div>
-                <div id="bookTagFilterSection" style="display: none; background: #f5f7fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div id="bookTagFilterSection" style="background: #f5f7fa; padding: 0; border-radius: 8px; margin-bottom: 16px; overflow: hidden;">
+                    <div style="padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="toggleTagFilterPanel()">
                         <div style="font-weight: 600; color: #333;">🏷️ 标签筛选（可多选）</div>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="secondary" onclick="clearTagFilters()" style="font-size: 13px; padding: 6px 12px;">清除筛选</button>
-                            <button class="secondary" onclick="toggleTagFilterMode()" style="font-size: 13px; padding: 6px 12px;">
-                                <span id="tagFilterModeText">AND 模式</span>
-                            </button>
+                        <span class="expand-icon" id="tagFilterExpandIcon" style="font-size: 14px;">▼</span>
+                    </div>
+                    <div id="bookTagFilterContent" style="display: none; padding: 0 16px 16px 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="color: #666; font-size: 12px;">
+                                <span id="tagFilterDescription">AND 模式：书籍必须包含所有选中的标签</span>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="secondary" onclick="clearTagFilters()" style="font-size: 13px; padding: 6px 12px;">清除筛选</button>
+                                <button class="secondary" onclick="toggleTagFilterMode()" style="font-size: 13px; padding: 6px 12px;">
+                                    <span id="tagFilterModeText">AND 模式</span>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div style="color: #666; font-size: 12px; margin-bottom: 8px;">
-                        <span id="tagFilterDescription">AND 模式：书籍必须包含所有选中的标签</span>
-                    </div>
-                    <div class="book-source-filter" id="bookTagFilter">
-                        <button class="source-filter-btn" onclick="toggleTagFilter(null)">加载中...</button>
-                    </div>
-                    <div id="selectedTagsInfo" style="margin-top: 8px; color: #667eea; font-size: 13px; font-weight: 600;">
+                        <div class="book-source-filter" id="bookTagFilter">
+                            <button class="source-filter-btn" onclick="toggleTagFilter(null)">加载中...</button>
+                        </div>
+                        <div id="selectedTagsInfo" style="margin-top: 8px; color: #667eea; font-size: 13px; font-weight: 600;">
+                        </div>
                     </div>
                 </div>
                 <div class="book-grid" id="bookGridContainer">
@@ -803,22 +1186,39 @@
     
     <!-- Book Detail Modal -->
     <div id="bookDetailModal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
-            <div class="modal-header">
-                <div class="modal-title">📖 书籍详情</div>
-                <div class="modal-header-actions">
-                    <button id="editBookBtn" class="edit-btn" onclick="toggleEditMode()" style="display: none;">✏️ 编辑</button>
-                    <button id="saveBookBtn" class="save-btn" onclick="saveBookDetail()" style="display: none;">💾 保存</button>
-                    <button id="cancelEditBtn" class="cancel-btn" onclick="cancelEditMode()" style="display: none;">✖️ 取消</button>
-                    <button class="modal-close" onclick="closeBookDetailModal()">×</button>
+        <div style="display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 40px 20px; position: relative;">
+            <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-header">
+                    <div class="modal-title">📖 书籍详情</div>
+                    <div class="modal-header-actions">
+                        <button id="reparseBookBtn" class="secondary" onclick="reparseBook()" style="display: none;" title="重新解析章节">🔄 重解析</button>
+                        <button id="editBookBtn" class="edit-btn" onclick="toggleEditMode()" style="display: none;">✏️ 编辑</button>
+                        <button id="chaptersBtn" class="chapters-btn" onclick="toggleChaptersPanel()" style="display: none;">📑 章节</button>
+                        <button id="saveBookBtn" class="save-btn" onclick="saveBookDetail()" style="display: none;">💾 保存</button>
+                        <button id="cancelEditBtn" class="cancel-btn" onclick="cancelEditMode()" style="display: none;">✖️ 取消</button>
+                        <button class="modal-close" onclick="closeBookDetailModal()">×</button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div id="bookDetailContainer" class="book-detail-container">
+                        <div class="loading">加载中...</div>
+                    </div>
                 </div>
             </div>
-            <div class="modal-body">
-                <div id="bookDetailContainer" class="book-detail-container">
-                    <div class="loading">加载中...</div>
+            <!-- 章节面板（在弹窗右侧） -->
+            <div id="chaptersPanel" class="chapters-panel-external" style="display: none;">
+                <div class="chapters-panel-header">
+                    <h3>📑 章节列表</h3>
+                    <button class="chapters-panel-close" onclick="toggleChaptersPanel()">×</button>
+                </div>
+                <div class="chapters-panel-content">
+                    <div id="chaptersList" class="chapters-list">
+                        <div class="loading">加载章节中...</div>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
     </div>
     
     <!-- Create Tag Modal -->
@@ -868,6 +1268,115 @@
                 <div style="display: flex; gap: 12px; margin-top: 20px;">
                     <button onclick="executeMergeTags()" style="flex: 1;">合并标签</button>
                     <button onclick="closeMergeTagsModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add TXT Rule Modal -->
+    <div id="addTxtRuleModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <div class="modal-title">➕ 添加 TXT 解析规则</div>
+                <button class="modal-close" onclick="closeAddTxtRuleModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>规则名称</label>
+                    <input type="text" id="newTxtRuleName" placeholder="例如：常规模式、英文章节等" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>正则表达式</label>
+                    <textarea id="newTxtRulePattern" placeholder="输入正则表达式，例如：^第([零一二三四五六七八九十百千万0-9]+)[章节回].*$" class="book-detail-edit-textarea" style="font-family: 'Courier New', monospace; min-height: 80px;"></textarea>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        💡 使用正则表达式匹配章节标题
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>示例（可选）</label>
+                    <input type="text" id="newTxtRuleExample" placeholder="例如：第一章 我还活着" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>优先级</label>
+                    <input type="number" id="newTxtRulePriority" value="0" min="0" max="100" class="book-detail-edit-input">
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        数字越小优先级越高
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="createTxtRule()" style="flex: 1;">创建</button>
+                    <button onclick="closeAddTxtRuleModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit TXT Rule Modal -->
+    <div id="editTxtRuleModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <div class="modal-title">✏️ 编辑 TXT 解析规则</div>
+                <button class="modal-close" onclick="closeEditTxtRuleModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editTxtRuleId">
+                <div class="form-group">
+                    <label>规则名称</label>
+                    <input type="text" id="editTxtRuleName" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>正则表达式</label>
+                    <textarea id="editTxtRulePattern" class="book-detail-edit-textarea" style="font-family: 'Courier New', monospace; min-height: 80px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>示例（可选）</label>
+                    <input type="text" id="editTxtRuleExample" class="book-detail-edit-input">
+                </div>
+                <div class="form-group">
+                    <label>优先级</label>
+                    <input type="number" id="editTxtRulePriority" min="0" max="100" class="book-detail-edit-input">
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="updateTxtRule()" style="flex: 1;">保存</button>
+                    <button onclick="closeEditTxtRuleModal()" class="secondary" style="flex: 1;">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import JSON Modal -->
+    <div id="importJsonModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="modal-title">📥 导入 TXT 解析规则</div>
+                <button class="modal-close" onclick="closeImportJsonModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #666; margin-bottom: 16px; font-size: 14px;">
+                    将 JSON 格式的规则粘贴到下方文本框中，支持批量导入。已存在的同名规则将被跳过。
+                </p>
+                <div class="form-group">
+                    <label>JSON 内容</label>
+                    <textarea id="importJsonContent" placeholder='[
+  {
+    "name": "常规模式",
+    "rule": "^第([零一二三四五六七八九十百千万0-9]+)[章节回].*$",
+    "example": "第一章 我还活着"
+  },
+  {
+    "name": "英文章节",
+    "rule": "^(Chapter|CHAPTER)\\s+\\d+.*$",
+    "example": "Chapter 1"
+  }
+]' class="book-detail-edit-textarea" style="font-family: 'Courier New', monospace; min-height: 300px;"></textarea>
+                    <div style="color: #666; font-size: 12px; margin-top: 8px;">
+                        💡 格式说明：JSON 数组，每个对象包含 name（名称）、rule（正则）、example（示例）
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button onclick="executeImportJson()" style="flex: 1;">导入</button>
+                    <button onclick="loadDefaultJson()" class="browse-btn" style="flex: 1;">📄 加载默认规则</button>
+                    <button onclick="closeImportJsonModal()" class="secondary" style="flex: 1;">取消</button>
                 </div>
             </div>
         </div>
@@ -952,18 +1461,60 @@
             window.location.href = '/login';
         }
         
+        function toggleNavGroup(groupId) {
+            const group = document.getElementById(groupId);
+            const arrow = document.getElementById(groupId.replace('-group', '-arrow'));
+            
+            if (group.classList.contains('expanded')) {
+                group.classList.remove('expanded');
+                arrow.classList.remove('expanded');
+            } else {
+                group.classList.add('expanded');
+                arrow.classList.add('expanded');
+            }
+        }
+        
         function switchTab(tab) {
+            // Remove active from all tabs and panes
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
             
-            event.target.classList.add('active');
-            document.getElementById(`${tab}-tab`).classList.add('active');
+            // Activate the clicked tab
+            const tabs = Array.from(document.querySelectorAll('.nav-tab'));
+            const clickedTab = tabs.find(t => {
+                const onclick = t.getAttribute('onclick');
+                return onclick && onclick.includes(`'${tab}'`);
+            });
+            if (clickedTab) {
+                clickedTab.classList.add('active');
+                
+                // Auto-expand parent group if clicking sub-tab
+                const parentGroup = clickedTab.closest('.nav-group');
+                if (parentGroup) {
+                    const subTabs = parentGroup.querySelector('.sub-tabs');
+                    const arrow = parentGroup.querySelector('.expand-arrow');
+                    if (subTabs && !subTabs.classList.contains('expanded')) {
+                        subTabs.classList.add('expanded');
+                        arrow.classList.add('expanded');
+                    }
+                }
+            }
             
-            if (tab === 'users') {
+            // Show the corresponding pane
+            const pane = document.getElementById(`${tab}-tab`);
+            if (pane) {
+                pane.classList.add('active');
+            }
+            
+            // Load data for specific tabs
+            if (tab === 'user-manage') {
                 loadUsers();
+            } else if (tab === 'invite-tokens') {
                 loadInviteTokens();
             } else if (tab === 'tags') {
                 loadTags();
+            } else if (tab === 'txt-rules') {
+                loadTxtRules();
             }
         }
         
@@ -1309,6 +1860,19 @@
             }
         }
         
+        function toggleTagFilterPanel() {
+            const content = document.getElementById('bookTagFilterContent');
+            const icon = document.getElementById('tagFilterExpandIcon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▼';
+            }
+        }
+        
         function toggleTagFilter(tagId) {
             if (tagId === null) {
                 // Should not happen with new UI
@@ -1533,6 +2097,89 @@
             isEditMode = false;
             currentBookData = null;
             originalBookData = null;
+            // 关闭章节面板
+            const chaptersPanel = document.getElementById('chaptersPanel');
+            if (chaptersPanel) {
+                chaptersPanel.style.display = 'none';
+            }
+        }
+        
+        // 切换章节面板
+        async function toggleChaptersPanel() {
+            const panel = document.getElementById('chaptersPanel');
+            
+            if (panel.style.display === 'none' || !panel.style.display) {
+                // 显示面板
+                panel.style.display = 'flex';
+                
+                // 加载章节数据
+                if (!currentBookData || !currentBookData.id) return;
+                
+                const chaptersList = document.getElementById('chaptersList');
+                chaptersList.innerHTML = '<div class="loading">加载章节中...</div>';
+                
+                try {
+                    const response = await fetch(`/api/books/${currentBookData.id}/chapters`);
+                    if (!response.ok) throw new Error('Failed to load chapters');
+                    
+                    const data = await response.json();
+                    displayChapters(data);
+                } catch (error) {
+                    console.error('Failed to load chapters:', error);
+                    chaptersList.innerHTML = `
+                        <div class="chapters-empty">
+                            <div class="chapters-empty-icon">📭</div>
+                            <div>章节加载失败</div>
+                            <div style="font-size: 12px; margin-top: 8px;">可能是书籍尚未解析完成</div>
+                        </div>
+                    `;
+                }
+            } else {
+                // 隐藏面板
+                panel.style.display = 'none';
+            }
+        }
+        
+        // 显示章节列表
+        function displayChapters(data) {
+            const chaptersList = document.getElementById('chaptersList');
+            
+            if (!data.chapters || data.chapters.length === 0) {
+                chaptersList.innerHTML = `
+                    <div class="chapters-empty">
+                        <div class="chapters-empty-icon">📭</div>
+                        <div>暂无章节信息</div>
+                        <div style="font-size: 12px; margin-top: 8px;">请等待书籍解析完成</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            chaptersList.innerHTML = data.chapters.map(chapter => `
+                <div class="chapter-item" style="padding-left: ${chapter.level * 16 + 12}px;">
+                    <div class="chapter-item-header">
+                        <span class="chapter-index">#${chapter.index + 1}</span>
+                        <span class="chapter-title" title="${escapeHtml(chapter.title)}">${escapeHtml(chapter.title)}</span>
+                    </div>
+                    <div class="chapter-stats">
+                        <div class="chapter-stat">
+                            <span class="chapter-stat-icon">📝</span>
+                            <span>${formatNumber(chapter.wordCount)}字</span>
+                        </div>
+                        ${chapter.imageCount > 0 ? `
+                            <div class="chapter-stat">
+                                <span class="chapter-stat-icon">📷</span>
+                                <span>${chapter.imageCount}张</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // 格式化数字（千位分隔）
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         }
         
         async function loadBookDetail(bookId) {
@@ -1597,6 +2244,15 @@
                                 <span class="book-detail-value">${createdTimeStr}</span>
                             </li>
                             <li class="book-detail-meta-item">
+                                <span class="book-detail-label">📑 章节状态</span>
+                                <span class="book-detail-value">
+                                    ${book.chaptersParsed 
+                                        ? `<span style="color: #28a745;">✅ 已解析 (${book.chaptersCount || 0} 章)</span>` 
+                                        : '<span style="color: #ffc107;">⏳ 未解析</span>'}
+                                    ${book.lastParsedAt ? `<span style="color: #999; font-size: 11px; margin-left: 8px;">最后解析: ${formatDateTime(book.lastParsedAt)}</span>` : ''}
+                                </span>
+                            </li>
+                            <li class="book-detail-meta-item">
                                 <span class="book-detail-label">🆔 书籍ID</span>
                                 <span class="book-detail-value">${book.id}</span>
                             </li>
@@ -1629,14 +2285,53 @@
                 // Load and display tags
                 loadBookTagsDisplay(book.id);
                 
-                // 显示编辑按钮
+                // 显示编辑按钮、重解析按钮和章节按钮
+                document.getElementById('reparseBookBtn').style.display = 'inline-block';
                 document.getElementById('editBookBtn').style.display = 'inline-block';
+                document.getElementById('chaptersBtn').style.display = 'inline-block';
                 document.getElementById('saveBookBtn').style.display = 'none';
                 document.getElementById('cancelEditBtn').style.display = 'none';
                 
             } catch (e) {
                 console.error('Failed to load book detail:', e);
                 container.innerHTML = `<div style="color: #dc3545; text-align: center;">❌ 加载失败: ${e.message}</div>`;
+            }
+        }
+        
+        /**
+         * 重新解析书籍章节
+         */
+        async function reparseBook() {
+            if (!currentBookData) {
+                alert('❌ 请先打开书籍详情');
+                return;
+            }
+            
+            if (!confirm('确定要重新解析这本书的章节吗？\n\n这将清除现有章节数据并重新解析。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/books/${currentBookData.id}/reparse`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    alert('✅ 已加入重解析队列！\n\n书籍将在后台重新解析，请稍后刷新查看章节。');
+                    
+                    // 刷新书籍详情显示
+                    setTimeout(() => {
+                        loadBookDetail(currentBookData.id);
+                    }, 2000);
+                } else {
+                    const error = await res.json();
+                    alert('❌ 重解析失败: ' + (error.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('Failed to reparse book:', e);
+                alert('❌ 重解析失败: ' + e.message);
             }
         }
         
@@ -1685,10 +2380,17 @@
             console.log('Entering edit mode');
             isEditMode = true;
             
-            // 切换按钮
+            // 切换按钮（编辑模式隐藏章节按钮）
             document.getElementById('editBookBtn').style.display = 'none';
+            document.getElementById('chaptersBtn').style.display = 'none';
             document.getElementById('saveBookBtn').style.display = 'inline-block';
             document.getElementById('cancelEditBtn').style.display = 'inline-block';
+            
+            // 关闭章节面板
+            const chaptersPanel = document.getElementById('chaptersPanel');
+            if (chaptersPanel && chaptersPanel.style.display !== 'none') {
+                chaptersPanel.style.display = 'none';
+            }
             
             // 渲染编辑模式的UI
             renderEditMode();
@@ -1700,6 +2402,7 @@
             
             // 切换按钮
             document.getElementById('editBookBtn').style.display = 'inline-block';
+            document.getElementById('chaptersBtn').style.display = 'inline-block';
             document.getElementById('saveBookBtn').style.display = 'none';
             document.getElementById('cancelEditBtn').style.display = 'none';
             
@@ -2536,6 +3239,9 @@
         
         // ============ Tag Management Functions ============
         
+        let selectedTagIdsForBatch = new Set();
+        let allTagIds = [];
+        
         async function loadTags() {
             try {
                 const res = await fetch(`${API_BASE}/tags`, {
@@ -2544,20 +3250,34 @@
                 const tags = await res.json();
                 
                 const list = document.getElementById('tagList');
+                const selectAllContainer = document.getElementById('selectAllContainer');
+                
                 if (tags.length === 0) {
-                    list.innerHTML = '<li class="empty-state"><div class="empty-state-icon">📭</div><div>暂无标签，请点击"自动提取所有书籍标签"按钮</div></li>';
+                    list.innerHTML = '<li class="empty-state"><div class="empty-state-icon">📭</div><div>暂无标签，请扫描书籍或点击"自动提取所有书籍标签"按钮</div></li>';
+                    document.getElementById('batchDeleteTagBtn').style.display = 'none';
+                    selectAllContainer.style.display = 'none';
                     return;
                 }
                 
+                allTagIds = tags.map(tag => tag.id);
+                selectAllContainer.style.display = 'flex';
+                
                 list.innerHTML = tags.map(tag => `
                     <li class="tag-list-item">
-                        <div>
-                            <span class="tag-name">🏷️ ${escapeHtml(tag.name)}</span>
-                            <span class="tag-count">(${tag.bookCount} 本书籍)</span>
+                        <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                            <input type="checkbox" id="tagCheck-${tag.id}" onchange="toggleTagForBatchDelete(${tag.id})" style="width: 18px; height: 18px; cursor: pointer;">
+                            <label for="tagCheck-${tag.id}" style="cursor: pointer; flex: 1; display: flex; align-items: center;">
+                                <span class="tag-name">🏷️ ${escapeHtml(tag.name)}</span>
+                                <span class="tag-count">(${tag.bookCount} 本书籍)</span>
+                            </label>
                         </div>
                         <button class="danger" onclick="deleteTag(${tag.id}, '${escapeHtml(tag.name)}')">删除</button>
                     </li>
                 `).join('');
+                
+                selectedTagIdsForBatch.clear();
+                updateBatchDeleteButton();
+                updateSelectAllCheckbox();
             } catch (error) {
                 console.error('Failed to load tags:', error);
                 const list = document.getElementById('tagList');
@@ -2565,8 +3285,104 @@
             }
         }
         
+        function toggleTagForBatchDelete(tagId) {
+            if (selectedTagIdsForBatch.has(tagId)) {
+                selectedTagIdsForBatch.delete(tagId);
+            } else {
+                selectedTagIdsForBatch.add(tagId);
+            }
+            updateBatchDeleteButton();
+            updateSelectAllCheckbox();
+        }
+        
+        function toggleSelectAllTags() {
+            const selectAllCheckbox = document.getElementById('selectAllTags');
+            
+            if (selectAllCheckbox.checked) {
+                // Select all
+                allTagIds.forEach(tagId => {
+                    selectedTagIdsForBatch.add(tagId);
+                    const checkbox = document.getElementById(`tagCheck-${tagId}`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            } else {
+                // Deselect all
+                selectedTagIdsForBatch.clear();
+                allTagIds.forEach(tagId => {
+                    const checkbox = document.getElementById(`tagCheck-${tagId}`);
+                    if (checkbox) checkbox.checked = false;
+                });
+            }
+            
+            updateBatchDeleteButton();
+        }
+        
+        function updateSelectAllCheckbox() {
+            const selectAllCheckbox = document.getElementById('selectAllTags');
+            if (selectAllCheckbox && allTagIds.length > 0) {
+                selectAllCheckbox.checked = selectedTagIdsForBatch.size === allTagIds.length;
+                selectAllCheckbox.indeterminate = selectedTagIdsForBatch.size > 0 && selectedTagIdsForBatch.size < allTagIds.length;
+            }
+        }
+        
+        function updateBatchDeleteButton() {
+            const btn = document.getElementById('batchDeleteTagBtn');
+            if (selectedTagIdsForBatch.size > 0) {
+                btn.style.display = 'inline-block';
+                btn.textContent = `🗑️ 批量删除 (${selectedTagIdsForBatch.size})`;
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+        
+        async function batchDeleteTags() {
+            if (selectedTagIdsForBatch.size === 0) {
+                alert('请至少选择一个标签');
+                return;
+            }
+            
+            if (!confirm(`确定要删除选中的 ${selectedTagIdsForBatch.size} 个标签吗？\n\n这将从所有书籍中移除这些标签。`)) {
+                return;
+            }
+            
+            try {
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const tagId of selectedTagIdsForBatch) {
+                    try {
+                        const res = await fetch(`${API_BASE}/tags/${tagId}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${authToken}` }
+                        });
+                        
+                        if (res.ok || res.status === 204) {
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } catch (e) {
+                        console.error('Failed to delete tag:', tagId, e);
+                        failCount++;
+                    }
+                }
+                
+                if (failCount === 0) {
+                    alert(`✅ 批量删除成功！\n\n共删除 ${successCount} 个标签`);
+                } else {
+                    alert(`⚠️ 批量删除完成\n\n成功: ${successCount} 个\n失败: ${failCount} 个`);
+                }
+                
+                selectedTagIdsForBatch.clear();
+                loadTags();
+            } catch (error) {
+                console.error('Failed to batch delete tags:', error);
+                alert('❌ 批量删除失败: ' + error.message);
+            }
+        }
+        
         async function autoTagAllBooks() {
-            if (!confirm('确定要自动提取所有书籍的标签吗？\n\n这将从文件名中提取标签（格式：书名-数字-作者-标签1,标签2.ext）')) {
+            if (!confirm('确定要自动提取所有书籍的标签吗？\n\n这将从电子书元数据中读取标签（EPUB dc:subject、MOBI keywords、PDF keywords、HTML meta keywords）')) {
                 return;
             }
             
@@ -2812,6 +3628,454 @@
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
             stopScanStatusCheck();
+        });
+        
+        // ============ TXT Parse Rule Management Functions ============
+        
+        async function loadTxtRules() {
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const rules = await res.json();
+                
+                const list = document.getElementById('txtRuleList');
+                if (rules.length === 0) {
+                    list.innerHTML = '<li class="empty-state"><div class="empty-state-icon">📭</div><div>暂无解析规则</div></li>';
+                    return;
+                }
+                
+                list.innerHTML = rules.map(rule => `
+                    <li class="tag-list-item" style="${!rule.enabled ? 'opacity: 0.5;' : ''}">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <span class="tag-name">📝 ${escapeHtml(rule.name)}</span>
+                                <span style="font-size: 11px; background: #e1e8ed; padding: 2px 8px; border-radius: 12px; color: #666;">
+                                    优先级: ${rule.priority}
+                                </span>
+                                <span class="status-badge ${rule.enabled ? 'status-enabled' : 'status-disabled'}">
+                                    ${rule.enabled ? '启用' : '禁用'}
+                                </span>
+                            </div>
+                            <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #666; background: #f5f7fa; padding: 8px; border-radius: 4px; margin-bottom: 4px; word-break: break-all;">
+                                ${escapeHtml(rule.rule)}
+                            </div>
+                            ${rule.example ? `
+                                <div style="font-size: 12px; color: #999;">
+                                    示例: ${escapeHtml(rule.example)}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="toggleTxtRuleEnabled(${rule.id})" class="secondary" style="padding: 8px 16px; font-size: 13px;">
+                                ${rule.enabled ? '禁用' : '启用'}
+                            </button>
+                            <button onclick="editTxtRule(${rule.id})" class="secondary" style="padding: 8px 16px; font-size: 13px;">编辑</button>
+                            <button onclick="deleteTxtRule(${rule.id}, '${escapeHtml(rule.name)}')" class="danger" style="padding: 8px 16px; font-size: 13px;">删除</button>
+                        </div>
+                    </li>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load TXT rules:', error);
+                const list = document.getElementById('txtRuleList');
+                list.innerHTML = '<li class="empty-state"><div style="color: #dc3545;">❌ 加载失败</div></li>';
+            }
+        }
+        
+        function showAddTxtRuleDialog() {
+            document.getElementById('addTxtRuleModal').classList.add('active');
+            document.getElementById('newTxtRuleName').value = '';
+            document.getElementById('newTxtRulePattern').value = '';
+            document.getElementById('newTxtRuleExample').value = '';
+            document.getElementById('newTxtRulePriority').value = '0';
+        }
+        
+        function closeAddTxtRuleModal() {
+            document.getElementById('addTxtRuleModal').classList.remove('active');
+        }
+        
+        async function createTxtRule() {
+            const name = document.getElementById('newTxtRuleName').value.trim();
+            const rule = document.getElementById('newTxtRulePattern').value.trim();
+            const example = document.getElementById('newTxtRuleExample').value.trim();
+            const priority = parseInt(document.getElementById('newTxtRulePriority').value);
+            
+            if (!name || !rule) {
+                alert('❌ 请填写规则名称和正则表达式');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        name,
+                        rule,
+                        example: example || null,
+                        enabled: true,
+                        priority
+                    })
+                });
+                
+                if (res.ok) {
+                    alert('✅ 规则创建成功！');
+                    closeAddTxtRuleModal();
+                    loadTxtRules();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 创建失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to create TXT rule:', error);
+                alert('❌ 创建失败: ' + error.message);
+            }
+        }
+        
+        async function editTxtRule(ruleId) {
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const rule = await res.json();
+                
+                document.getElementById('editTxtRuleId').value = rule.id;
+                document.getElementById('editTxtRuleName').value = rule.name;
+                document.getElementById('editTxtRulePattern').value = rule.rule;
+                document.getElementById('editTxtRuleExample').value = rule.example || '';
+                document.getElementById('editTxtRulePriority').value = rule.priority;
+                
+                document.getElementById('editTxtRuleModal').classList.add('active');
+            } catch (error) {
+                console.error('Failed to load TXT rule:', error);
+                alert('❌ 加载失败: ' + error.message);
+            }
+        }
+        
+        function closeEditTxtRuleModal() {
+            document.getElementById('editTxtRuleModal').classList.remove('active');
+        }
+        
+        async function updateTxtRule() {
+            const id = parseInt(document.getElementById('editTxtRuleId').value);
+            const name = document.getElementById('editTxtRuleName').value.trim();
+            const rule = document.getElementById('editTxtRulePattern').value.trim();
+            const example = document.getElementById('editTxtRuleExample').value.trim();
+            const priority = parseInt(document.getElementById('editTxtRulePriority').value);
+            
+            if (!name || !rule) {
+                alert('❌ 请填写规则名称和正则表达式');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        name,
+                        rule,
+                        example: example || null,
+                        enabled: true,
+                        priority
+                    })
+                });
+                
+                if (res.ok) {
+                    alert('✅ 规则更新成功！');
+                    closeEditTxtRuleModal();
+                    loadTxtRules();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 更新失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to update TXT rule:', error);
+                alert('❌ 更新失败: ' + error.message);
+            }
+        }
+        
+        async function deleteTxtRule(ruleId, ruleName) {
+            if (!confirm(`确定要删除规则 "${ruleName}" 吗？`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok || res.status === 204) {
+                    alert('✅ 规则已删除');
+                    loadTxtRules();
+                } else {
+                    alert('❌ 删除失败');
+                }
+            } catch (error) {
+                console.error('Failed to delete TXT rule:', error);
+                alert('❌ 删除失败: ' + error.message);
+            }
+        }
+        
+        async function toggleTxtRuleEnabled(ruleId) {
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    loadTxtRules();
+                } else {
+                    alert('❌ 操作失败');
+                }
+            } catch (error) {
+                console.error('Failed to toggle TXT rule:', error);
+                alert('❌ 操作失败: ' + error.message);
+            }
+        }
+        
+        async function importTxtRulesFromJson() {
+            showImportJsonModal();
+        }
+        
+        function showImportJsonModal() {
+            document.getElementById('importJsonModal').classList.add('active');
+            document.getElementById('importJsonContent').value = '';
+        }
+        
+        function closeImportJsonModal() {
+            document.getElementById('importJsonModal').classList.remove('active');
+        }
+        
+        async function loadDefaultJson() {
+            // 这里可以预填一些默认的规则 JSON
+            const defaultJson = `[
+  {
+    "name": "常规模式",
+    "rule": "^[ 　\\\\t]{0,4}(?:序章|楔子|正文(?!完|结)|终章|后记|尾声|番外|第\\\\s{0,4}[\\\\d〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+?\\\\s{0,4}(?:章|节(?!课)|卷|集(?![合和])|部(?![分赛游])|篇(?!张))).{0,30}$",
+    "example": "第一章 我还活着"
+  },
+  {
+    "name": "英文章节",
+    "rule": "^[ 　\\\\t]{0,4}(?:[Cc]hapter|[Ss]ection|[Pp]art|ＰＡＲＴ|[Nn][oO][.、]|[Ee]pisode)\\\\s{0,4}\\\\d{1,4}.{0,30}$",
+    "example": "Chapter 1 The Beginning"
+  },
+  {
+    "name": "纯数字标题",
+    "rule": "(?<=[　\\\\s])\\\\d+\\\\.?[ 　\\\\t]{0,4}$",
+    "example": "12"
+  },
+  {
+    "name": "数字 分隔符 标题",
+    "rule": "^[ 　\\\\t]{0,4}\\\\d{1,5}[:：,.， 、_—\\\\-].{1,30}$",
+    "example": "1、这个就是标题"
+  }
+]`;
+            document.getElementById('importJsonContent').value = defaultJson;
+        }
+        
+        async function executeImportJson() {
+            const jsonContent = document.getElementById('importJsonContent').value.trim();
+            
+            if (!jsonContent) {
+                alert('❌ 请输入 JSON 内容');
+                return;
+            }
+            
+            // 验证 JSON 格式
+            try {
+                JSON.parse(jsonContent);
+            } catch (e) {
+                alert('❌ JSON 格式错误：' + e.message);
+                return;
+            }
+            
+            if (!confirm('确定要导入这些规则吗？\n\n已存在的同名规则将被跳过。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/txt-parse-rules/import`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}` 
+                    },
+                    body: JSON.stringify({
+                        jsonContent: jsonContent,
+                        useFile: false
+                    })
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    alert(`✅ 导入完成！\n\n导入: ${result.imported} 条\n跳过: ${result.skipped} 条`);
+                    closeImportJsonModal();
+                    loadTxtRules();
+                } else {
+                    const error = await res.json();
+                    alert('❌ 导入失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to import TXT rules:', error);
+                alert('❌ 导入失败: ' + error.message);
+            }
+        }
+        
+        function testTxtRules() {
+            alert('测试功能开发中...\n\n您可以通过添加规则后扫描TXT书籍来测试效果。');
+        }
+        
+        // ==================== 后台解析管理 ====================
+        
+        /**
+         * 刷新后台解析状态
+         */
+        async function refreshParseStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/background-parse/status`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const status = await res.json();
+                    updateParseStatusUI(status);
+                } else {
+                    console.error('Failed to fetch parse status');
+                }
+            } catch (error) {
+                console.error('Error fetching parse status:', error);
+            }
+        }
+        
+        /**
+         * 更新后台解析状态 UI
+         */
+        function updateParseStatusUI(status) {
+            // 更新状态徽章
+            const statusEl = document.getElementById('parseStatus');
+            if (!status.enabled) {
+                statusEl.innerHTML = '<span class="status-badge status-disabled">未启用</span>';
+            } else if (status.running) {
+                statusEl.innerHTML = '<span class="status-badge status-running">🟢 运行中</span>';
+            } else {
+                statusEl.innerHTML = '<span class="status-badge status-stopped">🔴 已停止</span>';
+            }
+            
+            // 更新统计数据
+            document.getElementById('unparsedCount').textContent = 
+                status.unparsedBooksCount >= 0 ? status.unparsedBooksCount : '-';
+            document.getElementById('parseInterval').textContent = 
+                `${status.intervalSeconds} 秒`;
+            document.getElementById('batchSize').textContent = status.batchSize;
+            
+            // 更新按钮状态
+            const startBtn = document.getElementById('startParseBtn');
+            const stopBtn = document.getElementById('stopParseBtn');
+            
+            if (!status.enabled) {
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+            } else if (status.running) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+        
+        /**
+         * 启动后台解析服务
+         */
+        async function startBackgroundParse() {
+            if (!confirm('确定要启动后台解析服务吗？')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/background-parse/start`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    alert('✅ 后台解析服务已启动');
+                    setTimeout(() => refreshParseStatus(), 1000);
+                } else {
+                    const error = await res.json();
+                    alert('❌ 启动失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to start background parse:', error);
+                alert('❌ 启动失败: ' + error.message);
+            }
+        }
+        
+        /**
+         * 停止后台解析服务
+         */
+        async function stopBackgroundParse() {
+            if (!confirm('确定要停止后台解析服务吗？\n\n正在进行的解析任务将被取消。')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/background-parse/stop`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    alert('✅ 后台解析服务已停止');
+                    setTimeout(() => refreshParseStatus(), 1000);
+                } else {
+                    const error = await res.json();
+                    alert('❌ 停止失败: ' + (error.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to stop background parse:', error);
+                alert('❌ 停止失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载时自动刷新状态（如果在后台解析 tab）
+        document.addEventListener('DOMContentLoaded', () => {
+            // 监听 tab 切换
+            const originalSwitchTab = window.switchTab;
+            window.switchTab = function(tabId) {
+                originalSwitchTab(tabId);
+                if (tabId === 'background-parse') {
+                    refreshParseStatus();
+                }
+            };
+        });
+        
+        // Add modal click handlers for TXT rules
+        document.getElementById('addTxtRuleModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'addTxtRuleModal') {
+                closeAddTxtRuleModal();
+            }
+        });
+        
+        document.getElementById('editTxtRuleModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'editTxtRuleModal') {
+                closeEditTxtRuleModal();
+            }
+        });
+        
+        document.getElementById('importJsonModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'importJsonModal') {
+                closeImportJsonModal();
+            }
         });
     </script>
 </body>

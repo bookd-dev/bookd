@@ -11,10 +11,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BookScanService(
     private val bookRepository: BookRepository,
     private val bookSourceRepository: BookSourceRepository,
-    private val metadataService: BookMetadataService
+    private val metadataService: BookMetadataService,
+    private val contentService: BookContentService
 ) {
     private val logger = LoggerFactory.getLogger(BookScanService::class.java)
-    private val supportedFormats = setOf("txt", "epub", "mobi", "azw3", "pdf")
+    private val supportedFormats = setOf("txt", "epub", "mobi", "azw3", "pdf", "html")
     
     // Track scanning status
     private val scanningInProgress = AtomicBoolean(false)
@@ -213,6 +214,10 @@ class BookScanService(
                 } catch (e: Exception) {
                     logger.error("Failed to start metadata extraction for existing book: ${file.name}", e)
                 }
+                
+                // 注意：不再自动解析内容，改为按需解析
+                // 用户打开书籍时才会触发解析
+                
                 return existing // 返回已存在的书籍，表示已处理
             } else {
                 // 增量扫描模式：只对缺失元数据的书籍提取
@@ -233,13 +238,13 @@ class BookScanService(
         val format = file.extension.lowercase()
         val fileSize = file.length()
         
-        // 从文件名提取标题和作者
-        val (title, author) = extractTitleAndAuthorFromFileName(fileName)
+        // 直接使用文件名作为标题,让元数据提取器后续更新
+        // 不从文件名猜测作者,避免错误提取
         
         return try {
             val book = bookRepository.create(
-                title = title,
-                author = author,
+                title = fileName,  // 使用完整文件名作为初始标题
+                author = null,     // 不猜测作者,等待元数据提取
                 format = format,
                 filePath = filePath,
                 fileSize = fileSize,
@@ -254,6 +259,10 @@ class BookScanService(
                 // 不影响主流程，继续
             }
             
+            // 注意：不再自动解析内容，改为按需解析
+            // 用户打开书籍时才会触发解析
+            logger.info("Book created, chapters will be parsed on-demand: $fileName")
+            
             book
         } catch (e: Exception) {
             logger.error("Failed to create book: $fileName", e)
@@ -261,78 +270,6 @@ class BookScanService(
         }
     }
     
-    /**
-     * 从文件名提取标题和作者
-     * 支持格式：
-     * 1. 《书名》作者  或  <书名> 作者
-     * 2. 书名-作者
-     * 3. [作者]书名
-     * 4. 作者-书名
-     */
-    private fun extractTitleAndAuthorFromFileName(fileName: String): Pair<String, String?> {
-        // 格式1: 《书名》作者 或 <书名>作者
-        if (fileName.contains("《") && fileName.contains("》")) {
-            val start = fileName.indexOf("《")
-            val end = fileName.indexOf("》")
-            if (end > start) {
-                val title = fileName.substring(start + 1, end).trim()
-                val author = fileName.substring(end + 1).trim().takeIf { it.isNotEmpty() }
-                logger.debug("Extracted from 《》 format - title: $title, author: $author")
-                return Pair(title, author)
-            }
-        }
-        
-        if (fileName.contains("<") && fileName.contains(">")) {
-            val start = fileName.indexOf("<")
-            val end = fileName.indexOf(">")
-            if (end > start) {
-                val title = fileName.substring(start + 1, end).trim()
-                val author = fileName.substring(end + 1).trim().takeIf { it.isNotEmpty() }
-                logger.debug("Extracted from <> format - title: $title, author: $author")
-                return Pair(title, author)
-            }
-        }
-        
-        // 格式2: [作者]书名
-        if (fileName.contains("[") && fileName.contains("]")) {
-            val start = fileName.indexOf("[")
-            val end = fileName.indexOf("]")
-            if (end > start) {
-                val author = fileName.substring(start + 1, end).trim()
-                val title = fileName.substring(end + 1).trim().takeIf { it.isNotEmpty() } ?: fileName
-                logger.debug("Extracted from [] format - title: $title, author: $author")
-                return Pair(title, author)
-            }
-        }
-        
-        // 格式3: 书名-作者 或 作者-书名
-        if (fileName.contains("-")) {
-            val parts = fileName.split("-", limit = 2)
-            if (parts.size == 2) {
-                val first = parts[0].trim()
-                val second = parts[1].trim()
-                // 假设较长的是书名
-                val (title, author) = if (first.length > second.length) {
-                    Pair(first, second)
-                } else {
-                    Pair(second, first)
-                }
-                logger.debug("Extracted from - format - title: $title, author: $author")
-                return Pair(title, author)
-            }
-        }
-        
-        // 默认：整个文件名作为标题，没有作者
-        return Pair(fileName, null)
-    }
-    
-    /**
-     * 从文件名提取作者（已废弃，保留用于兼容）
-     */
-    @Deprecated("Use extractTitleAndAuthorFromFileName instead")
-    private fun extractAuthorFromFileName(fileName: String): String? {
-        return extractTitleAndAuthorFromFileName(fileName).second
-    }
 }
 
 data class ScanResult(

@@ -1,14 +1,17 @@
 package com.bookd.domain.service
 
+import com.bookd.infrastructure.storage.BookImageStorage
 import org.slf4j.LoggerFactory
 import java.awt.Color
 import java.awt.Font
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
-import java.io.File
+import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 
-class CoverGeneratorService {
+class CoverGeneratorService(
+    private val imageStorage: BookImageStorage
+) {
     private val logger = LoggerFactory.getLogger(CoverGeneratorService::class.java)
     
     // Cover dimensions
@@ -70,13 +73,6 @@ class CoverGeneratorService {
      */
     fun generateCover(bookId: Int, title: String, author: String?): String? {
         try {
-            // Create covers directory if it doesn't exist
-            val coversDir = File("covers")
-            if (!coversDir.exists()) {
-                coversDir.mkdirs()
-                logger.info("Created covers directory: ${coversDir.absolutePath}")
-            }
-            
             // Create a new buffered image
             val image = BufferedImage(coverWidth, coverHeight, BufferedImage.TYPE_INT_RGB)
             val g2d = image.createGraphics()
@@ -130,12 +126,16 @@ class CoverGeneratorService {
             
             g2d.dispose()
             
-            // Save the image
-            val outputFile = File(coversDir, "book_${bookId}_generated.png")
-            ImageIO.write(image, "png", outputFile)
+            // Convert image to byte array
+            val outputStream = ByteArrayOutputStream()
+            ImageIO.write(image, "png", outputStream)
+            val imageData = outputStream.toByteArray()
             
-            logger.info("Generated cover for book ID $bookId: ${outputFile.absolutePath}")
-            return "/covers/book_${bookId}_generated.png"
+            // Save using BookImageStorage
+            val coverPath = imageStorage.saveCover(bookId, "cover.png", imageData, isGenerated = true)
+            
+            logger.info("Generated cover for book ID $bookId: $coverPath")
+            return coverPath
             
         } catch (e: Exception) {
             logger.error("Failed to generate cover for book ID $bookId: ${e.message}", e)

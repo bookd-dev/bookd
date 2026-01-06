@@ -3,8 +3,11 @@ package com.bookd
 import com.bookd.config.DatabaseConfig
 import com.bookd.plugins.*
 import io.ktor.server.application.*
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.koin.ktor.ext.inject
+import java.io.File
 
 fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
@@ -36,7 +39,11 @@ fun Application.module() {
             com.bookd.data.entity.Sessions,
             com.bookd.data.entity.InviteTokens,
             com.bookd.data.entity.Bookmarks,
-            com.bookd.data.entity.ReaderSettings
+            com.bookd.data.entity.ReaderSettings,
+            com.bookd.data.entity.BookChapters,
+            com.bookd.data.entity.ChapterContents,
+            com.bookd.data.entity.ChapterResources,
+            com.bookd.data.entity.TxtParseRules
         )
     }
     
@@ -48,4 +55,17 @@ fun Application.module() {
     configureMonitoring()
     configureStatusPages()
     configureRouting()
+    
+    // Initialize TXT parse rules from JSON file if database is empty
+    val txtParseRuleService by inject<com.bookd.domain.service.TxtParseRuleService>()
+    runBlocking {
+        val jsonFile = File("txt_toc_rules.json")
+        if (jsonFile.exists()) {
+            txtParseRuleService.initializeFromJson(jsonFile)
+        }
+    }
+    
+    // Start background parse service
+    val backgroundParseService by inject<com.bookd.domain.service.BackgroundParseService>()
+    backgroundParseService.start()
 }

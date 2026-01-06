@@ -86,19 +86,15 @@ push_to_hub() {
     echo "📤 构建并推送镜像到 Docker Hub"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "🏷️  镜像名称: $IMAGE_NAME"
+    echo "🏗️  架构支持: linux/amd64, linux/arm64"
     
     echo ""
     echo "🏗️  1/3 构建应用..."
     ./gradlew clean build -x test
     
     echo ""
-    echo "🐳 2/3 构建镜像..."
-    docker build -t "$IMAGE_NAME" .
-    
-    echo ""
-    echo "🔐 3/3 登录并推送..."
-    docker login
-    docker push "$IMAGE_NAME"
+    echo "🐳 2/3 构建多架构镜像..."
+    docker buildx build --platform linux/amd64,linux/arm64 -t "$IMAGE_NAME" --push .
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

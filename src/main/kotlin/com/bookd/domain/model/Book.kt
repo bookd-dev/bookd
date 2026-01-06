@@ -16,6 +16,17 @@ data class Book(
     val publisher: String? = null,
     val description: String? = null,
     val sourceId: Int? = null,
+    val chapterCount: Int = 0,
+    val totalWordCount: Int = 0,
+    val totalImageCount: Int = 0,
+    
+    // 章节解析状态
+    val chaptersParsed: Boolean = false,
+    val chaptersCount: Int = 0,
+    val lastParsedAt: LocalDateTime? = null,
+    val parseStatus: String? = null,
+    val parseProgress: Int = 0,
+    
     val createdAt: LocalDateTime? = null,
     val updatedAt: LocalDateTime? = null
 )
