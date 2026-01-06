@@ -8,7 +8,7 @@ import java.io.File
 class EpubTagExtractionTest {
     
     companion object {
-        private const val TEST_EPUB_PATH = "/Users/shenchao/ebook/EBook/我怎么可能成为你的恋人 小说/我怎么可能成为你的恋人，不行不行！(※不是不可能！？) 4 - みかみてれん & 竹嶋えく.epub"
+        private const val TEST_EPUB_PATH = ""
         
         @JvmStatic
         fun testEpubExists(): Boolean = File(TEST_EPUB_PATH).exists()

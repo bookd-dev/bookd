@@ -1,5 +1,6 @@
 package com.bookd.routes
 
+import com.bookd.com.bookd.extension.buildBaseUrl
 import com.bookd.domain.service.BookContentService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -7,23 +8,6 @@ import io.ktor.server.plugins.origin
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.java.KoinJavaComponent.get
-
-/**
- * 构建基础 URL（协议 + 域名 + 端口）
- */
-private fun buildBaseUrl(call: ApplicationCall): String {
-    val request = call.request
-    val scheme = request.origin.scheme
-    val host = request.origin.serverHost
-    val port = request.origin.serverPort
-    
-    return when {
-        (scheme == "http" && port == 80) || (scheme == "https" && port == 443) -> {
-            "$scheme://$host"
-        }
-        else -> "$scheme://$host:$port"
-    }
-}
 
 fun Route.bookContentRoutes() {
     route("/api/books/{id}") {
@@ -76,7 +60,7 @@ fun Route.bookContentRoutes() {
             }
             
             // 构建完整的 URL
-            val baseUrl = buildBaseUrl(call)
+            val baseUrl = call.buildBaseUrl()
             
             val chapterContent = contentService.getChapterContent(bookId, chapterIndex, baseUrl)
             if (chapterContent == null) {

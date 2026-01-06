@@ -1,6 +1,7 @@
 package com.bookd.domain.service.metadata
 
 import org.slf4j.LoggerFactory
+import org.w3c.dom.Document
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -102,7 +103,7 @@ class EpubMetadataExtractor : MetadataExtractor {
             
             if (containerEntry != null) {
                 zipFile.getInputStream(containerEntry).use { stream ->
-                    val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                    val factory = DocumentBuilderFactory.newInstance()
                     factory.isNamespaceAware = true
                     val doc = factory.newDocumentBuilder().parse(stream)
                     val rootfiles = doc.getElementsByTagName("rootfile")
@@ -117,7 +118,7 @@ class EpubMetadataExtractor : MetadataExtractor {
             
             // 解析 OPF 查找封面
             zipFile.getInputStream(opfEntry).use { stream ->
-                val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                val factory = DocumentBuilderFactory.newInstance()
                 factory.isNamespaceAware = true
                 val doc = factory.newDocumentBuilder().parse(stream)
                 
@@ -164,7 +165,7 @@ class EpubMetadataExtractor : MetadataExtractor {
     /**
      * 从 manifest 中查找指定 id 的 href
      */
-    private fun findManifestHref(doc: org.w3c.dom.Document, id: String): String? {
+    private fun findManifestHref(doc: Document, id: String): String? {
         val manifestItems = doc.getElementsByTagName("item")
         for (i in 0 until manifestItems.length) {
             val item = manifestItems.item(i)
@@ -205,7 +206,7 @@ class EpubMetadataExtractor : MetadataExtractor {
         }
     }
     
-    private fun extractElement(doc: org.w3c.dom.Document, namespace: String, tagName: String, fallbackTag: String): String? {
+    private fun extractElement(doc: Document, namespace: String, tagName: String, fallbackTag: String): String? {
         var value = doc.getElementsByTagNameNS(namespace, tagName)
             .item(0)?.textContent?.trim()?.takeIf { it.isNotBlank() }
         
@@ -220,7 +221,7 @@ class EpubMetadataExtractor : MetadataExtractor {
     /**
      * 提取标签 (dc:subject)
      */
-    private fun extractTags(doc: org.w3c.dom.Document): List<String> {
+    private fun extractTags(doc: Document): List<String> {
         val tags = mutableListOf<String>()
         
         // 尝试从 dc:subject 提取

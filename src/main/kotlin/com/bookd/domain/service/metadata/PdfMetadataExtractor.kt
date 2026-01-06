@@ -26,12 +26,12 @@ class PdfMetadataExtractor : MetadataExtractor {
                 }
                 
                 // 从 PDF Keywords 字段提取标签
-                val tags = info.keywords?.let { keywords ->
-                    keywords.split(';', ',', '/', '|')
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() && it.length <= 50 }
-                        .distinct()
-                } ?: emptyList()
+                val tags = info.keywords
+                    ?.split(';', ',', '/', '|')
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() && it.length <= 50 }
+                    ?.distinct()
+                    ?: emptyList()
                 
                 if (tags.isNotEmpty()) {
                     logger.debug("Extracted ${tags.size} tags from PDF: ${tags.joinToString(", ")}")

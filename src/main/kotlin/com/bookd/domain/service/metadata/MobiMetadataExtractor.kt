@@ -208,7 +208,7 @@ class MobiMetadataExtractor : MetadataExtractor {
             // 尝试备选搜索方案
             return try {
                 searchForExth(raf)
-            } catch (e2: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -265,22 +265,22 @@ class MobiMetadataExtractor : MetadataExtractor {
             val buffer = ByteBuffer.wrap(exthData).order(ByteOrder.BIG_ENDIAN)
             buffer.position(8)
             val recordCount = buffer.int
-            
+
             for (i in 0 until recordCount) {
                 if (offset + 8 > exthData.size) break
-                
+
                 buffer.position(offset)
                 val recordType = buffer.int
                 val recordLength = buffer.int
-                
+
                 if (recordLength < 8 || offset + recordLength > exthData.size) break
-                
+
                 val dataLength = recordLength - 8
                 val data = ByteArray(dataLength)
                 buffer.get(data)
-                
+
                 val value = String(data, Charsets.UTF_8).trim()
-                
+
                 when (recordType) {
                     100 -> author = value  // Author
                     101 -> {  // Subject/Keywords
@@ -293,7 +293,7 @@ class MobiMetadataExtractor : MetadataExtractor {
                     106 -> publisher = value  // Publisher
                     503 -> title = value  // Title
                 }
-                
+
                 offset += recordLength
             }
             

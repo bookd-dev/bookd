@@ -1,8 +1,11 @@
 package com.bookd.routes
 
+import com.bookd.com.bookd.extension.buildBaseUrl
+import com.bookd.data.repository.BookChapterRepository
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.data.repository.BookRepository
+import com.bookd.domain.service.BookContentService
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -62,23 +65,6 @@ data class CoverUploadResponse(
     val coverPath: String
 )
 
-/**
- * 构建基础 URL（协议 + 域名 + 端口）
- */
-private fun buildBaseUrl(call: ApplicationCall): String {
-    val request = call.request
-    val scheme = request.origin.scheme
-    val host = request.origin.serverHost
-    val port = request.origin.serverPort
-    
-    return when {
-        (scheme == "http" && port == 80) || (scheme == "https" && port == 443) -> {
-            "$scheme://$host"
-        }
-        else -> "$scheme://$host:$port"
-    }
-}
-
 fun Route.bookRoutes() {
     route("/api/books") {
         get {
@@ -128,7 +114,7 @@ fun Route.bookRoutes() {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "Book not found"))
             } else {
                 // 构建完整的 URL
-                val baseUrl = buildBaseUrl(call)
+                val baseUrl = call.buildBaseUrl()
                 val bookWithFullUrls = book.copy(
                     coverPath = book.coverPath?.let { path ->
                         if (path.startsWith("http")) path else "$baseUrl$path"
@@ -140,15 +126,9 @@ fun Route.bookRoutes() {
         
         // 获取书籍章节列表
         get("/{id}/chapters") {
-            val bookRepository = get<com.bookd.data.repository.BookRepository>(
-                com.bookd.data.repository.BookRepository::class.java
-            )
-            val chapterRepository = get<com.bookd.data.repository.BookChapterRepository>(
-                com.bookd.data.repository.BookChapterRepository::class.java
-            )
-            val contentService = get<com.bookd.domain.service.BookContentService>(
-                com.bookd.domain.service.BookContentService::class.java
-            )
+            val bookRepository = get<BookRepository>(BookRepository::class.java)
+            val chapterRepository = get<BookChapterRepository>(BookChapterRepository::class.java)
+            val contentService = get<BookContentService>(BookContentService::class.java)
             
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {

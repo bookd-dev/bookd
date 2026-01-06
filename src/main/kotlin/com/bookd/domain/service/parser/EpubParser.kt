@@ -5,10 +5,12 @@ import com.bookd.domain.model.TextSpan
 import com.bookd.domain.model.TextStyle
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import org.slf4j.LoggerFactory
+import org.w3c.dom.Node.ELEMENT_NODE
+import org.w3c.dom.Element as DomElement
 import java.io.File
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -104,7 +106,7 @@ class EpubParser {
     /**
      * 解析 OPF 文件获取 spine 和 toc 路径
      */
-    private fun parseOpf(zipFile: ZipFile, opfEntry: java.util.zip.ZipEntry): Pair<List<String>, String?> {
+    private fun parseOpf(zipFile: ZipFile, opfEntry: ZipEntry): Pair<List<String>, String?> {
         val spineItems = mutableListOf<String>()
         var tocHref: String? = null
         
@@ -195,15 +197,15 @@ class EpubParser {
                 }
                 
                 val tocChapters = mutableListOf<ChapterInfo>()
-                val navMapElement = navMap.item(0) as org.w3c.dom.Element
+                val navMapElement = navMap.item(0) as DomElement
                 
                 // 只处理 navMap 的直接子 navPoint
                 val children = navMapElement.childNodes
                 for (i in 0 until children.length) {
                     val child = children.item(i)
-                    if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && 
+                    if (child.nodeType == ELEMENT_NODE &&
                         child.nodeName == "navPoint") {
-                        parseNavPointRecursive(child as org.w3c.dom.Element, hrefToIndex, tocChapters, 0)
+                        parseNavPointRecursive(child as DomElement, hrefToIndex, tocChapters, 0)
                     }
                 }
                 
@@ -249,7 +251,7 @@ class EpubParser {
      * 递归解析单个 navPoint 及其直接子 navPoint
      */
     private fun parseNavPointRecursive(
-        navPoint: org.w3c.dom.Element,
+        navPoint: DomElement,
         hrefToIndex: Map<String, Int>,
         chapters: MutableList<ChapterInfo>,
         level: Int
@@ -259,8 +261,8 @@ class EpubParser {
         val children = navPoint.childNodes
         for (i in 0 until children.length) {
             val child = children.item(i)
-            if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && child.nodeName == "navLabel") {
-                val navLabel = child as org.w3c.dom.Element
+            if (child.nodeType == ELEMENT_NODE && child.nodeName == "navLabel") {
+                val navLabel = child as DomElement
                 val textNodes = navLabel.getElementsByTagName("text")
                 if (textNodes.length > 0) {
                     title = textNodes.item(0).textContent?.trim()
@@ -273,7 +275,7 @@ class EpubParser {
         var href: String? = null
         for (i in 0 until children.length) {
             val child = children.item(i)
-            if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && child.nodeName == "content") {
+            if (child.nodeType == ELEMENT_NODE && child.nodeName == "content") {
                 val src = child.attributes.getNamedItem("src")?.nodeValue
                 if (src != null) {
                     href = src.substringBefore("#")
@@ -293,8 +295,8 @@ class EpubParser {
         // 递归处理直接子 navPoint
         for (i in 0 until children.length) {
             val child = children.item(i)
-            if (child.nodeType == org.w3c.dom.Node.ELEMENT_NODE && child.nodeName == "navPoint") {
-                parseNavPointRecursive(child as org.w3c.dom.Element, hrefToIndex, chapters, level + 1)
+            if (child.nodeType == ELEMENT_NODE && child.nodeName == "navPoint") {
+                parseNavPointRecursive(child as DomElement, hrefToIndex, chapters, level + 1)
             }
         }
     }
@@ -377,9 +379,7 @@ class EpubParser {
      * 递归解析 HTML 元素
      */
     private fun parseElement(element: Element, elements: MutableList<ContentElement>, baseDir: String, chapterHref: String) {
-        val tagName = element.tagName().lowercase()
-        
-        when (tagName) {
+        when (val tagName = element.tagName().lowercase()) {
             "h1", "h2", "h3", "h4", "h5", "h6" -> {
                 val level = tagName.substring(1).toIntOrNull() ?: 1
                 elements.add(ContentElement.Heading(level, element.text()))
@@ -444,15 +444,16 @@ class EpubParser {
                 if (hasDirectText && hasBrTags) {
                     // This div contains text mixed with <br/> tags
                     // Process line by line, treating <br/> as paragraph separator
-                    var currentLineText = StringBuilder()
+                    val currentLineText = StringBuilder()
                     
                     element.childNodes().forEach { node ->
-                        when {
-                            node is TextNode -> {
+                        when (node) {
+                            is TextNode -> {
                                 val text = node.text()
                                 currentLineText.append(text)
                             }
-                            node is Element && node.tagName().lowercase() == "br" -> {
+
+                            is Element if node.tagName().lowercase() == "br" -> {
                                 // <br/> marks end of line, flush current text as paragraph
                                 val text = currentLineText.toString().trim()
                                 if (text.isNotEmpty()) {
@@ -460,7 +461,8 @@ class EpubParser {
                                 }
                                 currentLineText.clear()
                             }
-                            node is Element && node.tagName().lowercase() == "img" -> {
+
+                            is Element if node.tagName().lowercase() == "img" -> {
                                 // Flush any text before image
                                 val text = currentLineText.toString().trim()
                                 if (text.isNotEmpty()) {
@@ -475,7 +477,8 @@ class EpubParser {
                                     elements.add(ContentElement.Image(normalizedSrc, alt))
                                 }
                             }
-                            node is Element -> {
+
+                            is Element -> {
                                 // Other inline elements like <strong>, <em> etc
                                 currentLineText.append(node.text())
                             }
