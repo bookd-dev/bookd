@@ -7,7 +7,7 @@ import com.bookd.data.repository.TagRepository
 import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.data.repository.BookmarkRepository
 import com.bookd.data.repository.ReaderSettingsRepository
-import com.bookd.data.repository.BookChapterRepository
+import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.TxtParseRuleRepository
 import com.bookd.domain.service.BookMetadataService
 import com.bookd.domain.service.BookScanService
@@ -35,7 +35,7 @@ val appModule = module {
     single { ReadingProgressRepository() }
     single { BookmarkRepository() }
     single { ReaderSettingsRepository() }
-    single { BookChapterRepository() }
+    single { BookDocumentRepository() }
     single { TxtParseRuleRepository() }
     
     // Storage

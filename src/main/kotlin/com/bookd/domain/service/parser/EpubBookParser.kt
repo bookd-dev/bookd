@@ -13,12 +13,13 @@ class EpubBookParser(
     override suspend fun parseStructure(file: File): BookParser.BookStructure? {
         val structure = epubParser.parseStructure(file) ?: return null
         
-        val chapters = structure.chapters.map { chapter ->
+        val chapters = structure.chapters.map { doc ->
             BookParser.ChapterInfo(
-                index = chapter.index,
-                title = cleanTitle(chapter.title),
-                level = chapter.level,
-                href = chapter.href
+                index = doc.index,
+                title = cleanTitle(doc.title),
+                level = doc.level,
+                href = doc.href,
+                inToc = doc.inToc
             )
         }
         

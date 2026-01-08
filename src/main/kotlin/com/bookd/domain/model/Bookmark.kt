@@ -9,7 +9,7 @@ data class BookmarkDTO(
     val bookId: Int,
     val positionType: String,
     val positionValue: String,
-    val chapterId: String? = null,
+    val documentId: String? = null,
     val title: String? = null,
     val note: String? = null,
     val color: String = "#FFD700"
@@ -21,7 +21,7 @@ data class BookmarkResponse(
     val bookId: Int,
     val positionType: String,
     val positionValue: String,
-    val chapterId: String?,
+    val documentId: String?,
     val title: String?,
     val note: String?,
     val color: String,

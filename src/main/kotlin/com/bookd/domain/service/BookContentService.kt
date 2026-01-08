@@ -1,6 +1,6 @@
 package com.bookd.domain.service
 
-import com.bookd.data.repository.BookChapterRepository
+import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.*
 import com.bookd.domain.service.parser.*
@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
 
 class BookContentService(
     private val bookRepository: BookRepository,
-    private val chapterRepository: BookChapterRepository,
+    private val documentRepository: BookDocumentRepository,
     private val txtParser: TxtParser,
     private val imageStorage: BookImageStorage,
     private val cacheService: BookCacheService?
@@ -109,10 +109,10 @@ class BookContentService(
             parseBookContent(bookId, filePath)
             
             // 6. 更新数据库和缓存（这里可能不需要，因为解析方法内部已经更新了）
-            val chapterCount = chapterRepository.countByBookId(bookId)
+            val documentCount = documentRepository.countByBookId(bookId)
             cacheService?.setBookParsed(bookId, true)
             
-            logger.info("Book $bookId parsed successfully, chapters: $chapterCount")
+            logger.info("Book $bookId parsed successfully, documents: $documentCount")
             true
         } catch (e: Exception) {
             logger.error("Failed to parse book on-demand: $bookId", e)
@@ -198,38 +198,39 @@ class BookContentService(
             return
         }
         
-        // 2. 清理旧数据并创建章节
+        // 2. 清理旧数据并创建文档
         try {
-            // 在独立事务中清理旧章节数据
+            // 在独立事务中清理旧文档数据
             transaction {
-                logger.info("Deleting old chapters for book ID: $bookId")
-                val count = chapterRepository.deleteByBookId(bookId)
-                logger.info("Deleted $count old chapters for book ID: $bookId")
-                chapterRepository.deleteResourcesByBookId(bookId)
+                logger.info("Deleting old documents for book ID: $bookId")
+                val count = documentRepository.deleteByBookId(bookId)
+                logger.info("Deleted $count old documents for book ID: $bookId")
+                documentRepository.deleteResourcesByBookId(bookId)
             }
             
-            // 批量保存章节信息（在新事务中）
+            // 批量保存文档信息（在新事务中）
             val createdCount = transaction {
-                logger.info("Creating ${structure.chapters.size} chapters for book ID: $bookId")
+                logger.info("Creating ${structure.chapters.size} documents for book ID: $bookId")
                 var successCount = 0
                 structure.chapters.forEach { chapterInfo ->
-                    chapterRepository.create(
+                    documentRepository.create(
                         bookId = bookId,
                         index = chapterInfo.index,
+                        href = chapterInfo.href,
+                        inToc = chapterInfo.inToc,
                         title = chapterInfo.title,
-                        level = chapterInfo.level,
-                        href = chapterInfo.href
+                        level = chapterInfo.level
                     )
                     successCount++
                 }
                 successCount
             }
             
-            logger.info("Successfully created $createdCount chapters for book ID: $bookId")
+            logger.info("Successfully created $createdCount documents for book ID: $bookId")
             
-            // 3. 解析并保存章节内容（在事务外，避免长事务）
+            // 3. 解析并保存文档内容（在事务外，避免长事务）
             structure.chapters.forEach { chapterInfo ->
-                parseAndSaveChapterContent(bookId, file, parser, chapterInfo)
+                parseAndSaveDocumentContent(bookId, file, parser, chapterInfo)
             }
             
             // 4. 保存资源文件（如果有）
@@ -253,22 +254,22 @@ class BookContentService(
     }
     
     /**
-     * 解析并保存单个章节内容
+     * 解析并保存单个文档内容
      */
-    private suspend fun parseAndSaveChapterContent(
+    private suspend fun parseAndSaveDocumentContent(
         bookId: Int,
         file: File,
         parser: BookParser,
         chapterInfo: BookParser.ChapterInfo
     ) {
         try {
-            val chapter = chapterRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
-            if (chapter == null) {
-                logger.error("Chapter not found after creation: bookId=$bookId, index=${chapterInfo.index}")
+            val document = documentRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
+            if (document == null) {
+                logger.error("Document not found after creation: bookId=$bookId, index=${chapterInfo.index}")
                 return
             }
             
-            // 解析章节内容
+            // 解析文档内容
             val elements = parser.parseChapterContent(file, chapterInfo)
             
             // 统计字数和图片数
@@ -276,12 +277,12 @@ class BookContentService(
             val imageCount = parser.countImages(elements)
             
             // 保存内容和统计信息
-            chapterRepository.saveChapterContent(chapter.id, elements)
-            chapterRepository.updateStats(chapter.id, wordCount, imageCount)
+            documentRepository.saveDocumentContent(document.id, elements)
+            documentRepository.updateStats(document.id, wordCount, imageCount)
             
-            logger.debug("Saved chapter ${chapter.index}: ${chapter.title} ($wordCount words, $imageCount images)")
+            logger.debug("Saved document ${document.index}: ${document.title} ($wordCount words, $imageCount images)")
         } catch (e: Exception) {
-            logger.error("Failed to parse chapter ${chapterInfo.index}", e)
+            logger.error("Failed to parse document ${chapterInfo.index}", e)
         }
     }
     
@@ -297,7 +298,7 @@ class BookContentService(
                 val mediaType = imageStorage.detectMediaType(extension)
                 
                 // 保存到数据库，记录原始路径和存储路径的映射
-                chapterRepository.saveResource(
+                documentRepository.saveResource(
                     bookId = bookId,
                     path = path,
                     storedPath = storedPath,  // 存储相对路径，如 "14/abc123.jpg"
@@ -333,24 +334,27 @@ class BookContentService(
      */
     fun getBookManifest(bookId: Int): BookManifest? {
         val book = bookRepository.findById(bookId) ?: return null
-        val chapters = chapterRepository.findByBookId(bookId)
+        val allDocuments = documentRepository.findByBookId(bookId)
         
-        if (chapters.isEmpty()) {
-            logger.warn("No chapters found for book ID: $bookId")
+        if (allDocuments.isEmpty()) {
+            logger.warn("No documents found for book ID: $bookId")
             return null
         }
         
+        // 目录项：仅 inToc=true
+        val tocDocuments = allDocuments.filter { it.inToc }
+        
         // 构建目录树
-        val toc = buildTocTree(chapters)
+        val toc = buildTocTree(tocDocuments)
         
         return BookManifest(
             id = book.id,
             title = book.title,
             author = book.author,
             format = book.format,
-            totalChapters = chapters.size,
+            totalChapters = tocDocuments.size,
             toc = toc,
-            spine = chapters.map { it.index },
+            spine = allDocuments.map { it.index }, // 完整阅读顺序
             metadata = BookMetadata(
                 publisher = book.publisher,
                 language = null,
@@ -362,40 +366,27 @@ class BookContentService(
     }
     
     /**
-     * 获取章节内容
+     * 获取文档内容
      * @param baseUrl 可选的基础 URL，用于构建完整的图片 URL
      */
     fun getChapterContent(bookId: Int, index: Int, baseUrl: String? = null): ChapterContent? {
-        val chapter = chapterRepository.findByBookIdAndIndex(bookId, index) ?: return null
-        val elements = chapterRepository.getChapterContent(chapter.id) ?: emptyList()
+        val document = documentRepository.findByBookIdAndIndex(bookId, index) ?: return null
+        val elements = documentRepository.getDocumentContent(document.id) ?: emptyList()
         
         // 转换图片路径为可访问的URL
         val transformedElements = elements.map { element ->
-            when (element) {
-                is ContentElement.Image -> {
-                    // 从数据库获取图片的存储路径
-                    val resource = chapterRepository.findResource(bookId, element.src)
-                    if (resource != null) {
-                        val (storedPath, _) = resource
-                        // 转换为 HTTP 可访问的路径
-                        val imagePath = "/book_images/$storedPath"
-                        val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-                        element.copy(src = fullPath)
-                    } else {
-                        element
-                    }
-                }
-                else -> element
-            }
+            transformElement(element, bookId, baseUrl)
         }
         
-        val allChapters = chapterRepository.findByBookId(bookId)
-        val prevIndex = allChapters.find { it.index == index - 1 }?.index
-        val nextIndex = allChapters.find { it.index == index + 1 }?.index
+        // 使用所有文档（spine）计算前后导航
+        val allDocuments = documentRepository.findByBookId(bookId)
+        val currentIdx = allDocuments.indexOfFirst { it.index == index }
+        val prevIndex = if (currentIdx > 0) allDocuments[currentIdx - 1].index else null
+        val nextIndex = if (currentIdx < allDocuments.size - 1) allDocuments[currentIdx + 1].index else null
         
         return ChapterContent(
             index = index,
-            title = chapter.title,
+            title = document.title,
             elements = transformedElements,
             prevIndex = prevIndex,
             nextIndex = nextIndex
@@ -403,40 +394,91 @@ class BookContentService(
     }
     
     /**
+     * 转换 ContentElement 中的图片路径
+     */
+    private fun transformElement(element: ContentElement, bookId: Int, baseUrl: String?): ContentElement {
+        return when (element) {
+            is ContentElement.Image -> {
+                val resource = documentRepository.findResource(bookId, element.src)
+                if (resource != null) {
+                    val (storedPath, _) = resource
+                    val imagePath = "/book_images/$storedPath"
+                    val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+                    element.copy(src = fullPath)
+                } else {
+                    element
+                }
+            }
+            is ContentElement.Paragraph -> {
+                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+            }
+            is ContentElement.Quote -> {
+                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+            }
+            is ContentElement.ListBlock -> {
+                element.copy(items = element.items.map { item ->
+                    ListItem(item.spans.map { transformSpan(it, bookId, baseUrl) })
+                })
+            }
+            is ContentElement.Footnote -> {
+                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+            }
+            else -> element
+        }
+    }
+    
+    /**
+     * 转换 TextSpan 中的 footnoteImage 路径为完整 URL
+     */
+    private fun transformSpan(span: TextSpan, bookId: Int, baseUrl: String?): TextSpan {
+        if (span.footnoteImage == null) return span
+        
+        val resource = documentRepository.findResource(bookId, span.footnoteImage)
+        return if (resource != null) {
+            val (storedPath, _) = resource
+            val imagePath = "/book_images/$storedPath"
+            val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+            span.copy(footnoteImage = fullPath)
+        } else {
+            span
+        }
+    }
+    
+    /**
      * 构建目录树
      */
-    private fun buildTocTree(chapters: List<BookChapter>): List<TocItem> {
+    private fun buildTocTree(documents: List<BookDocument>): List<TocItem> {
         val rootItems = mutableListOf<TocItem>()
         val stack = mutableListOf<Pair<Int, MutableList<TocItem>>>() // (level, children list)
         
-        chapters.forEach { chapter ->
+        documents.forEach { document ->
             val tocItem = TocItem(
-                index = chapter.index,
-                title = chapter.title ?: "第${chapter.index + 1}章",
-                level = chapter.level,
-                wordCount = chapter.wordCount,
-                imageCount = chapter.imageCount,
+                index = document.index,
+                title = document.title ?: "第${document.index + 1}章",
+                level = document.level,
+                wordCount = document.wordCount,
+                imageCount = document.imageCount,
                 children = mutableListOf()
             )
             
             when {
-                chapter.level == 0 -> {
+                document.level == 0 -> {
                     rootItems.add(tocItem)
                     stack.clear()
-                    stack.add(chapter.level to (tocItem.children as MutableList))
+                    stack.add(document.level to (tocItem.children as MutableList))
                 }
-                chapter.level > 0 && stack.isNotEmpty() -> {
+                document.level > 0 && stack.isNotEmpty() -> {
                     // 找到合适的父级
-                    while (stack.isNotEmpty() && stack.last().first >= chapter.level) {
+                    while (stack.isNotEmpty() && stack.last().first >= document.level) {
                         stack.removeLast()
                     }
                     
                     if (stack.isNotEmpty()) {
                         stack.last().second.add(tocItem)
-                        stack.add(chapter.level to (tocItem.children as MutableList))
+                        stack.add(document.level to (tocItem.children as MutableList))
                     } else {
                         rootItems.add(tocItem)
-                        stack.add(chapter.level to (tocItem.children as MutableList))
+                        stack.add(document.level to (tocItem.children as MutableList))
                     }
                 }
             }

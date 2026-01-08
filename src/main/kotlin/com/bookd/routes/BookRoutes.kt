@@ -1,7 +1,7 @@
 package com.bookd.routes
 
 import com.bookd.com.bookd.extension.buildBaseUrl
-import com.bookd.data.repository.BookChapterRepository
+import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.data.repository.BookRepository
@@ -124,10 +124,10 @@ fun Route.bookRoutes() {
             }
         }
         
-        // 获取书籍章节列表
+        // 获取书籍章节列表（仅目录项）
         get("/{id}/chapters") {
             val bookRepository = get<BookRepository>(BookRepository::class.java)
-            val chapterRepository = get<BookChapterRepository>(BookChapterRepository::class.java)
+            val documentRepository = get<BookDocumentRepository>(BookDocumentRepository::class.java)
             val contentService = get<BookContentService>(BookContentService::class.java)
             
             val id = call.parameters["id"]?.toIntOrNull()
@@ -163,20 +163,20 @@ fun Route.bookRoutes() {
                 }
             }
             
-            // 3. 从数据库获取章节
-            val chapters = chapterRepository.findByBookId(id)
+            // 3. 从数据库获取目录项（仅 inToc=true）
+            val tocDocuments = documentRepository.findTocByBookId(id)
             
             call.respond(
                 ChaptersResponse(
                     bookId = id,
-                    total = chapters.size,
-                    chapters = chapters.map { chapter ->
+                    total = tocDocuments.size,
+                    chapters = tocDocuments.map { doc ->
                         ChapterInfo(
-                            index = chapter.index,
-                            title = chapter.title ?: "第${chapter.index + 1}章",
-                            wordCount = chapter.wordCount,
-                            imageCount = chapter.imageCount,
-                            level = chapter.level
+                            index = doc.index,
+                            title = doc.title ?: "第${doc.index + 1}章",
+                            wordCount = doc.wordCount,
+                            imageCount = doc.imageCount,
+                            level = doc.level
                         )
                     }
                 )

@@ -9,7 +9,7 @@ object Bookmarks : IntIdTable("bookmarks") {
     val bookId = reference("book_id", Books, onDelete = ReferenceOption.CASCADE)
     val positionType = varchar("position_type", 20)  // cfi | page | percentage
     val positionValue = varchar("position_value", 500)
-    val chapterId = varchar("chapter_id", 100).nullable()
+    val documentId = varchar("document_id", 100).nullable()
     val title = varchar("title", 255).nullable()
     val note = text("note").nullable()
     val color = varchar("color", 20).default("#FFD700")

@@ -11,7 +11,7 @@ data class ReadingProgressDTO(
     val currentPage: Int? = null,
     val totalPages: Int? = null,
     val cfiLocation: String? = null,
-    val chapterId: String? = null,
+    val documentId: String? = null,
     val deviceId: String? = null,
     val lastReadAt: String? = null
 )
@@ -24,7 +24,7 @@ data class ReadingProgressResponse(
     val currentPage: Int,
     val totalPages: Int?,
     val cfiLocation: String?,
-    val chapterId: String?,
+    val documentId: String?,
     val deviceId: String?,
     val lastReadAt: LocalDateTime
 )
