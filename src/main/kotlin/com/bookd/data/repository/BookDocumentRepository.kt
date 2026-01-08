@@ -2,8 +2,8 @@ package com.bookd.data.repository
 
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.BookDocuments
-import com.bookd.data.entity.ChapterContents
-import com.bookd.data.entity.ChapterResources
+import com.bookd.data.entity.DocumentContents
+import com.bookd.data.entity.DocumentResources
 import com.bookd.domain.model.BookDocument
 import com.bookd.domain.model.ContentElement
 import kotlinx.serialization.encodeToString
@@ -117,17 +117,17 @@ class BookDocumentRepository {
     fun saveDocumentContent(documentId: Int, elements: List<ContentElement>) = transaction {
         val contentJson = json.encodeToString(elements)
         
-        ChapterContents.deleteWhere { ChapterContents.documentId eq documentId }
-        ChapterContents.insert {
-            it[ChapterContents.documentId] = documentId
+        DocumentContents.deleteWhere { DocumentContents.documentId eq documentId }
+        DocumentContents.insert {
+            it[DocumentContents.documentId] = documentId
             it[content] = contentJson
         }
     }
     
     fun getDocumentContent(documentId: Int): List<ContentElement>? = transaction {
-        ChapterContents.selectAll()
-            .where { ChapterContents.documentId eq documentId }
-            .map { json.decodeFromString<List<ContentElement>>(it[ChapterContents.content]) }
+        DocumentContents.selectAll()
+            .where { DocumentContents.documentId eq documentId }
+            .map { json.decodeFromString<List<ContentElement>>(it[DocumentContents.content]) }
             .singleOrNull()
     }
     
@@ -140,24 +140,24 @@ class BookDocumentRepository {
         mediaType: String,
         size: Long
     ) = transaction {
-        ChapterResources.insert {
-            it[ChapterResources.bookId] = bookId
-            it[ChapterResources.path] = path
-            it[ChapterResources.storedPath] = storedPath
-            it[ChapterResources.mediaType] = mediaType
-            it[ChapterResources.size] = size
+        DocumentResources.insert {
+            it[DocumentResources.bookId] = bookId
+            it[DocumentResources.path] = path
+            it[DocumentResources.storedPath] = storedPath
+            it[DocumentResources.mediaType] = mediaType
+            it[DocumentResources.size] = size
         }
     }
     
     fun findResource(bookId: Int, path: String): Pair<String, String>? = transaction {
-        ChapterResources.selectAll()
-            .where { (ChapterResources.bookId eq bookId) and (ChapterResources.path eq path) }
-            .map { it[ChapterResources.storedPath] to it[ChapterResources.mediaType] }
+        DocumentResources.selectAll()
+            .where { (DocumentResources.bookId eq bookId) and (DocumentResources.path eq path) }
+            .map { it[DocumentResources.storedPath] to it[DocumentResources.mediaType] }
             .singleOrNull()
     }
     
     fun deleteResourcesByBookId(bookId: Int): Int = transaction {
-        ChapterResources.deleteWhere { ChapterResources.bookId eq bookId }
+        DocumentResources.deleteWhere { DocumentResources.bookId eq bookId }
     }
     
     private fun toBookDocument(row: ResultRow) = BookDocument(
