@@ -15,7 +15,7 @@ class BookScanService(
     private val contentService: BookContentService
 ) {
     private val logger = LoggerFactory.getLogger(BookScanService::class.java)
-    private val supportedFormats = setOf("txt", "epub", "mobi", "azw3", "pdf", "html")
+    private val supportedFormats = setOf("txt", "epub")
     
     // Track scanning status
     private val scanningInProgress = AtomicBoolean(false)

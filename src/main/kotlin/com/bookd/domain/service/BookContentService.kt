@@ -238,12 +238,7 @@ class BookContentService(
                 saveResources(bookId, structure.resources)
             }
             
-            // 5. 特殊处理：PDF 图片提取
-            if (parser is PdfBookParser) {
-                extractAndSavePdfImages(bookId, file, parser)
-            }
-            
-            // 6. 更新书籍解析状态
+            // 5. 更新书籍解析状态
             bookRepository.updateChaptersParsed(bookId, structure.chapters.size)
             
             logger.info("Parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
@@ -310,22 +305,6 @@ class BookContentService(
             } catch (e: Exception) {
                 logger.error("Failed to save resource: $path", e)
             }
-        }
-    }
-    
-    /**
-     * 提取并保存 PDF 图片
-     */
-    private fun extractAndSavePdfImages(bookId: Int, file: File, parser: PdfBookParser) {
-        try {
-            val images = parser.extractImages(file)
-            logger.info("Extracted ${images.size} images from PDF")
-            
-            if (images.isNotEmpty()) {
-                saveResources(bookId, images)
-            }
-        } catch (e: Exception) {
-            logger.error("Failed to extract images from PDF", e)
         }
     }
     

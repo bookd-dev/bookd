@@ -56,10 +56,11 @@
 ### EpubTocParser
 - **职责**: 解析目录文件获取章节信息
 - **支持格式**:
-  - `toc.ncx`（EPUB2）
-  - `nav.xhtml`（EPUB3，待实现）
+  - `nav.xhtml`（EPUB3，优先使用）
+  - `toc.ncx`（EPUB2，回退方案）
 - **特性**:
-  - 递归解析嵌套 `navPoint`
+  - 优先解析 EPUB3 nav.xhtml
+  - 递归解析嵌套结构
   - 防止循环引用
   - 自动检测章节标题
 
@@ -154,7 +155,3 @@ EpubContentParser ──→ List<ContentElement>
 ### 添加新的行内样式
 1. 在 `BookContent.kt` 的 `TextStyle` 枚举中添加新样式
 2. 在 `InlineParser.parseInlineElement()` 中添加对应的标签处理
-
-### 支持 EPUB3 nav.xhtml
-1. 在 `EpubTocParser` 中添加 `parseNavXhtml()` 方法
-2. 在 `parseToc()` 中根据 TOC 类型选择解析方式

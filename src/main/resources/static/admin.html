@@ -959,7 +959,7 @@
         <div class="section">
             <h2>🏷️ 标签管理</h2>
             <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
-                管理书籍标签。标签会从电子书元数据（EPUB/MOBI/PDF/HTML 的 subject/keywords 字段）自动提取
+                管理书籍标签。标签会从电子书元数据（EPUB 的 subject/keywords 字段）自动提取
             </p>
             <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
                 <button onclick="autoTagAllBooks()">🤖 自动提取所有书籍标签</button>
@@ -2042,9 +2042,6 @@
         function getFormatIcon(format) {
             const icons = {
                 'epub': '📕',
-                'pdf': '📄',
-                'mobi': '📗',
-                'azw3': '📘',
                 'txt': '📃'
             };
             return icons[format?.toLowerCase()] || '📚';
@@ -3382,7 +3379,7 @@
         }
         
         async function autoTagAllBooks() {
-            if (!confirm('确定要自动提取所有书籍的标签吗？\n\n这将从电子书元数据中读取标签（EPUB dc:subject、MOBI keywords、PDF keywords、HTML meta keywords）')) {
+            if (!confirm('确定要自动提取所有书籍的标签吗？\n\n这将从电子书元数据中读取标签（EPUB dc:subject）')) {
                 return;
             }
             
