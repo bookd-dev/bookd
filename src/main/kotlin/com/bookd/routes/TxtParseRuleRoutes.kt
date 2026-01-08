@@ -2,11 +2,9 @@ package com.bookd.routes
 
 import com.bookd.domain.service.TxtParseRuleService
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.Json.Default.decodeFromString
 import org.koin.java.KoinJavaComponent.get
 
@@ -164,7 +162,7 @@ fun Route.txtParseRuleRoutes() {
                 
                 val jsonContent = if (request.useFile || request.jsonContent.isNullOrBlank()) {
                     // 从文件读取
-                    val jsonFile = java.io.File("txt_toc_rules.json")
+                    val jsonFile = java.io.File("static/txt_toc_rules.json")
                     if (!jsonFile.exists()) {
                         return@post call.respond(
                             HttpStatusCode.NotFound, 

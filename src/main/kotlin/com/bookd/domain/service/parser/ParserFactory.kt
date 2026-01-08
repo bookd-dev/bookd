@@ -10,7 +10,6 @@ class ParserFactory(
 ) {
     private val epubParser = EpubParser()
     private val pdfParser = PdfParser()
-    private val mobiParser = MobiParser()
     private val htmlParser = HtmlParser()
     
     /**
@@ -22,7 +21,6 @@ class ParserFactory(
             "epub" -> EpubBookParser(epubParser)
             "txt" -> TxtBookParser(txtParser)
             "pdf" -> PdfBookParser(pdfParser)
-            "mobi", "azw3" -> MobiBookParser(mobiParser)
             "html", "htm" -> HtmlBookParser(htmlParser)
             else -> null
         }
@@ -32,6 +30,6 @@ class ParserFactory(
      * 检查格式是否支持
      */
     fun isSupported(extension: String): Boolean {
-        return extension.lowercase() in listOf("epub", "txt", "pdf", "mobi", "azw3", "html", "htm")
+        return extension.lowercase() in listOf("epub", "txt", "pdf", "html", "htm")
     }
 }

@@ -14,7 +14,6 @@ class MetadataExtractorFactory {
     private val tikaExtractor = TikaMetadataExtractor()
     private val epubExtractor = EpubMetadataExtractor()
     private val pdfExtractor = PdfMetadataExtractor()
-    private val mobiExtractor = MobiMetadataExtractor()
     private val txtExtractor = TxtMetadataExtractor()
     private val htmlExtractor = HtmlMetadataExtractor()
     
@@ -23,15 +22,13 @@ class MetadataExtractorFactory {
      * 策略:
      * 1. EPUB: EPUB专用提取器 → Tika备选
      * 2. PDF: PDF专用提取器 → Tika备选
-     * 3. MOBI/AZW3: MOBI专用提取器 → Tika备选
-     * 4. HTML: HTML专用提取器
-     * 5. TXT: 返回null,使用文件名(等待刮削器)
+     * 3. HTML: HTML专用提取器
+     * 4. TXT: 返回null,使用文件名(等待刮削器)
      */
     fun createExtractor(file: File): MetadataExtractor {
         return when (val format = file.extension.lowercase()) {
             "epub" -> CompositeMetadataExtractor(listOf(epubExtractor, tikaExtractor))
             "pdf" -> CompositeMetadataExtractor(listOf(pdfExtractor, tikaExtractor))
-            "mobi", "azw3", "azw" -> CompositeMetadataExtractor(listOf(mobiExtractor, tikaExtractor))
             "html", "htm" -> htmlExtractor
             "txt" -> txtExtractor
             else -> {
