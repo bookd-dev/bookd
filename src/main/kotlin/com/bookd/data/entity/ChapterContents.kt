@@ -4,6 +4,6 @@ import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.ReferenceOption
 
 object ChapterContents : IntIdTable("chapter_contents") {
-    val chapterId = reference("chapter_id", BookChapters, onDelete = ReferenceOption.CASCADE).uniqueIndex()
+    val documentId = reference("document_id", BookDocuments, onDelete = ReferenceOption.CASCADE).uniqueIndex()
     val content = text("content") // JSON 序列化的 List<ContentElement>
 }

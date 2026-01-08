@@ -36,7 +36,7 @@ class ReadingProgressRepository {
         currentPage: Int?,
         totalPages: Int?,
         cfiLocation: String?,
-        chapterId: String?,
+        documentId: String?,
         deviceId: String?
     ): ReadingProgressResponse = transaction {
         val now = TimeProvider.now()
@@ -51,7 +51,7 @@ class ReadingProgressRepository {
                 if (currentPage != null) it[ReadingProgress.currentPage] = currentPage
                 if (totalPages != null) it[ReadingProgress.totalPages] = totalPages
                 if (cfiLocation != null) it[ReadingProgress.cfiLocation] = cfiLocation
-                if (chapterId != null) it[ReadingProgress.chapterId] = chapterId
+                if (documentId != null) it[ReadingProgress.documentId] = documentId
                 if (deviceId != null) it[ReadingProgress.deviceId] = deviceId
                 it[lastReadAt] = now
             }
@@ -63,7 +63,7 @@ class ReadingProgressRepository {
                 it[ReadingProgress.currentPage] = currentPage ?: 0
                 it[ReadingProgress.totalPages] = totalPages
                 it[ReadingProgress.cfiLocation] = cfiLocation
-                it[ReadingProgress.chapterId] = chapterId
+                it[ReadingProgress.documentId] = documentId
                 it[ReadingProgress.deviceId] = deviceId
                 it[lastReadAt] = now
             }
@@ -110,7 +110,7 @@ class ReadingProgressRepository {
         currentPage = row[ReadingProgress.currentPage],
         totalPages = row[ReadingProgress.totalPages],
         cfiLocation = row[ReadingProgress.cfiLocation],
-        chapterId = row[ReadingProgress.chapterId],
+        documentId = row[ReadingProgress.documentId],
         deviceId = row[ReadingProgress.deviceId],
         lastReadAt = row[ReadingProgress.lastReadAt]
     )

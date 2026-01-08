@@ -46,7 +46,7 @@ class BookmarkRepository {
         bookId: Int,
         positionType: String,
         positionValue: String,
-        chapterId: String?,
+        documentId: String?,
         title: String?,
         note: String?,
         color: String
@@ -58,7 +58,7 @@ class BookmarkRepository {
             it[Bookmarks.bookId] = bookId
             it[Bookmarks.positionType] = positionType
             it[Bookmarks.positionValue] = positionValue
-            it[Bookmarks.chapterId] = chapterId
+            it[Bookmarks.documentId] = documentId
             it[Bookmarks.title] = title
             it[Bookmarks.note] = note
             it[Bookmarks.color] = color
@@ -98,7 +98,7 @@ class BookmarkRepository {
         bookId = row[Bookmarks.bookId].value,
         positionType = row[Bookmarks.positionType],
         positionValue = row[Bookmarks.positionValue],
-        chapterId = row[Bookmarks.chapterId],
+        documentId = row[Bookmarks.documentId],
         title = row[Bookmarks.title],
         note = row[Bookmarks.note],
         color = row[Bookmarks.color],

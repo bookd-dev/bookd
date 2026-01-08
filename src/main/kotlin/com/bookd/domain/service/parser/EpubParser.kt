@@ -19,14 +19,18 @@ class EpubParser(
     private val logger = LoggerFactory.getLogger(EpubParser::class.java)
     
     data class EpubStructure(
-        val chapters: List<ChapterInfo>,
+        val chapters: List<DocumentInfo>,
         val resources: Map<String, ByteArray>
     )
     
-    data class ChapterInfo(
+    /**
+     * 文档信息（对应 spine 中的一个项）
+     */
+    data class DocumentInfo(
         val index: Int,
-        val title: String?,
         val href: String,
+        val inToc: Boolean,
+        val title: String?,
         val level: Int = 0
     )
     
@@ -39,18 +43,20 @@ class EpubParser(
                 // 1. 读取包信息
                 val packageInfo = packageReader.readPackage(zipFile) ?: return null
                 
-                // 2. 解析目录
-                val tocChapters = tocParser.parseToc(
+                // 2. 解析目录，返回所有 spine 文档
+                val documents = tocParser.parseToc(
                     zipFile,
                     packageInfo.baseDir,
                     packageInfo.tocHref,
                     packageInfo.spineItems
                 )
-                logger.info("Parsed ${tocChapters.size} chapters")
                 
-                // 3. 转换章节信息格式
-                val chapters = tocChapters.map { 
-                    ChapterInfo(it.index, it.title, it.href, it.level)
+                val tocCount = documents.count { it.inToc }
+                logger.info("Parsed ${documents.size} documents (${tocCount} in TOC)")
+                
+                // 3. 转换为本地数据格式
+                val chapters = documents.map { 
+                    DocumentInfo(it.index, it.href, it.inToc, it.title, it.level)
                 }
                 
                 // 4. 提取资源
@@ -65,7 +71,7 @@ class EpubParser(
     }
     
     /**
-     * 解析章节内容为结构化元素
+     * 解析文档内容为结构化元素
      */
     fun parseChapterContent(file: File, href: String): List<ContentElement>? {
         try {

@@ -23,6 +23,7 @@ interface BookParser {
         val title: String?,
         val level: Int = 0,
         val href: String? = null,
+        val inToc: Boolean = true, // 是否在目录中显示
         val startPos: Int = 0,
         val endPos: Int = 0
     )

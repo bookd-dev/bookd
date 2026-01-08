@@ -3,16 +3,21 @@ package com.bookd.domain.model
 import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
 
+/**
+ * 书籍文档（spine 项）
+ * 代表 EPUB spine 中的一个文档
+ */
 @Serializable
-data class BookChapter(
+data class BookDocument(
     val id: Int,
     val bookId: Int,
     val index: Int,
-    val title: String?,
+    val href: String? = null,
+    val inToc: Boolean = false,
+    val title: String? = null,
     val level: Int = 0,
     val wordCount: Int = 0,
     val imageCount: Int = 0,
-    val href: String? = null,
     val createdAt: LocalDateTime? = null,
     val updatedAt: LocalDateTime? = null
 )

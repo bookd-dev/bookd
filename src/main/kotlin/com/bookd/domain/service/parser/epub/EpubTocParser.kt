@@ -8,44 +8,94 @@ import org.w3c.dom.Element as DomElement
 
 /**
  * EPUB 目录解析器
- * 负责解析 toc.ncx 或 nav.xhtml 获取章节列表
+ * 负责解析 toc.ncx 或 nav.xhtml 获取文档列表
+ * 返回所有 spine 项，并标记哪些在 TOC 中
  */
 class EpubTocParser {
     
     private val logger = LoggerFactory.getLogger(EpubTocParser::class.java)
     
-    data class ChapterInfo(
+    data class DocumentInfo(
         val index: Int,
-        val title: String?,
         val href: String,
+        val inToc: Boolean,
+        val title: String?,
         val level: Int = 0
     )
     
     /**
-     * 解析 TOC 获取章节列表
+     * 解析 TOC 并返回所有 spine 文档
+     * 
      * @param zipFile EPUB 压缩文件
      * @param baseDir OPF 文件所在目录
      * @param tocHref TOC 文件路径
      * @param spineItems spine 中的文档列表
-     * @return 章节信息列表
+     * @return 文档信息列表（包含所有 spine 项，TOC 项标记 inToc=true）
      */
     fun parseToc(
         zipFile: ZipFile,
         baseDir: String,
         tocHref: String?,
         spineItems: List<String>
-    ): List<ChapterInfo> {
-        // 如果没有 TOC，根据 spine 生成默认章节
-        if (tocHref == null) {
-            return spineItems.mapIndexed { index, href ->
-                ChapterInfo(index, detectChapterTitle(href), href)
+    ): List<DocumentInfo> {
+        // 解析 TOC 获取目录项信息
+        val tocMap = parseTocMap(zipFile, baseDir, tocHref, spineItems)
+        
+        // 构建完整的文档列表：所有 spine 项，使用 TOC 信息（如果有）
+        return spineItems.mapIndexed { index, href ->
+            val tocInfo = tocMap[index]
+            if (tocInfo != null) {
+                DocumentInfo(
+                    index = index,
+                    href = href,
+                    inToc = true,
+                    title = tocInfo.title,
+                    level = tocInfo.level
+                )
+            } else {
+                DocumentInfo(
+                    index = index,
+                    href = href,
+                    inToc = false,
+                    title = null,
+                    level = 0
+                )
             }
+        }
+    }
+    
+    /**
+     * 内部 TOC 项信息
+     */
+    private data class TocEntry(
+        val title: String?,
+        val level: Int
+    )
+    
+    /**
+     * 解析 TOC 获取 index -> TocEntry 映射
+     */
+    private fun parseTocMap(
+        zipFile: ZipFile,
+        baseDir: String,
+        tocHref: String?,
+        spineItems: List<String>
+    ): Map<Int, TocEntry> {
+        // 如果没有 TOC，所有 spine 项都视为目录项
+        if (tocHref == null) {
+            logger.info("No TOC found, marking all spine items as TOC entries")
+            return spineItems.mapIndexed { index, href ->
+                index to TocEntry(detectChapterTitle(href), 0)
+            }.toMap()
         }
         
         // 解析 toc.ncx
         val tocPath = EpubPathUtils.resolveFullPath(baseDir, tocHref)
-        val tocEntry = zipFile.getEntry(tocPath) ?: return spineItems.mapIndexed { index, href ->
-            ChapterInfo(index, detectChapterTitle(href), href)
+        val tocEntry = zipFile.getEntry(tocPath) ?: run {
+            logger.warn("TOC file not found: $tocPath, marking all spine items as TOC entries")
+            return spineItems.mapIndexed { index, href ->
+                index to TocEntry(detectChapterTitle(href), 0)
+            }.toMap()
         }
         
         return try {
@@ -59,16 +109,17 @@ class EpubTocParser {
                 // 获取 navMap
                 val navMap = doc.getElementsByTagName("navMap")
                 if (navMap.length == 0) {
+                    logger.warn("No navMap found in TOC, marking all spine items as TOC entries")
                     return@use spineItems.mapIndexed { index, href ->
-                        ChapterInfo(index, detectChapterTitle(href), href)
-                    }
+                        index to TocEntry(detectChapterTitle(href), 0)
+                    }.toMap()
                 }
                 
-                val tocChapters = mutableListOf<ChapterInfo>()
+                val tocEntries = mutableListOf<Pair<Int, TocEntry>>()
                 val navMapElement = navMap.item(0) as DomElement
                 val visitedNodes = mutableSetOf<DomElement>()
                 
-                // 只处理 navMap 的直接子 navPoint
+                // 解析 navPoints
                 val children = navMapElement.childNodes
                 for (i in 0 until children.length) {
                     val child = children.item(i)
@@ -76,32 +127,23 @@ class EpubTocParser {
                         parseNavPointRecursive(
                             child as DomElement,
                             hrefToIndex,
-                            tocChapters,
+                            tocEntries,
                             0,
                             visitedNodes
                         )
                     }
                 }
                 
-                logger.info("Parsed ${tocChapters.size} chapters from TOC (before dedup)")
+                logger.info("Parsed ${tocEntries.size} TOC entries")
                 
-                // 去重：同一个 index 只保留第一个章节
-                val uniqueTocChapters = tocChapters
-                    .groupBy { it.index }
-                    .mapValues { it.value.first() }
-                
-                val tocInfoMap = uniqueTocChapters.toMap()
-                
-                // 包含所有 spine 项，使用 TOC 信息（如果有）
-                spineItems.mapIndexed { index, href ->
-                    tocInfoMap[index] ?: ChapterInfo(index, detectChapterTitle(href), href, 0)
-                }
+                // 去重：同一个 index 只保留第一个
+                tocEntries.distinctBy { it.first }.toMap()
             }
         } catch (e: Exception) {
-            logger.warn("Failed to parse TOC, using spine items", e)
+            logger.warn("Failed to parse TOC, marking all spine items as TOC entries", e)
             spineItems.mapIndexed { index, href ->
-                ChapterInfo(index, detectChapterTitle(href), href)
-            }
+                index to TocEntry(detectChapterTitle(href), 0)
+            }.toMap()
         }
     }
     
@@ -111,18 +153,16 @@ class EpubTocParser {
     private fun parseNavPointRecursive(
         navPoint: DomElement,
         hrefToIndex: Map<String, Int>,
-        chapters: MutableList<ChapterInfo>,
+        entries: MutableList<Pair<Int, TocEntry>>,
         level: Int,
         visitedNodes: MutableSet<DomElement>,
         maxDepth: Int = 50
     ) {
-        // 防止无限递归
         if (level > maxDepth) {
             logger.warn("Reached maximum recursion depth ($maxDepth) while parsing TOC")
             return
         }
         
-        // 防止循环引用
         if (!visitedNodes.add(navPoint)) {
             logger.warn("Detected circular reference in TOC structure")
             return
@@ -156,11 +196,11 @@ class EpubTocParser {
             }
         }
         
-        // 添加章节（如果在 spine 中存在）
+        // 添加 TOC 条目（如果在 spine 中存在）
         if (href != null) {
             val index = hrefToIndex[href]
             if (index != null) {
-                chapters.add(ChapterInfo(index, title, href, level))
+                entries.add(index to TocEntry(title, level))
             }
         }
         
@@ -171,7 +211,7 @@ class EpubTocParser {
                 parseNavPointRecursive(
                     child as DomElement,
                     hrefToIndex,
-                    chapters,
+                    entries,
                     level + 1,
                     visitedNodes,
                     maxDepth

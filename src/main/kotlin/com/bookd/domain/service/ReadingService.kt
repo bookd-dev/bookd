@@ -24,7 +24,7 @@ class ReadingService(
             currentPage = dto.currentPage,
             totalPages = dto.totalPages,
             cfiLocation = dto.cfiLocation,
-            chapterId = dto.chapterId,
+            documentId = dto.documentId,
             deviceId = dto.deviceId
         )
     }
@@ -61,7 +61,7 @@ class ReadingService(
             bookId = bookId,
             positionType = dto.positionType,
             positionValue = dto.positionValue,
-            chapterId = dto.chapterId,
+            documentId = dto.documentId,
             title = dto.title,
             note = dto.note,
             color = dto.color

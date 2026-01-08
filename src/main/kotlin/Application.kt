@@ -40,7 +40,7 @@ fun Application.module() {
             com.bookd.data.entity.InviteTokens,
             com.bookd.data.entity.Bookmarks,
             com.bookd.data.entity.ReaderSettings,
-            com.bookd.data.entity.BookChapters,
+            com.bookd.data.entity.BookDocuments,
             com.bookd.data.entity.ChapterContents,
             com.bookd.data.entity.ChapterResources,
             com.bookd.data.entity.TxtParseRules

@@ -1,12 +1,12 @@
 package com.bookd.domain.service
 
 import com.bookd.data.repository.BookRepository
-import com.bookd.data.repository.BookChapterRepository
+import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.domain.model.Book
 
 class BookService(
     private val bookRepository: BookRepository,
-    private val chapterRepository: BookChapterRepository
+    private val documentRepository: BookDocumentRepository
 ) {
     fun getAllBooks(limit: Int = 100, offset: Long = 0): List<Book> {
         return bookRepository.findAll(limit, offset).map { enrichBookWithStats(it) }
@@ -49,20 +49,20 @@ class BookService(
     }
     
     /**
-     * 用章节统计信息丰富 Book 对象
+     * 用文档统计信息丰富 Book 对象
      */
     private fun enrichBookWithStats(book: Book): Book {
-        val chapters = chapterRepository.findByBookId(book.id)
+        val documents = documentRepository.findByBookId(book.id)
         
-        if (chapters.isEmpty()) {
+        if (documents.isEmpty()) {
             return book
         }
         
-        val totalWordCount = chapters.sumOf { it.wordCount }
-        val totalImageCount = chapters.sumOf { it.imageCount }
+        val totalWordCount = documents.sumOf { it.wordCount }
+        val totalImageCount = documents.sumOf { it.imageCount }
         
         return book.copy(
-            chapterCount = chapters.size,
+            chapterCount = documents.count { it.inToc }, // 只统计目录项
             totalWordCount = totalWordCount,
             totalImageCount = totalImageCount
         )

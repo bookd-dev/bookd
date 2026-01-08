@@ -11,7 +11,7 @@ object ReadingProgress : IntIdTable("reading_progress") {
     val currentPage = integer("current_page").default(0)
     val totalPages = integer("total_pages").nullable()
     val cfiLocation = varchar("cfi_location", 500).nullable()
-    val chapterId = varchar("chapter_id", 100).nullable()
+    val documentId = varchar("document_id", 100).nullable()
     val deviceId = varchar("device_id", 100).nullable()
     val lastReadAt = datetime("last_read_at")
     
