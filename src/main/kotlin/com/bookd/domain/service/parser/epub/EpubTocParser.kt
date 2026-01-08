@@ -74,6 +74,7 @@ class EpubTocParser {
     
     /**
      * 解析 TOC 获取 index -> TocEntry 映射
+     * 如果 TOC 不存在或解析失败，返回空 Map（所有项 inToc=false）
      */
     private fun parseTocMap(
         zipFile: ZipFile,
@@ -81,21 +82,17 @@ class EpubTocParser {
         tocHref: String?,
         spineItems: List<String>
     ): Map<Int, TocEntry> {
-        // 如果没有 TOC，所有 spine 项都视为目录项
+        // 如果没有 TOC，返回空 Map（所有项 inToc=false）
         if (tocHref == null) {
-            logger.info("No TOC found, marking all spine items as TOC entries")
-            return spineItems.mapIndexed { index, href ->
-                index to TocEntry(detectChapterTitle(href), 0)
-            }.toMap()
+            logger.info("No TOC found, all spine items will have inToc=false")
+            return emptyMap()
         }
         
         // 解析 toc.ncx
         val tocPath = EpubPathUtils.resolveFullPath(baseDir, tocHref)
         val tocEntry = zipFile.getEntry(tocPath) ?: run {
-            logger.warn("TOC file not found: $tocPath, marking all spine items as TOC entries")
-            return spineItems.mapIndexed { index, href ->
-                index to TocEntry(detectChapterTitle(href), 0)
-            }.toMap()
+            logger.warn("TOC file not found: $tocPath, all spine items will have inToc=false")
+            return emptyMap()
         }
         
         return try {
@@ -109,10 +106,8 @@ class EpubTocParser {
                 // 获取 navMap
                 val navMap = doc.getElementsByTagName("navMap")
                 if (navMap.length == 0) {
-                    logger.warn("No navMap found in TOC, marking all spine items as TOC entries")
-                    return@use spineItems.mapIndexed { index, href ->
-                        index to TocEntry(detectChapterTitle(href), 0)
-                    }.toMap()
+                    logger.warn("No navMap found in TOC, all spine items will have inToc=false")
+                    return@use emptyMap()
                 }
                 
                 val tocEntries = mutableListOf<Pair<Int, TocEntry>>()
@@ -140,10 +135,8 @@ class EpubTocParser {
                 tocEntries.distinctBy { it.first }.toMap()
             }
         } catch (e: Exception) {
-            logger.warn("Failed to parse TOC, marking all spine items as TOC entries", e)
-            spineItems.mapIndexed { index, href ->
-                index to TocEntry(detectChapterTitle(href), 0)
-            }.toMap()
+            logger.warn("Failed to parse TOC, all spine items will have inToc=false", e)
+            emptyMap()
         }
     }
     
@@ -218,27 +211,5 @@ class EpubTocParser {
                 )
             }
         }
-    }
-    
-    /**
-     * 从文件名检测章节标题
-     */
-    private fun detectChapterTitle(href: String): String {
-        val fileName = href.substringAfterLast("/").substringBeforeLast(".")
-        
-        val patterns = listOf(
-            """(?i)chapter[\s_-]*(\d+)""".toRegex(),
-            """(?i)ch[\s_-]*(\d+)""".toRegex(),
-            """第([零一二三四五六七八九十百千万\d]+)[章节回]""".toRegex(),
-            """([零一二三四五六七八九十百千万\d]+)[章节回]""".toRegex()
-        )
-        
-        patterns.forEach { pattern ->
-            pattern.find(fileName)?.let { match ->
-                return match.value
-            }
-        }
-        
-        return fileName.replace("_", " ").replace("-", " ")
     }
 }
