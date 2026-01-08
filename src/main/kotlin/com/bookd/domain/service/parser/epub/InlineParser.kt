@@ -11,6 +11,16 @@ import org.jsoup.nodes.TextNode
  */
 class InlineParser {
     
+    // 脚注计数器，用于生成默认脚注标记 [1], [2], [3]...
+    private var footnoteCounter = 0
+    
+    /**
+     * 重置脚注计数器（每章开始时调用）
+     */
+    fun resetFootnoteCounter() {
+        footnoteCounter = 0
+    }
+    
     /**
      * 解析行内元素为 TextSpan 列表
      */
@@ -45,8 +55,11 @@ class InlineParser {
             val footnoteId = FootnoteParser.extractFootnoteId(node)
             if (footnoteId != null) {
                 val footnoteImage = FootnoteParser.extractFootnoteImage(node, chapterHref)
+                // 保留原始脚注标记文本（如 [1]、*、† 等），若为空则生成序号标记
+                val originalText = node.text().trim().takeIf { it.isNotEmpty() }
+                    ?: "[${++footnoteCounter}]"
                 spans.add(TextSpan(
-                    text = "†",
+                    text = originalText,
                     styles = listOf(TextStyle.BOLD),
                     footnoteId = footnoteId,
                     footnoteImage = footnoteImage

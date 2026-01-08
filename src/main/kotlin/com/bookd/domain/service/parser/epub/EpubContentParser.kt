@@ -23,6 +23,9 @@ class EpubContentParser(
     fun parseHtml(html: String, chapterHref: String): List<ContentElement> {
         val elements = mutableListOf<ContentElement>()
         
+        // 每章开始时重置脚注计数器
+        inlineParser.resetFootnoteCounter()
+        
         try {
             val doc = Jsoup.parse(html)
             val body = doc.body()
