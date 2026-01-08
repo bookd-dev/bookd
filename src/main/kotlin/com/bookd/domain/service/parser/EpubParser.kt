@@ -1,6 +1,7 @@
 package com.bookd.domain.service.parser
 
 import com.bookd.domain.model.ContentElement
+import com.bookd.domain.model.ListItem
 import com.bookd.domain.model.TextSpan
 import com.bookd.domain.model.TextStyle
 import org.jsoup.Jsoup
@@ -418,7 +419,7 @@ class EpubParser {
                 // 检查是否为脚注定义段落
                 val footnoteId = extractFootnoteDefinitionId(element)
                 if (footnoteId != null) {
-                    val spans = parseInlineElements(element)
+                    val spans = parseInlineElements(element, chapterHref)
                     if (spans.isNotEmpty()) {
                         elements.add(ContentElement.Footnote(footnoteId, spans))
                     }
@@ -440,7 +441,7 @@ class EpubParser {
                 }
                 
                 // Parse text content (excluding images)
-                val spans = parseInlineElements(element)
+                val spans = parseInlineElements(element, chapterHref)
                 if (spans.isNotEmpty()) {
                     elements.add(ContentElement.Paragraph(spans))
                 }
@@ -460,12 +461,11 @@ class EpubParser {
             }
             "aside" -> {
                 // EPUB3 脚注定义通常使用 <aside epub:type="footnote">
-                val footnoteId = extractFootnoteDefinitionId(element)
-                if (footnoteId != null) {
-                    val spans = parseInlineElements(element)
-                    if (spans.isNotEmpty()) {
-                        elements.add(ContentElement.Footnote(footnoteId, spans))
-                    }
+                // 处理嵌套结构: <aside><ol><li id="n20">内容</li></ol></aside>
+                val epubType = element.attr("epub:type")
+                if (epubType.contains("footnote") || epubType.contains("rearnote") ||
+                    element.className().lowercase().contains("footnote")) {
+                    parseFootnoteContainer(element, elements, chapterHref)
                 } else {
                     // 非脚注的 aside，递归处理
                     element.children().forEach { child ->
@@ -474,7 +474,7 @@ class EpubParser {
                 }
             }
             "blockquote" -> {
-                val spans = parseInlineElements(element)
+                val spans = parseInlineElements(element, chapterHref)
                 if (spans.isNotEmpty()) {
                     elements.add(ContentElement.Quote(spans))
                 }
@@ -486,7 +486,7 @@ class EpubParser {
                 val ordered = element.tagName() == "ol"
                 val items = element.children()
                     .filter { it.tagName() == "li" }
-                    .map { com.bookd.domain.model.ListItem(parseInlineElements(it)) }
+                    .map { ListItem(parseInlineElements(it, chapterHref)) }
                 
                 if (items.isNotEmpty()) {
                     elements.add(ContentElement.ListBlock(ordered, items))
@@ -499,7 +499,7 @@ class EpubParser {
                 // 检查是否为脚注定义容器
                 val footnoteId = extractFootnoteDefinitionId(element)
                 if (footnoteId != null) {
-                    val spans = parseInlineElements(element)
+                    val spans = parseInlineElements(element, chapterHref)
                     if (spans.isNotEmpty()) {
                         elements.add(ContentElement.Footnote(footnoteId, spans))
                     }
@@ -600,9 +600,40 @@ class EpubParser {
     }
     
     /**
+     * 解析脚注容器，处理嵌套的 ol/li 结构
+     * 支持: <aside><ol><li id="n20">内容</li></ol></aside>
+     */
+    private fun parseFootnoteContainer(container: Element, elements: MutableList<ContentElement>, chapterHref: String) {
+        // 查找所有带 id 的 li 元素（通常脚注内容在 li 中）
+        val footnoteLis = container.select("li[id]")
+        
+        if (footnoteLis.isNotEmpty()) {
+            // 每个 li 作为一个独立的脚注
+            footnoteLis.forEach { li ->
+                val id = li.id()
+                if (id.isNotEmpty()) {
+                    val spans = parseInlineElements(li, chapterHref)
+                    if (spans.isNotEmpty()) {
+                        elements.add(ContentElement.Footnote(id, spans))
+                    }
+                }
+            }
+        } else {
+            // 没有嵌套 li，直接使用容器的 id
+            val id = container.id()
+            if (id.isNotEmpty()) {
+                val spans = parseInlineElements(container, chapterHref)
+                if (spans.isNotEmpty()) {
+                    elements.add(ContentElement.Footnote(id, spans))
+                }
+            }
+        }
+    }
+    
+    /**
      * 解析行内元素为 TextSpan
      */
-    private fun parseInlineElements(element: Element): List<TextSpan> {
+    private fun parseInlineElements(element: Element, chapterHref: String = ""): List<TextSpan> {
         val spans = mutableListOf<TextSpan>()
         
         element.childNodes().forEach { node ->
@@ -620,8 +651,15 @@ class EpubParser {
                     if (tagName == "a" && isFootnoteLink(node)) {
                         val footnoteId = extractFootnoteId(node)
                         if (footnoteId != null) {
+                            // 提取脚注图片路径（已正规化）
+                            val footnoteImage = extractFootnoteImage(node, chapterHref)
                             // 创建脚注引用标记
-                            spans.add(TextSpan("†", listOf(TextStyle.BOLD), footnoteId = footnoteId))
+                            spans.add(TextSpan(
+                                text = "†",
+                                styles = listOf(TextStyle.BOLD),
+                                footnoteId = footnoteId,
+                                footnoteImage = footnoteImage
+                            ))
                         }
                         return@forEach
                     }
@@ -648,7 +686,7 @@ class EpubParser {
                             }
                             "sup", "sub" -> {
                                 // 递归解析上标/下标内容
-                                spans.addAll(parseInlineElements(node))
+                                spans.addAll(parseInlineElements(node, chapterHref))
                                 return@forEach
                             }
                         }
@@ -656,13 +694,22 @@ class EpubParser {
                         spans.add(TextSpan(text, styles, link))
                     } else if (tagName == "sup" || tagName == "sub") {
                         // 上标/下标可能只包含图片，递归处理
-                        spans.addAll(parseInlineElements(node))
+                        spans.addAll(parseInlineElements(node, chapterHref))
                     }
                 }
             }
         }
         
         return spans
+    }
+    
+    /**
+     * 从脚注链接中提取脚注图片路径（已正规化）
+     */
+    private fun extractFootnoteImage(element: Element, chapterHref: String): String? {
+        val img = element.selectFirst("img")
+        val src = img?.attr("src")?.takeIf { it.isNotEmpty() } ?: return null
+        return normalizeImagePath(src, chapterHref)
     }
     
     /**

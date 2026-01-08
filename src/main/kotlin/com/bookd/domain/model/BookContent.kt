@@ -111,7 +111,8 @@ data class TextSpan(
     val text: String,
     val styles: List<TextStyle> = emptyList(),
     val link: String? = null,
-    val footnoteId: String? = null  // 脚注引用 ID
+    val footnoteId: String? = null,  // 脚注引用 ID
+    val footnoteImage: String? = null  // 脚注原始图片路径
 )
 
 @Serializable

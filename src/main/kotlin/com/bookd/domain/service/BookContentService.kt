@@ -371,22 +371,7 @@ class BookContentService(
         
         // 转换图片路径为可访问的URL
         val transformedElements = elements.map { element ->
-            when (element) {
-                is ContentElement.Image -> {
-                    // 从数据库获取图片的存储路径
-                    val resource = chapterRepository.findResource(bookId, element.src)
-                    if (resource != null) {
-                        val (storedPath, _) = resource
-                        // 转换为 HTTP 可访问的路径
-                        val imagePath = "/book_images/$storedPath"
-                        val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-                        element.copy(src = fullPath)
-                    } else {
-                        element
-                    }
-                }
-                else -> element
-            }
+            transformElement(element, bookId, baseUrl)
         }
         
         val allChapters = chapterRepository.findByBookId(bookId)
@@ -400,6 +385,57 @@ class BookContentService(
             prevIndex = prevIndex,
             nextIndex = nextIndex
         )
+    }
+    
+    /**
+     * 转换 ContentElement 中的图片路径
+     */
+    private fun transformElement(element: ContentElement, bookId: Int, baseUrl: String?): ContentElement {
+        return when (element) {
+            is ContentElement.Image -> {
+                val resource = chapterRepository.findResource(bookId, element.src)
+                if (resource != null) {
+                    val (storedPath, _) = resource
+                    val imagePath = "/book_images/$storedPath"
+                    val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+                    element.copy(src = fullPath)
+                } else {
+                    element
+                }
+            }
+            is ContentElement.Paragraph -> {
+                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+            }
+            is ContentElement.Quote -> {
+                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+            }
+            is ContentElement.ListBlock -> {
+                element.copy(items = element.items.map { item ->
+                    ListItem(item.spans.map { transformSpan(it, bookId, baseUrl) })
+                })
+            }
+            is ContentElement.Footnote -> {
+                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+            }
+            else -> element
+        }
+    }
+    
+    /**
+     * 转换 TextSpan 中的 footnoteImage 路径为完整 URL
+     */
+    private fun transformSpan(span: TextSpan, bookId: Int, baseUrl: String?): TextSpan {
+        if (span.footnoteImage == null) return span
+        
+        val resource = chapterRepository.findResource(bookId, span.footnoteImage)
+        return if (resource != null) {
+            val (storedPath, _) = resource
+            val imagePath = "/book_images/$storedPath"
+            val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+            span.copy(footnoteImage = fullPath)
+        } else {
+            span
+        }
     }
     
     /**
