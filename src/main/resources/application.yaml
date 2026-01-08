@@ -26,8 +26,9 @@ app:
     formats:
       - "txt"
       - "epub"
-      - "mobi"
-      - "azw3"
+      - "pdf"
+      - "html"
+      - "htm"
   parse:
     autoParseOnScan: ${PARSE_AUTO_ON_SCAN:false}  # 扫描时不自动解析章节
     backgroundParseEnabled: ${PARSE_BACKGROUND_ENABLED:true}  # 启用后台解析

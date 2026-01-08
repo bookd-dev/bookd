@@ -17,7 +17,8 @@ class EpubPackageReader {
         val opfPath: String,
         val baseDir: String,
         val spineItems: List<String>,
-        val tocHref: String?
+        val tocHref: String?,      // NCX 目录 (EPUB 2)
+        val navHref: String?       // Nav 目录 (EPUB 3)
     )
     
     /**
@@ -34,14 +35,15 @@ class EpubPackageReader {
         val opfEntry = zipFile.getEntry(opfPath) ?: return null
         val opfBaseDir = opfPath.substringBeforeLast("/", "")
         
-        val (spineItems, tocHref) = parseOpf(zipFile, opfEntry)
-        logger.info("Found ${spineItems.size} spine items")
+        val opfResult = parseOpf(zipFile, opfEntry)
+        logger.info("Found ${opfResult.spineItems.size} spine items, ncx=${opfResult.tocHref != null}, nav=${opfResult.navHref != null}")
         
         return PackageInfo(
             opfPath = opfPath,
             baseDir = opfBaseDir,
-            spineItems = spineItems,
-            tocHref = tocHref
+            spineItems = opfResult.spineItems,
+            tocHref = opfResult.tocHref,
+            navHref = opfResult.navHref
         )
     }
     
@@ -63,12 +65,19 @@ class EpubPackageReader {
         }
     }
     
+    private data class OpfResult(
+        val spineItems: List<String>,
+        val tocHref: String?,
+        val navHref: String?
+    )
+    
     /**
-     * 解析 OPF 文件获取 spine 和 toc 路径
+     * 解析 OPF 文件获取 spine、toc.ncx 和 nav.xhtml 路径
      */
-    private fun parseOpf(zipFile: ZipFile, opfEntry: ZipEntry): Pair<List<String>, String?> {
+    private fun parseOpf(zipFile: ZipFile, opfEntry: ZipEntry): OpfResult {
         val spineItems = mutableListOf<String>()
         var tocHref: String? = null
+        var navHref: String? = null
         
         zipFile.getInputStream(opfEntry).use { stream ->
             val factory = DocumentBuilderFactory.newInstance()
@@ -86,13 +95,20 @@ class EpubPackageReader {
                         val id = node.attributes.getNamedItem("id")?.nodeValue
                         val href = node.attributes.getNamedItem("href")?.nodeValue
                         val mediaType = node.attributes.getNamedItem("media-type")?.nodeValue
+                        val properties = node.attributes.getNamedItem("properties")?.nodeValue
                         
                         if (id != null && href != null) {
                             manifestMap[id] = href
                             
-                            // 查找 TOC
+                            // 查找 NCX 目录 (EPUB 2)
                             if (mediaType == "application/x-dtbncx+xml" || id == "ncx") {
                                 tocHref = href
+                            }
+                            
+                            // 查找 Nav 目录 (EPUB 3)
+                            // properties 属性包含 "nav" 表示这是导航文档
+                            if (properties != null && properties.split(" ").contains("nav")) {
+                                navHref = href
                             }
                         }
                     }
@@ -115,6 +131,6 @@ class EpubPackageReader {
             }
         }
         
-        return spineItems to tocHref
+        return OpfResult(spineItems, tocHref, navHref)
     }
 }

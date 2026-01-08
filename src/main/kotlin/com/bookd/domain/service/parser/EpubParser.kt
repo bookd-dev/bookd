@@ -44,11 +44,13 @@ class EpubParser(
                 val packageInfo = packageReader.readPackage(zipFile) ?: return null
                 
                 // 2. 解析目录，返回所有 spine 文档
+                // 优先使用 nav.xhtml (EPUB 3)，回退到 ncx (EPUB 2)
                 val documents = tocParser.parseToc(
                     zipFile,
                     packageInfo.baseDir,
-                    packageInfo.tocHref,
-                    packageInfo.spineItems
+                    ncxHref = packageInfo.tocHref,
+                    navHref = packageInfo.navHref,
+                    spineItems = packageInfo.spineItems
                 )
                 
                 val tocCount = documents.count { it.inToc }

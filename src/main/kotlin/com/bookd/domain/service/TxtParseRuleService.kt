@@ -93,9 +93,9 @@ class TxtParseRuleService(
     }
     
     /**
-     * 初始化：从 JSON 文件导入规则（如果数据库为空）
+     * 初始化：从 JSON 字符串导入规则（如果数据库为空）
      */
-    suspend fun initializeFromJson(jsonFile: File, force: Boolean = false) {
+    suspend fun initializeFromJson(jsonContent: String, force: Boolean = false) {
         try {
             val existingRules = repository.getAllRules()
             if (existingRules.isNotEmpty() && !force) {
@@ -103,7 +103,7 @@ class TxtParseRuleService(
                 return
             }
             
-            logger.info("Initializing TXT parse rules from ${jsonFile.absolutePath} (force: $force)")
+            logger.info("Initializing TXT parse rules from JSON content (force: $force)")
             
             @Serializable
             data class JsonRule(
@@ -112,7 +112,6 @@ class TxtParseRuleService(
                 val example: String
             )
             
-            val jsonContent = jsonFile.readText()
             val jsonRules = Json.decodeFromString<List<JsonRule>>(jsonContent)
             
             var imported = 0
