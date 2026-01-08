@@ -98,13 +98,20 @@ sealed class ContentElement {
     
     @Serializable
     data object Divider : ContentElement()
+    
+    @Serializable
+    data class Footnote(
+        val id: String,
+        val spans: List<TextSpan>
+    ) : ContentElement()
 }
 
 @Serializable
 data class TextSpan(
     val text: String,
     val styles: List<TextStyle> = emptyList(),
-    val link: String? = null
+    val link: String? = null,
+    val footnoteId: String? = null  // 脚注引用 ID
 )
 
 @Serializable

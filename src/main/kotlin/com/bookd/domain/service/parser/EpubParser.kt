@@ -415,8 +415,18 @@ class EpubParser {
                 elements.add(ContentElement.Heading(level, element.text()))
             }
             "p" -> {
-                // Check if paragraph contains images
-                val images = element.select("img")
+                // 检查是否为脚注定义段落
+                val footnoteId = extractFootnoteDefinitionId(element)
+                if (footnoteId != null) {
+                    val spans = parseInlineElements(element)
+                    if (spans.isNotEmpty()) {
+                        elements.add(ContentElement.Footnote(footnoteId, spans))
+                    }
+                    return
+                }
+                
+                // Check if paragraph contains images (but not footnote images)
+                val images = element.select("img").filter { !isFootnoteImage(it) }
                 if (images.isNotEmpty()) {
                     // If paragraph has images, extract them as separate Image elements
                     images.forEach { img ->
@@ -436,12 +446,31 @@ class EpubParser {
                 }
             }
             "img" -> {
+                // 跳过脚注图片
+                if (isFootnoteImage(element)) {
+                    return
+                }
                 val src = element.attr("src")
                 val alt = element.attr("alt")
                 if (src.isNotEmpty()) {
                     // Normalize image path relative to chapter location
                     val normalizedSrc = normalizeImagePath(src, chapterHref)
                     elements.add(ContentElement.Image(normalizedSrc, alt))
+                }
+            }
+            "aside" -> {
+                // EPUB3 脚注定义通常使用 <aside epub:type="footnote">
+                val footnoteId = extractFootnoteDefinitionId(element)
+                if (footnoteId != null) {
+                    val spans = parseInlineElements(element)
+                    if (spans.isNotEmpty()) {
+                        elements.add(ContentElement.Footnote(footnoteId, spans))
+                    }
+                } else {
+                    // 非脚注的 aside，递归处理
+                    element.children().forEach { child ->
+                        parseElement(child, elements, baseDir, chapterHref)
+                    }
                 }
             }
             "blockquote" -> {
@@ -467,6 +496,16 @@ class EpubParser {
                 elements.add(ContentElement.Divider)
             }
             "div", "section", "article" -> {
+                // 检查是否为脚注定义容器
+                val footnoteId = extractFootnoteDefinitionId(element)
+                if (footnoteId != null) {
+                    val spans = parseInlineElements(element)
+                    if (spans.isNotEmpty()) {
+                        elements.add(ContentElement.Footnote(footnoteId, spans))
+                    }
+                    return
+                }
+                
                 // Check if this div has direct text content (mixed text and br tags)
                 val hasDirectText = element.childNodes().any { it is TextNode && it.text().trim().isNotEmpty() }
                 val hasBrTags = element.select("br").isNotEmpty()
@@ -493,6 +532,10 @@ class EpubParser {
                             }
 
                             is Element if node.tagName().lowercase() == "img" -> {
+                                // 跳过脚注图片
+                                if (isFootnoteImage(node)) {
+                                    return@forEach
+                                }
                                 // Flush any text before image
                                 val text = currentLineText.toString().trim()
                                 if (text.isNotEmpty()) {
@@ -531,6 +574,32 @@ class EpubParser {
     }
     
     /**
+     * 从脚注定义元素中提取脚注 ID
+     */
+    private fun extractFootnoteDefinitionId(element: Element): String? {
+        val epubType = element.attr("epub:type")
+        val className = element.className().lowercase()
+        val id = element.id()
+        
+        // EPUB3 脚注定义: <aside epub:type="footnote" id="n20">
+        if (epubType.contains("footnote") || epubType.contains("rearnote")) {
+            return id.takeIf { it.isNotEmpty() }
+        }
+        
+        // 类名标识的脚注: <div class="footnote" id="n20">
+        if (className.contains("footnote") || className.contains("duokan-footnote")) {
+            return id.takeIf { it.isNotEmpty() }
+        }
+        
+        // 通过 ID 模式匹配: id="n20", id="fn20", id="note20"
+        if (id.matches(Regex("^(n|fn|note|footnote)\\d+$", RegexOption.IGNORE_CASE))) {
+            return id
+        }
+        
+        return null
+    }
+    
+    /**
      * 解析行内元素为 TextSpan
      */
     private fun parseInlineElements(element: Element): List<TextSpan> {
@@ -545,12 +614,29 @@ class EpubParser {
                     }
                 }
                 is Element -> {
+                    val tagName = node.tagName().lowercase()
+                    
+                    // 检查是否为脚注链接
+                    if (tagName == "a" && isFootnoteLink(node)) {
+                        val footnoteId = extractFootnoteId(node)
+                        if (footnoteId != null) {
+                            // 创建脚注引用标记
+                            spans.add(TextSpan("†", listOf(TextStyle.BOLD), footnoteId = footnoteId))
+                        }
+                        return@forEach
+                    }
+                    
+                    // 跳过脚注内的图片标记（如 note.png）
+                    if (tagName == "img" && isFootnoteImage(node)) {
+                        return@forEach
+                    }
+                    
                     val text = node.text().trim()
                     if (text.isNotEmpty()) {
                         val styles = mutableListOf<TextStyle>()
                         var link: String? = null
                         
-                        when (node.tagName().lowercase()) {
+                        when (tagName) {
                             "strong", "b" -> styles.add(TextStyle.BOLD)
                             "em", "i" -> styles.add(TextStyle.ITALIC)
                             "u" -> styles.add(TextStyle.UNDERLINE)
@@ -560,15 +646,85 @@ class EpubParser {
                                 styles.add(TextStyle.UNDERLINE)
                                 link = node.attr("href")
                             }
+                            "sup", "sub" -> {
+                                // 递归解析上标/下标内容
+                                spans.addAll(parseInlineElements(node))
+                                return@forEach
+                            }
                         }
                         
                         spans.add(TextSpan(text, styles, link))
+                    } else if (tagName == "sup" || tagName == "sub") {
+                        // 上标/下标可能只包含图片，递归处理
+                        spans.addAll(parseInlineElements(node))
                     }
                 }
             }
         }
         
         return spans
+    }
+    
+    /**
+     * 判断链接是否为脚注链接
+     */
+    private fun isFootnoteLink(element: Element): Boolean {
+        val href = element.attr("href")
+        val epubType = element.attr("epub:type")
+        val className = element.className()
+        
+        // 检查 epub:type="noteref" 或常见脚注类名
+        if (epubType.contains("noteref") || epubType.contains("footnote")) {
+            return true
+        }
+        
+        // 检查类名
+        if (className.contains("footnote") || className.contains("note")) {
+            return true
+        }
+        
+        // 检查 href 是否指向页内锚点（脚注通常如此）
+        if (href.startsWith("#n") || href.startsWith("#fn") || href.startsWith("#note")) {
+            return true
+        }
+        
+        // 检查是否只包含脚注图标图片
+        val imgs = element.select("img")
+        if (imgs.isNotEmpty() && element.text().trim().isEmpty()) {
+            val imgSrc = imgs.first()?.attr("src") ?: ""
+            if (imgSrc.contains("note") || imgSrc.contains("footnote")) {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    /**
+     * 从脚注链接中提取脚注 ID
+     */
+    private fun extractFootnoteId(element: Element): String? {
+        val href = element.attr("href")
+        if (href.startsWith("#")) {
+            return href.substring(1)
+        }
+        // 对于跨文件脚注引用，提取锚点部分
+        if (href.contains("#")) {
+            return href.substringAfter("#")
+        }
+        return element.attr("id").takeIf { it.isNotEmpty() }
+    }
+    
+    /**
+     * 判断图片是否为脚注标记图片
+     */
+    private fun isFootnoteImage(element: Element): Boolean {
+        val src = element.attr("src").lowercase()
+        val alt = element.attr("alt").lowercase()
+        val className = element.className().lowercase()
+        
+        return src.contains("note") || alt.contains("note") || 
+               className.contains("footnote") || className.contains("note")
     }
     
     /**
