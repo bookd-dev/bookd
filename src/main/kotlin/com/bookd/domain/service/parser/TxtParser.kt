@@ -164,24 +164,30 @@ class TxtParser(
      */
     fun extractChapterContent(fullText: String, chapterInfo: ChapterInfo): List<ContentElement> {
         val chapterText = fullText.substring(chapterInfo.startPos, chapterInfo.endPos)
-        val paragraphs = chapterText.split("\n\n")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        
+        // 统一换行符为 \n，然后按行分割
+        val normalizedText = chapterText.replace("\r\n", "\n").replace("\r", "\n")
+        val lines = normalizedText.split("\n")
         
         val elements = mutableListOf<ContentElement>()
+        var isFirstNonEmpty = true
         
-        paragraphs.forEachIndexed { index, paragraph ->
-            // 第一个段落如果是标题，添加为 Heading
-            if (index == 0 && chapterInfo.title != null && paragraph.startsWith(chapterInfo.title)) {
-                elements.add(ContentElement.Heading(1, paragraph))
+        lines.forEach { line ->
+            val trimmedLine = line.trim()
+            
+            if (trimmedLine.isEmpty()) {
+                // 空行跳过
+                return@forEach
+            }
+            
+            // 第一个非空行如果是标题，添加为 Heading
+            if (isFirstNonEmpty && chapterInfo.title != null && trimmedLine.startsWith(chapterInfo.title.trim())) {
+                elements.add(ContentElement.Heading(1, trimmedLine))
+                isFirstNonEmpty = false
             } else {
-                // 其他段落作为普通段落
-                val spans = paragraph.split("\n")
-                    .map { line -> TextSpan(line) }
-                
-                if (spans.isNotEmpty()) {
-                    elements.add(ContentElement.Paragraph(spans))
-                }
+                // 每行作为一个独立段落
+                elements.add(ContentElement.Paragraph(listOf(TextSpan(trimmedLine))))
+                isFirstNonEmpty = false
             }
         }
         
