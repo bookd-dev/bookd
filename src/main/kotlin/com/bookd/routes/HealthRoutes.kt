@@ -5,7 +5,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun Route.healthRoutes() {
-    route("/health") {
+    route("/api/health") {
         get {
             call.respond(mapOf(
                 "status" to "UP",
