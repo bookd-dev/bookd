@@ -45,6 +45,17 @@ class BookRepository {
             .map { toBook(it) }
     }
     
+    /**
+     * 根据书源 ID 分页获取书籍列表（APP 端专用）
+     */
+    fun findBySourceIdPaged(sourceId: Int, limit: Int, offset: Long): List<Book> = transaction {
+        Books.selectAll()
+            .where { Books.sourceId eq sourceId }
+            .orderBy(Books.title to SortOrder.ASC)
+            .limit(limit, offset)
+            .map { toBook(it) }
+    }
+    
     fun create(
         title: String,
         author: String?,

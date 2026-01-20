@@ -21,6 +21,13 @@ class BookService(
         return bookRepository.findBySourceId(sourceId).map { enrichBookWithStats(it) }
     }
     
+    /**
+     * 根据书源 ID 分页获取书籍列表（APP 端专用）
+     */
+    fun getBooksBySourceIdPaged(sourceId: Int, limit: Int, offset: Long): List<Book> {
+        return bookRepository.findBySourceIdPaged(sourceId, limit, offset).map { enrichBookWithStats(it) }
+    }
+    
     fun getTotalCount(): Long {
         return bookRepository.count()
     }

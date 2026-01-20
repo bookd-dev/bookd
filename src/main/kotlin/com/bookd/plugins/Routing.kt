@@ -28,5 +28,6 @@ fun Application.configureRouting() {
         fileSystemRoutes()
         webRoutes()
         readingRoutes()
+        appRoutes()
     }
 }
