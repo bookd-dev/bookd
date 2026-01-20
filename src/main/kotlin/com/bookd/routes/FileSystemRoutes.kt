@@ -1,8 +1,9 @@
 package com.bookd.routes
 
+import com.bookd.domain.model.ErrorCode
+import com.bookd.extension.*
 import io.ktor.http.*
 import io.ktor.server.application.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import java.io.File
@@ -24,35 +25,49 @@ data class DirectoryListResponse(
     val files: List<DirectoryInfo>
 )
 
+@Serializable
+data class ValidationResponse(
+    val path: String,
+    val exists: Boolean,
+    val isDirectory: Boolean,
+    val canRead: Boolean,
+    val isValid: Boolean
+)
+
+@Serializable
+data class RootsResponse(
+    val roots: List<DirectoryInfo>
+)
+
 fun Route.fileSystemRoutes() {
     route("/api/filesystem") {
         // 列出目录内容
         get("/list") {
             val path = call.request.queryParameters["path"] ?: "/"
-            
+
             val dir = File(path)
-            
+
             if (!dir.exists()) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Directory not found"))
+                call.respondError(ErrorCode.FS_DIR_NOT_FOUND)
                 return@get
             }
-            
+
             if (!dir.isDirectory) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Path is not a directory"))
+                call.respondError(ErrorCode.FS_NOT_A_DIRECTORY)
                 return@get
             }
-            
+
             if (!dir.canRead()) {
-                call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Permission denied"))
+                call.respondError(ErrorCode.FS_PERMISSION_DENIED)
                 return@get
             }
-            
+
             try {
                 val items = dir.listFiles()?.sortedWith(
                     compareBy<File> { !it.isDirectory }
                         .thenBy { it.name.lowercase() }
                 ) ?: emptyList()
-                
+
                 val directories = items.filter { it.isDirectory }.map { file ->
                     DirectoryInfo(
                         path = file.absolutePath,
@@ -61,7 +76,7 @@ fun Route.fileSystemRoutes() {
                         canRead = file.canRead()
                     )
                 }
-                
+
                 val files = items.filter { !it.isDirectory }.map { file ->
                     DirectoryInfo(
                         path = file.absolutePath,
@@ -71,44 +86,32 @@ fun Route.fileSystemRoutes() {
                         size = file.length()
                     )
                 }
-                
+
                 val parentPath = dir.parentFile?.absolutePath
-                
-                call.respond(DirectoryListResponse(
+
+                call.respondSuccess(DirectoryListResponse(
                     currentPath = dir.absolutePath,
                     parentPath = parentPath,
                     directories = directories,
                     files = files
                 ))
             } catch (e: Exception) {
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    mapOf("error" to "Failed to list directory: ${e.message}")
-                )
+                call.respondError(ErrorCode.FS_LIST_FAILED, e.message)
             }
         }
-        
+
         // 验证路径是否存在
         get("/validate") {
             val path = call.request.queryParameters["path"]
-            
+
             if (path.isNullOrBlank()) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Path parameter is required"))
+                call.respondError(ErrorCode.FS_PATH_REQUIRED)
                 return@get
             }
-            
+
             val dir = File(path)
-            
-            @Serializable
-            data class ValidationResponse(
-                val path: String,
-                val exists: Boolean,
-                val isDirectory: Boolean,
-                val canRead: Boolean,
-                val isValid: Boolean
-            )
-            
-            call.respond(ValidationResponse(
+
+            call.respondSuccess(ValidationResponse(
                 path = path,
                 exists = dir.exists(),
                 isDirectory = dir.isDirectory,
@@ -116,11 +119,11 @@ fun Route.fileSystemRoutes() {
                 isValid = (dir.exists() && dir.isDirectory && dir.canRead())
             ))
         }
-        
+
         // 获取根目录列表（用于初始化）
         get("/roots") {
             val roots = File.listRoots()
-            
+
             val rootInfos = roots.map { root ->
                 DirectoryInfo(
                     path = root.absolutePath,
@@ -129,8 +132,8 @@ fun Route.fileSystemRoutes() {
                     canRead = root.canRead()
                 )
             }
-            
-            call.respond(mapOf("roots" to rootInfos))
+
+            call.respondSuccess(RootsResponse(roots = rootInfos))
         }
     }
 }

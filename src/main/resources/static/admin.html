@@ -1382,8 +1382,8 @@
         </div>
     </div>
     
+    <script src="/js/api-client.js"></script>
     <script>
-        const API_BASE = '/api';
         let currentPath = '/';
         let authToken = localStorage.getItem('authToken');
         let currentUser = null;
@@ -1398,31 +1398,22 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
+                currentUser = await api.get(`${API_BASE}/auth/me`);
+                document.getElementById('currentUser').textContent = `${currentUser.username} (${getRoleText(currentUser.role)})`;
                 
-                if (res.ok) {
-                    currentUser = await res.json();
-                    document.getElementById('currentUser').textContent = `${currentUser.username} (${getRoleText(currentUser.role)})`;
-                    
-                    // Check admin permission
-                    if (currentUser.role !== 'admin') {
-                        alert('您没有管理员权限\n即将跳转到阅读器页面');
-                        setTimeout(() => {
-                            window.location.href = '/reader';
-                        }, 1000);
-                        return false;
-                    }
-                    
-                    return true;
-                } else {
-                    localStorage.removeItem('authToken');
-                    window.location.href = '/login';
+                // Check admin permission
+                if (currentUser.role !== 'admin') {
+                    alert('您没有管理员权限\n即将跳转到阅读器页面');
+                    setTimeout(() => {
+                        window.location.href = '/reader';
+                    }, 1000);
                     return false;
                 }
+                
+                return true;
             } catch (error) {
                 console.error('Auth check failed:', error);
+                localStorage.removeItem('authToken');
                 window.location.href = '/login';
                 return false;
             }
@@ -1448,10 +1439,7 @@
         
         async function logout() {
             try {
-                await fetch(`${API_BASE}/auth/logout`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
+                await api.post(`${API_BASE}/auth/logout`, {});
             } catch (error) {
                 console.error('Logout failed:', error);
             }
@@ -1520,10 +1508,7 @@
         
         async function loadUsers() {
             try {
-                const res = await fetch(`${API_BASE}/users`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                const users = await res.json();
+                const users = await api.get(`${API_BASE}/users`);
                 
                 const list = document.getElementById('userList');
                 if (users.length === 0) {
@@ -1549,48 +1534,29 @@
             if (!confirm(`确定要删除用户 "${username}" 吗？`)) return;
             
             try {
-                const res = await fetch(`${API_BASE}/users/${userId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    alert('用户已删除');
-                    loadUsers();
-                } else {
-                    alert('删除失败');
-                }
+                await api.delete(`${API_BASE}/users/${userId}`);
+                alert('用户已删除');
+                loadUsers();
             } catch (error) {
                 console.error('Failed to delete user:', error);
-                alert('删除失败');
+                alert('❌ ' + (error.message || '删除失败'));
             }
         }
         
         async function generateInviteToken() {
             try {
-                const res = await fetch(`${API_BASE}/users/invite-tokens`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    alert('邀请码生成成功');
-                    loadInviteTokens();
-                } else {
-                    alert('生成失败');
-                }
+                await api.post(`${API_BASE}/users/invite-tokens`, {});
+                alert('邀请码生成成功');
+                loadInviteTokens();
             } catch (error) {
                 console.error('Failed to generate token:', error);
-                alert('生成失败');
+                alert('❌ ' + (error.message || '生成失败'));
             }
         }
         
         async function loadInviteTokens() {
             try {
-                const res = await fetch(`${API_BASE}/users/invite-tokens`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                const tokens = await res.json();
+                const tokens = await api.get(`${API_BASE}/users/invite-tokens`);
                 
                 const list = document.getElementById('tokenList');
                 if (tokens.length === 0) {
@@ -1617,15 +1583,6 @@
             }
         })();
         
-        // Helper function for authenticated fetch
-        async function apiFetch(url, options = {}) {
-            const headers = {
-                ...options.headers,
-                'Authorization': `Bearer ${authToken}`
-            };
-            return fetch(url, { ...options, headers });
-        }
-        
         function openFileBrowser() {
             document.getElementById('fileBrowserModal').classList.add('active');
             loadDirectory('/');
@@ -1641,8 +1598,7 @@
             container.innerHTML = '<div class="loading">加载中...</div>';
             
             try {
-                const res = await fetch(`${API_BASE}/filesystem/list?path=${encodeURIComponent(path)}`);
-                const data = await res.json();
+                const data = await api.get(`${API_BASE}/filesystem/list?path=${encodeURIComponent(path)}`);
                 
                 // 更新面包屑
                 updateBreadcrumb(data.currentPath);
@@ -1751,8 +1707,7 @@
         
         async function loadSourcesModal() {
             try {
-                const res = await fetch(`${API_BASE}/sources`);
-                const sources = await res.json();
+                const sources = await api.get(`${API_BASE}/sources`);
                 const list = document.getElementById('sourceListModal');
                 
                 if (sources.length === 0) {
@@ -1813,14 +1768,12 @@
         
         async function loadBookSourcesForFilter() {
             try {
-                // Load book sources
-                const sourcesRes = await fetch(`${API_BASE}/sources`);
-                const sources = await sourcesRes.json();
+                // Load book sources and tags in parallel
+                const [sources, tags] = await Promise.all([
+                    api.get(`${API_BASE}/sources`),
+                    api.get(`${API_BASE}/tags`)
+                ]);
                 allBookSources = sources;
-                
-                // Load tags
-                const tagsRes = await fetch(`${API_BASE}/tags`);
-                const tags = await tagsRes.json();
                 allBookTags = tags;
                 
                 // Render source filter buttons
@@ -1970,12 +1923,10 @@
                 
                 // Step 1: Get books filtered by source
                 if (sourceId !== null) {
-                    const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}&limit=500`);
-                    const data = await res.json();
+                    const data = await api.get(`${API_BASE}/books?sourceId=${sourceId}&limit=500`);
                     books = data.books || [];
                 } else {
-                    const res = await fetch(`${API_BASE}/books?limit=500`);
-                    const data = await res.json();
+                    const data = await api.get(`${API_BASE}/books?limit=500`);
                     books = data.books || [];
                 }
                 
@@ -2116,10 +2067,7 @@
                 chaptersList.innerHTML = '<div class="loading">加载章节中...</div>';
                 
                 try {
-                    const response = await fetch(`/api/books/${currentBookData.id}/chapters`);
-                    if (!response.ok) throw new Error('Failed to load chapters');
-                    
-                    const data = await response.json();
+                    const data = await api.get(`/api/books/${currentBookData.id}/chapters`);
                     displayChapters(data);
                 } catch (error) {
                     console.error('Failed to load chapters:', error);
@@ -2184,11 +2132,7 @@
             container.innerHTML = '<div class="loading">加载中...</div>';
             
             try {
-                const res = await fetch(`${API_BASE}/books/${bookId}`);
-                if (!res.ok) {
-                    throw new Error('Failed to load book details');
-                }
-                const book = await res.json();
+                const book = await api.get(`${API_BASE}/books/${bookId}`);
                 
                 const formatIcon = getFormatIcon(book.format);
                 const timeStr = formatTime(book);
@@ -2309,26 +2253,16 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/books/${currentBookData.id}/reparse`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
+                await api.post(`${API_BASE}/books/${currentBookData.id}/reparse`, {});
+                alert('✅ 已加入重解析队列！\n\n书籍将在后台重新解析，请稍后刷新查看章节。');
                 
-                if (res.ok) {
-                    const result = await res.json();
-                    alert('✅ 已加入重解析队列！\n\n书籍将在后台重新解析，请稍后刷新查看章节。');
-                    
-                    // 刷新书籍详情显示
-                    setTimeout(() => {
-                        loadBookDetail(currentBookData.id);
-                    }, 2000);
-                } else {
-                    const error = await res.json();
-                    alert('❌ 重解析失败: ' + (error.error || '未知错误'));
-                }
-            } catch (e) {
-                console.error('Failed to reparse book:', e);
-                alert('❌ 重解析失败: ' + e.message);
+                // 刷新书籍详情显示
+                setTimeout(() => {
+                    loadBookDetail(currentBookData.id);
+                }, 2000);
+            } catch (error) {
+                console.error('Failed to reparse book:', error);
+                alert('❌ ' + (error.message || '重解析失败'));
             }
         }
         
@@ -2550,10 +2484,7 @@
         
         async function loadAvailableTagsForBook() {
             try {
-                const res = await fetch(`${API_BASE}/tags`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                allAvailableTags = await res.json();
+                allAvailableTags = await api.get(`${API_BASE}/tags`);
                 renderAvailableTags();
                 updateTagSuggestions();
             } catch (e) {
@@ -2738,32 +2669,17 @@
                     formData.append('cover', uploadedCoverFile);
                     formData.append('bookId', currentBookData.id);
                     
-                    const coverRes = await fetch(`${API_BASE}/books/${currentBookData.id}/cover`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (coverRes.ok) {
-                        const coverData = await coverRes.json();
+                    try {
+                        const coverData = await api.upload(`${API_BASE}/books/${currentBookData.id}/cover`, formData);
                         coverPath = coverData.coverPath;
                         updatedData.coverPath = coverPath;
-                    } else {
+                    } catch (e) {
                         alert('封面上传失败，但将继续保存其他数据');
                     }
                 }
                 
                 // 2. 更新书籍元数据
-                const updateRes = await fetch(`${API_BASE}/books/${currentBookData.id}/metadata`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(updatedData)
-                });
-                
-                if (!updateRes.ok) {
-                    throw new Error('Failed to update book metadata');
-                }
+                await api.put(`${API_BASE}/books/${currentBookData.id}/metadata`, updatedData);
                 
                 alert('✅ 保存成功！');
                 uploadedCoverFile = null;
@@ -2776,19 +2692,18 @@
                 
             } catch (e) {
                 console.error('Failed to save book detail:', e);
-                alert('❌ 保存失败: ' + e.message);
+                alert('❌ ' + (e.message || '保存失败'));
             }
         }
         
         async function loadStats() {
             try {
-                // Use the new count API endpoint
-                const countRes = await fetch(`${API_BASE}/books/count`);
-                const countData = await countRes.json();
+                // Load count and sources in parallel
+                const [countData, sourcesData] = await Promise.all([
+                    api.get(`${API_BASE}/books/count`),
+                    api.get(`${API_BASE}/sources`)
+                ]);
                 document.getElementById('totalBooks').textContent = countData.count || 0;
-                
-                const sourcesRes = await fetch(`${API_BASE}/sources`);
-                const sourcesData = await sourcesRes.json();
                 document.getElementById('totalSources').textContent = sourcesData.length || 0;
             } catch (e) {
                 console.error('Failed to load stats', e);
@@ -2904,8 +2819,7 @@
                 const scanMode = fullScan ? 'fullScan=true' : 'fullScan=false';
                 const url = `${API_BASE}/scan/source/${id}?${scanMode}`;
                 console.log('Calling scan API:', url);
-                const res = await fetch(url, { method: 'POST' });
-                const result = await res.json();
+                const result = await api.post(url, {});
                 console.log('Scan result:', result);
                 
                 if (result.message && result.message.includes('does not exist')) {
@@ -2927,7 +2841,7 @@
                     refreshOpenBookLists(id);
                 }
             } catch (e) {
-                alert('❌ 扫描失败: ' + e.message);
+                alert('❌ ' + (e.message || '扫描失败'));
             } finally {
                 isScanning = false;
                 updateScanButtons(false);
@@ -2950,8 +2864,7 @@
                 startScanStatusCheck();
                 
                 const scanMode = fullScan ? 'fullScan=true' : 'fullScan=false';
-                const res = await fetch(`${API_BASE}/scan/all?${scanMode}`, { method: 'POST' });
-                const result = await res.json();
+                const result = await api.post(`${API_BASE}/scan/all?${scanMode}`, {});
                 
                 let message = `✅ ${modeText}完成！\n\n发现文件: ${result.found} 个\n处理书籍: ${result.imported} 本\n${result.message}`;
                 
@@ -2967,7 +2880,7 @@
                 // 刷新所有已打开的书籍列表
                 refreshOpenBookLists();
             } catch (e) {
-                alert('❌ 扫描失败: ' + e.message);
+                alert('❌ ' + (e.message || '扫描失败'));
             } finally {
                 isScanning = false;
                 updateScanButtons(false);
@@ -2978,8 +2891,7 @@
         // Check scan status periodically (only during active scan)
         async function checkScanStatus() {
             try {
-                const res = await fetch(`${API_BASE}/scan/status`);
-                const status = await res.json();
+                const status = await api.get(`${API_BASE}/scan/status`);
                 
                 if (status.scanning && !isScanning) {
                     isScanning = true;
@@ -3057,30 +2969,22 @@
         async function deleteSource(id) {
             if (!confirm('确定要删除这个书籍源吗？\n删除后将无法恢复。')) return;
             try {
-                const res = await fetch(`${API_BASE}/sources/${id}`, { method: 'DELETE' });
-                if (res.ok || res.status === 204) {
-                    alert('✅ 删除成功');
-                    loadSourcesModal(); // Refresh modal if open
-                    loadStats();
-                } else {
-                    alert('❌ 删除失败');
-                }
+                await api.delete(`${API_BASE}/sources/${id}`);
+                alert('✅ 删除成功');
+                loadSourcesModal(); // Refresh modal if open
+                loadStats();
             } catch (e) {
-                alert('❌ 删除失败: ' + e.message);
+                alert('❌ ' + (e.message || '删除失败'));
             }
         }
         
         async function toggleSource(id) {
             try {
-                const res = await fetch(`${API_BASE}/sources/${id}/toggle`, { method: 'POST' });
-                if (res.ok) {
-                    alert('✅ 操作成功');
-                    loadSourcesModal(); // Refresh modal if open
-                } else {
-                    alert('❌ 操作失败');
-                }
+                await api.post(`${API_BASE}/sources/${id}/toggle`, {});
+                alert('✅ 操作成功');
+                loadSourcesModal(); // Refresh modal if open
             } catch (e) {
-                alert('❌ 操作失败: ' + e.message);
+                alert('❌ ' + (e.message || '操作失败'));
             }
         }
         
@@ -3095,23 +2999,13 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/sources`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, path })
-                });
-                
-                if (res.ok) {
-                    alert('✅ 添加成功！\n\n提示：点击"📁 书籍源"卡片，然后点击"🔍 扫描"按钮开始导入书籍。');
-                    document.getElementById('addSourceForm').reset();
-                    document.getElementById('pathPreview').style.display = 'none';
-                    loadStats(); // Update source count
-                } else {
-                    const error = await res.json().catch(() => ({}));
-                    alert('❌ 添加失败: ' + (error.error || '未知错误'));
-                }
+                await api.post(`${API_BASE}/sources`, { name, path });
+                alert('✅ 添加成功！\n\n提示：点击"📁 书籍源"卡片，然后点击"🔍 扫描"按钮开始导入书籍。');
+                document.getElementById('addSourceForm').reset();
+                document.getElementById('pathPreview').style.display = 'none';
+                loadStats(); // Update source count
             } catch (e) {
-                alert('❌ 添加失败: ' + e.message);
+                alert('❌ ' + (e.message || '添加失败'));
             }
         });
         
@@ -3182,20 +3076,18 @@
             const booksDiv = document.getElementById(`books-${sourceId}`);
             
             try {
-                // Use the count API to get total books for this source
-                const countRes = await fetch(`${API_BASE}/books/count?sourceId=${sourceId}`);
-                const countData = await countRes.json();
+                // Use the count API and fetch books in parallel
+                const [countData, data] = await Promise.all([
+                    api.get(`${API_BASE}/books/count?sourceId=${sourceId}`),
+                    api.get(`${API_BASE}/books?sourceId=${sourceId}&limit=1000`)
+                ]);
                 const totalBooks = countData.count || 0;
+                const allBooks = data.books || [];
                 
                 if (totalBooks === 0) {
                     booksDiv.innerHTML = '<div style="color: #999; padding: 20px; text-align: center;">📭 该书籍源暂无书籍</div>';
                     return;
                 }
-                
-                // Fetch all books for this source
-                const res = await fetch(`${API_BASE}/books?sourceId=${sourceId}&limit=1000`);
-                const data = await res.json();
-                const allBooks = data.books || [];
                 
                 if (allBooks.length > 0) {
                     const bookListHtml = `
@@ -3241,10 +3133,7 @@
         
         async function loadTags() {
             try {
-                const res = await fetch(`${API_BASE}/tags`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                const tags = await res.json();
+                const tags = await api.get(`${API_BASE}/tags`);
                 
                 const list = document.getElementById('tagList');
                 const selectAllContainer = document.getElementById('selectAllContainer');
@@ -3348,16 +3237,8 @@
                 
                 for (const tagId of selectedTagIdsForBatch) {
                     try {
-                        const res = await fetch(`${API_BASE}/tags/${tagId}`, {
-                            method: 'DELETE',
-                            headers: { 'Authorization': `Bearer ${authToken}` }
-                        });
-                        
-                        if (res.ok || res.status === 204) {
-                            successCount++;
-                        } else {
-                            failCount++;
-                        }
+                        await api.delete(`${API_BASE}/tags/${tagId}`);
+                        successCount++;
                     } catch (e) {
                         console.error('Failed to delete tag:', tagId, e);
                         failCount++;
@@ -3374,7 +3255,7 @@
                 loadTags();
             } catch (error) {
                 console.error('Failed to batch delete tags:', error);
-                alert('❌ 批量删除失败: ' + error.message);
+                alert('❌ ' + (error.message || '批量删除失败'));
             }
         }
         
@@ -3384,22 +3265,13 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/tags/auto-tag/all`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    const result = await res.json();
-                    alert(`✅ 自动标签提取完成！\n\n处理书籍: ${result.totalBooks} 本\n成功打标: ${result.booksTagged} 本\n新增标签: ${result.tagsCreated} 个`);
-                    loadTags();
-                    loadStats();
-                } else {
-                    alert('❌ 自动标签提取失败');
-                }
+                const result = await api.post(`${API_BASE}/tags/auto-tag/all`, {});
+                alert(`✅ 自动标签提取完成！\n\n处理书籍: ${result.totalBooks} 本\n成功打标: ${result.booksTagged} 本\n新增标签: ${result.tagsCreated} 个`);
+                loadTags();
+                loadStats();
             } catch (error) {
                 console.error('Failed to auto-tag books:', error);
-                alert('❌ 自动标签提取失败: ' + error.message);
+                alert('❌ ' + (error.message || '自动标签提取失败'));
             }
         }
         
@@ -3409,27 +3281,18 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/tags/${tagId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok || res.status === 204) {
-                    alert('✅ 标签已删除');
-                    loadTags();
-                } else {
-                    alert('❌ 删除失败');
-                }
+                await api.delete(`${API_BASE}/tags/${tagId}`);
+                alert('✅ 标签已删除');
+                loadTags();
             } catch (error) {
                 console.error('Failed to delete tag:', error);
-                alert('❌ 删除失败: ' + error.message);
+                alert('❌ ' + (error.message || '删除失败'));
             }
         }
         
         async function getBookTags(bookId) {
             try {
-                const res = await fetch(`${API_BASE}/tags/book/${bookId}`);
-                return await res.json();
+                return await api.get(`${API_BASE}/tags/book/${bookId}`);
             } catch (error) {
                 console.error('Failed to load book tags:', error);
                 return [];
@@ -3438,19 +3301,7 @@
         
         async function addTagToBook(bookId, tagName) {
             try {
-                const res = await fetch(`${API_BASE}/tags/book/${bookId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify({ tagName })
-                });
-                
-                if (res.ok) {
-                    return await res.json();
-                }
-                return null;
+                return await api.post(`${API_BASE}/tags/book/${bookId}`, { tagName });
             } catch (error) {
                 console.error('Failed to add tag to book:', error);
                 return null;
@@ -3459,11 +3310,8 @@
         
         async function removeTagFromBook(bookId, tagId) {
             try {
-                const res = await fetch(`${API_BASE}/tags/book/${bookId}/${tagId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                return res.ok || res.status === 204;
+                await api.delete(`${API_BASE}/tags/book/${bookId}/${tagId}`);
+                return true;
             } catch (error) {
                 console.error('Failed to remove tag from book:', error);
                 return false;
@@ -3490,26 +3338,13 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/tags`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify({ name: tagName })
-                });
-                
-                if (res.ok) {
-                    alert('✅ 标签创建成功！');
-                    closeCreateTagModal();
-                    loadTags();
-                } else {
-                    const error = await res.json();
-                    alert('❌ 创建失败: ' + (error.error || '未知错误'));
-                }
+                await api.post(`${API_BASE}/tags`, { name: tagName });
+                alert('✅ 标签创建成功！');
+                closeCreateTagModal();
+                loadTags();
             } catch (error) {
                 console.error('Failed to create tag:', error);
-                alert('❌ 创建失败: ' + error.message);
+                alert('❌ 创建失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -3532,10 +3367,7 @@
         
         async function loadTagsForMerge() {
             try {
-                const res = await fetch(`${API_BASE}/tags`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                allTagsForMerge = await res.json();
+                allTagsForMerge = await api.get(`${API_BASE}/tags`);
                 
                 const container = document.getElementById('sourceTagsList');
                 if (allTagsForMerge.length === 0) {
@@ -3587,30 +3419,16 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/tags/merge`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify({
-                        sourceTagIds: Array.from(selectedSourceTagIds),
-                        targetTagName: targetTagName
-                    })
+                const result = await api.post(`${API_BASE}/tags/merge`, {
+                    sourceTagIds: Array.from(selectedSourceTagIds),
+                    targetTagName: targetTagName
                 });
-                
-                if (res.ok) {
-                    const result = await res.json();
-                    alert(`✅ 标签合并成功！\n\n目标标签：${result.targetTag.name}\n合并数量：${result.mergedCount} 个\n相关书籍：${result.targetTag.bookCount} 本`);
-                    closeMergeTagsModal();
-                    loadTags();
-                } else {
-                    const error = await res.json();
-                    alert('❌ 合并失败: ' + (error.error || '未知错误'));
-                }
+                alert(`✅ 标签合并成功！\n\n目标标签：${result.targetTag.name}\n合并数量：${result.mergedCount} 个\n相关书籍：${result.targetTag.bookCount} 本`);
+                closeMergeTagsModal();
+                loadTags();
             } catch (error) {
                 console.error('Failed to merge tags:', error);
-                alert('❌ 合并失败: ' + error.message);
+                alert('❌ 合并失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -3631,10 +3449,7 @@
         
         async function loadTxtRules() {
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                const rules = await res.json();
+                const rules = await api.get(`${API_BASE}/txt-parse-rules`);
                 
                 const list = document.getElementById('txtRuleList');
                 if (rules.length === 0) {
@@ -3703,41 +3518,25 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify({
-                        name,
-                        rule,
-                        example: example || null,
-                        enabled: true,
-                        priority
-                    })
+                await api.post(`${API_BASE}/txt-parse-rules`, {
+                    name,
+                    rule,
+                    example: example || null,
+                    enabled: true,
+                    priority
                 });
-                
-                if (res.ok) {
-                    alert('✅ 规则创建成功！');
-                    closeAddTxtRuleModal();
-                    loadTxtRules();
-                } else {
-                    const error = await res.json();
-                    alert('❌ 创建失败: ' + (error.error || '未知错误'));
-                }
+                alert('✅ 规则创建成功！');
+                closeAddTxtRuleModal();
+                loadTxtRules();
             } catch (error) {
                 console.error('Failed to create TXT rule:', error);
-                alert('❌ 创建失败: ' + error.message);
+                alert('❌ 创建失败: ' + (error.message || '未知错误'));
             }
         }
         
         async function editTxtRule(ruleId) {
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                const rule = await res.json();
+                const rule = await api.get(`${API_BASE}/txt-parse-rules/${ruleId}`);
                 
                 document.getElementById('editTxtRuleId').value = rule.id;
                 document.getElementById('editTxtRuleName').value = rule.name;
@@ -3748,7 +3547,7 @@
                 document.getElementById('editTxtRuleModal').classList.add('active');
             } catch (error) {
                 console.error('Failed to load TXT rule:', error);
-                alert('❌ 加载失败: ' + error.message);
+                alert('❌ 加载失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -3769,32 +3568,19 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules/${id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
-                    body: JSON.stringify({
-                        name,
-                        rule,
-                        example: example || null,
-                        enabled: true,
-                        priority
-                    })
+                await api.put(`${API_BASE}/txt-parse-rules/${id}`, {
+                    name,
+                    rule,
+                    example: example || null,
+                    enabled: true,
+                    priority
                 });
-                
-                if (res.ok) {
-                    alert('✅ 规则更新成功！');
-                    closeEditTxtRuleModal();
-                    loadTxtRules();
-                } else {
-                    const error = await res.json();
-                    alert('❌ 更新失败: ' + (error.error || '未知错误'));
-                }
+                alert('✅ 规则更新成功！');
+                closeEditTxtRuleModal();
+                loadTxtRules();
             } catch (error) {
                 console.error('Failed to update TXT rule:', error);
-                alert('❌ 更新失败: ' + error.message);
+                alert('❌ 更新失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -3804,38 +3590,22 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok || res.status === 204) {
-                    alert('✅ 规则已删除');
-                    loadTxtRules();
-                } else {
-                    alert('❌ 删除失败');
-                }
+                await api.delete(`${API_BASE}/txt-parse-rules/${ruleId}`);
+                alert('✅ 规则已删除');
+                loadTxtRules();
             } catch (error) {
                 console.error('Failed to delete TXT rule:', error);
-                alert('❌ 删除失败: ' + error.message);
+                alert('❌ 删除失败: ' + (error.message || '未知错误'));
             }
         }
         
         async function toggleTxtRuleEnabled(ruleId) {
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules/${ruleId}/toggle`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    loadTxtRules();
-                } else {
-                    alert('❌ 操作失败');
-                }
+                await api.post(`${API_BASE}/txt-parse-rules/${ruleId}/toggle`);
+                loadTxtRules();
             } catch (error) {
                 console.error('Failed to toggle TXT rule:', error);
-                alert('❌ 操作失败: ' + error.message);
+                alert('❌ 操作失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -3900,30 +3670,16 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/txt-parse-rules/import`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}` 
-                    },
-                    body: JSON.stringify({
-                        jsonContent: jsonContent,
-                        useFile: false
-                    })
+                const result = await api.post(`${API_BASE}/txt-parse-rules/import`, {
+                    jsonContent: jsonContent,
+                    useFile: false
                 });
-                
-                if (res.ok) {
-                    const result = await res.json();
-                    alert(`✅ 导入完成！\n\n导入: ${result.imported} 条\n跳过: ${result.skipped} 条`);
-                    closeImportJsonModal();
-                    loadTxtRules();
-                } else {
-                    const error = await res.json();
-                    alert('❌ 导入失败: ' + (error.error || '未知错误'));
-                }
+                alert(`✅ 导入完成！\n\n导入: ${result.imported} 条\n跳过: ${result.skipped} 条`);
+                closeImportJsonModal();
+                loadTxtRules();
             } catch (error) {
                 console.error('Failed to import TXT rules:', error);
-                alert('❌ 导入失败: ' + error.message);
+                alert('❌ 导入失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -3938,16 +3694,8 @@
          */
         async function refreshParseStatus() {
             try {
-                const res = await fetch(`${API_BASE}/background-parse/status`, {
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    const status = await res.json();
-                    updateParseStatusUI(status);
-                } else {
-                    console.error('Failed to fetch parse status');
-                }
+                const status = await api.get(`${API_BASE}/background-parse/status`);
+                updateParseStatusUI(status);
             } catch (error) {
                 console.error('Error fetching parse status:', error);
             }
@@ -3999,21 +3747,12 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/background-parse/start`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    alert('✅ 后台解析服务已启动');
-                    setTimeout(() => refreshParseStatus(), 1000);
-                } else {
-                    const error = await res.json();
-                    alert('❌ 启动失败: ' + (error.error || '未知错误'));
-                }
+                await api.post(`${API_BASE}/background-parse/start`);
+                alert('✅ 后台解析服务已启动');
+                setTimeout(() => refreshParseStatus(), 1000);
             } catch (error) {
                 console.error('Failed to start background parse:', error);
-                alert('❌ 启动失败: ' + error.message);
+                alert('❌ 启动失败: ' + (error.message || '未知错误'));
             }
         }
         
@@ -4026,21 +3765,12 @@
             }
             
             try {
-                const res = await fetch(`${API_BASE}/background-parse/stop`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
-                });
-                
-                if (res.ok) {
-                    alert('✅ 后台解析服务已停止');
-                    setTimeout(() => refreshParseStatus(), 1000);
-                } else {
-                    const error = await res.json();
-                    alert('❌ 停止失败: ' + (error.error || '未知错误'));
-                }
+                await api.post(`${API_BASE}/background-parse/stop`);
+                alert('✅ 后台解析服务已停止');
+                setTimeout(() => refreshParseStatus(), 1000);
             } catch (error) {
                 console.error('Failed to stop background parse:', error);
-                alert('❌ 停止失败: ' + error.message);
+                alert('❌ 停止失败: ' + (error.message || '未知错误'));
             }
         }
         

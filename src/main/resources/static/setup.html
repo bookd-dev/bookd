@@ -213,6 +213,7 @@
         </div>
     </div>
 
+    <script src="/js/api-client.js"></script>
     <script>
         function showError(message) {
             const errorEl = document.getElementById('error');
@@ -258,21 +259,11 @@
             };
 
             try {
-                const response = await fetch('/api/auth/setup', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                if (response.ok) {
-                    alert('🎉 管理员创建成功！\n\n即将跳转到登录页面。');
-                    window.location.href = '/login';
-                } else {
-                    const error = await response.json();
-                    showError(error.error || '创建失败');
-                }
+                await api.post('/api/auth/setup', data);
+                alert('🎉 管理员创建成功！\n\n即将跳转到登录页面。');
+                window.location.href = '/login';
             } catch (error) {
-                showError('网络错误，请稍后重试');
+                showError(error.message || '创建失败');
             }
         });
     </script>

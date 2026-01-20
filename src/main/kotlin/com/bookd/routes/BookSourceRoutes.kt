@@ -1,11 +1,13 @@
 package com.bookd.routes
 
 import com.bookd.domain.model.CreateBookSourceRequest
+import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookSourceService
-import io.ktor.http.*
+import com.bookd.extension.*
+import com.bookd.infrastructure.i18n.MessageBundle
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
 import io.ktor.server.request.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.java.KoinJavaComponent.get
 
@@ -14,45 +16,45 @@ fun Route.bookSourceRoutes() {
         get {
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val sources = bookSourceService.getAllSources()
-            call.respond(sources)
+            call.respondSuccess(sources)
         }
-        
+
         post {
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val request = call.receive<CreateBookSourceRequest>()
             val source = bookSourceService.createSource(request.name, request.path)
-            call.respond(HttpStatusCode.Created, source)
+            call.respondSuccess(HttpStatusCode.Created, source)
         }
-        
+
         delete("/{id}") {
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid source ID"))
+                call.respondError(ErrorCode.SOURCE_INVALID_ID)
                 return@delete
             }
-            
+
             val deleted = bookSourceService.deleteSource(id)
             if (deleted) {
-                call.respond(HttpStatusCode.NoContent)
+                call.respondNoContent()
             } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Source not found"))
+                call.respondError(ErrorCode.SOURCE_NOT_FOUND)
             }
         }
-        
+
         post("/{id}/toggle") {
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid source ID"))
+                call.respondError(ErrorCode.SOURCE_INVALID_ID)
                 return@post
             }
-            
+
             val toggled = bookSourceService.toggleSource(id)
             if (toggled) {
-                call.respond(mapOf("message" to "Source toggled"))
+                call.respondSuccessMessage(MessageBundle.Success.SOURCE_TOGGLED)
             } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Source not found"))
+                call.respondError(ErrorCode.SOURCE_NOT_FOUND)
             }
         }
     }

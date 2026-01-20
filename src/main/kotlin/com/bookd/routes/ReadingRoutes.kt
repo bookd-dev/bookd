@@ -3,10 +3,11 @@ package com.bookd.routes
 import com.bookd.domain.model.*
 import com.bookd.domain.service.ReadingService
 import com.bookd.domain.service.UserService
+import com.bookd.extension.*
+import com.bookd.infrastructure.i18n.MessageBundle
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.koin.java.KoinJavaComponent.get
@@ -43,145 +44,145 @@ data class ReaderSettingsPatchRequest(
 fun Route.readingRoutes() {
     val readingService = get<ReadingService>(ReadingService::class.java)
     val userService = get<UserService>(UserService::class.java)
-    
+
     // ============ 阅读进度 API ============
     route("/api/books/{bookId}/progress") {
         get {
             val user = getCurrentUser(call, userService) ?: return@get
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
                 return@get
             }
-            
+
             val progress = readingService.getProgress(user.id, bookId)
             if (progress != null) {
-                call.respond(progress)
+                call.respondSuccess(progress)
             } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "No reading progress found"))
+                call.respondError(ErrorCode.READ_PROGRESS_NOT_FOUND)
             }
         }
-        
+
         put {
             val user = getCurrentUser(call, userService) ?: return@put
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
                 return@put
             }
-            
+
             val dto = call.receive<ReadingProgressDTO>()
             val progress = readingService.updateProgress(user.id, bookId, dto)
-            call.respond(progress)
+            call.respondSuccess(progress)
         }
     }
-    
+
     // ============ 阅读历史 API ============
     get("/api/user/reading-history") {
         val user = getCurrentUser(call, userService) ?: return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
-        
+
         val history = readingService.getReadingHistory(user.id, limit)
-        call.respond(ReadingHistoryResponse(items = history))
+        call.respondSuccess(ReadingHistoryResponse(items = history))
     }
-    
+
     // ============ 书签 API ============
     route("/api/books/{bookId}/bookmarks") {
         get {
             val user = getCurrentUser(call, userService) ?: return@get
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
                 return@get
             }
-            
+
             val bookmarks = readingService.getBookmarks(user.id, bookId)
-            call.respond(BookmarksResponse(bookmarks = bookmarks, total = bookmarks.size))
+            call.respondSuccess(BookmarksResponse(bookmarks = bookmarks, total = bookmarks.size))
         }
-        
+
         post {
             val user = getCurrentUser(call, userService) ?: return@post
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid book ID"))
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
                 return@post
             }
-            
+
             val dto = call.receive<BookmarkDTO>()
             val bookmark = readingService.addBookmark(user.id, bookId, dto)
-            call.respond(HttpStatusCode.Created, bookmark)
+            call.respondSuccess(HttpStatusCode.Created, bookmark)
         }
     }
-    
+
     route("/api/bookmarks/{id}") {
         put {
             val user = getCurrentUser(call, userService) ?: return@put
             val bookmarkId = call.parameters["id"]?.toIntOrNull()
             if (bookmarkId == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid bookmark ID"))
+                call.respondError(ErrorCode.READ_INVALID_BOOKMARK_ID)
                 return@put
             }
-            
+
             val dto = call.receive<BookmarkDTO>()
             val bookmark = readingService.updateBookmark(user.id, bookmarkId, dto)
             if (bookmark != null) {
-                call.respond(bookmark)
+                call.respondSuccess(bookmark)
             } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Bookmark not found"))
+                call.respondError(ErrorCode.READ_BOOKMARK_NOT_FOUND)
             }
         }
-        
+
         delete {
             val user = getCurrentUser(call, userService) ?: return@delete
             val bookmarkId = call.parameters["id"]?.toIntOrNull()
             if (bookmarkId == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid bookmark ID"))
+                call.respondError(ErrorCode.READ_INVALID_BOOKMARK_ID)
                 return@delete
             }
-            
+
             val deleted = readingService.deleteBookmark(user.id, bookmarkId)
             if (deleted) {
-                call.respond(HttpStatusCode.OK, mapOf("message" to "Bookmark deleted"))
+                call.respondSuccessMessage(MessageBundle.Success.BOOKMARK_DELETED)
             } else {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Bookmark not found"))
+                call.respondError(ErrorCode.READ_BOOKMARK_NOT_FOUND)
             }
         }
     }
-    
+
     get("/api/user/bookmarks") {
         val user = getCurrentUser(call, userService) ?: return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
         val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
-        
+
         val bookmarks = readingService.getAllUserBookmarks(user.id, limit, offset)
-        call.respond(BookmarksResponse(bookmarks = bookmarks, total = bookmarks.size))
+        call.respondSuccess(BookmarksResponse(bookmarks = bookmarks, total = bookmarks.size))
     }
-    
+
     // ============ 阅读器设置 API ============
     route("/api/user/reader-settings") {
         get {
             val user = getCurrentUser(call, userService) ?: return@get
-            
+
             val settings = readingService.getReaderSettings(user.id)
             if (settings != null) {
-                call.respond(settings)
+                call.respondSuccess(settings)
             } else {
                 // 返回默认设置
-                call.respond(ReaderSettingsDTO())
+                call.respondSuccess(ReaderSettingsDTO())
             }
         }
-        
+
         put {
             val user = getCurrentUser(call, userService) ?: return@put
-            
+
             val dto = call.receive<ReaderSettingsDTO>()
             val settings = readingService.updateReaderSettings(user.id, dto)
-            call.respond(settings)
+            call.respondSuccess(settings)
         }
-        
+
         patch {
             val user = getCurrentUser(call, userService) ?: return@patch
-            
+
             val request = call.receive<ReaderSettingsPatchRequest>()
             val settings = readingService.patchReaderSettings(
                 userId = user.id,
@@ -200,7 +201,7 @@ fun Route.readingRoutes() {
                 marginHorizontal = request.marginHorizontal,
                 marginVertical = request.marginVertical
             )
-            call.respond(settings)
+            call.respondSuccess(settings)
         }
     }
 }
@@ -208,15 +209,15 @@ fun Route.readingRoutes() {
 private suspend fun getCurrentUser(call: ApplicationCall, userService: UserService): com.bookd.domain.model.User? {
     val token = call.request.header("Authorization")?.removePrefix("Bearer ")
     if (token == null) {
-        call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "No token provided"))
+        call.respondError(ErrorCode.AUTH_NO_TOKEN)
         return null
     }
-    
+
     val user = userService.validateToken(token)
     if (user == null) {
-        call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Invalid token"))
+        call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
         return null
     }
-    
+
     return user
 }
