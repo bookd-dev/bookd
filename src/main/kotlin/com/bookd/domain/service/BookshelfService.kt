@@ -267,13 +267,12 @@ class BookshelfService(
         val pagedBookIds = sortedBookIds.drop(safeOffset).take(limit)
         
         // 5. 获取完整的书籍信息（保持排序后的顺序）
-        val bookMap = pagedBookIds.mapNotNull { bookId ->
-            bookRepository.findById(bookId)?.let { bookId to it }
-        }.toMap()
-        
-        val books = pagedBookIds.mapNotNull { bookMap[it] }
+        // 批量查询以避免对每本书逐个调用 findById 带来的性能开销
+        val booksById = bookRepository.findAllById(pagedBookIds).associateBy { it.id }
+        val books = pagedBookIds.mapNotNull { booksById[it] }
         
         // 6. 组装带进度的书籍列表
+        val booksWithProgress = books.map { book ->
         val booksWithProgress = books.map { book ->
             BookWithProgress(
                 book = book,
