@@ -4,6 +4,7 @@ import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.model.ErrorResponse
 import com.bookd.domain.model.MessageResponse
 import com.bookd.domain.model.SuccessResponse
+import com.bookd.domain.service.UserService
 import com.bookd.infrastructure.i18n.I18nException
 import com.bookd.infrastructure.i18n.Message
 import com.bookd.infrastructure.i18n.MessageBundle
@@ -13,6 +14,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
+import org.koin.java.KoinJavaComponent.get
 
 /**
  * ApplicationCall 国际化扩展函数
@@ -204,4 +206,28 @@ suspend fun ApplicationCall.respondConflict(errorCode: ErrorCode, details: Strin
  */
 suspend fun ApplicationCall.respondNoContent() {
     respond(HttpStatusCode.NoContent, Unit)
+}
+
+// ===== 身份验证 =====
+
+/**
+ * 获取当前认证用户的 ID
+ * 如果未认证则返回 null 并自动响应错误
+ */
+suspend fun ApplicationCall.getAuthenticatedUserId(): Int? {
+    val userService = get<UserService>(UserService::class.java)
+    val token = request.header("Authorization")?.removePrefix("Bearer ")
+    
+    if (token == null) {
+        respondError(ErrorCode.AUTH_NO_TOKEN)
+        return null
+    }
+    
+    val user = userService.validateToken(token)
+    if (user == null) {
+        respondError(ErrorCode.AUTH_INVALID_TOKEN)
+        return null
+    }
+    
+    return user.id
 }

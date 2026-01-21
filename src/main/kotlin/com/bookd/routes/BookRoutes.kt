@@ -6,7 +6,6 @@ import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.domain.service.BookDetailService
-import com.bookd.domain.service.UserService
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.service.BookContentService
 import com.bookd.extension.*
@@ -138,7 +137,6 @@ fun Route.bookRoutes() {
 
         // 获取书籍详情（包含标签、阅读进度、书架信息）- 需要认证
         get("/{id}/detail") {
-            val userService = get<UserService>(UserService::class.java)
             val bookDetailService = get<BookDetailService>(BookDetailService::class.java)
             
             val id = call.parameters["id"]?.toIntOrNull()
@@ -148,19 +146,9 @@ fun Route.bookRoutes() {
             }
             
             // 获取当前用户
-            val token = call.request.header("Authorization")?.removePrefix("Bearer ")
-            if (token == null) {
-                call.respondError(ErrorCode.AUTH_NO_TOKEN)
-                return@get
-            }
+            val userId = call.getAuthenticatedUserId() ?: return@get
             
-            val user = userService.validateToken(token)
-            if (user == null) {
-                call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
-                return@get
-            }
-            
-            val bookDetail = bookDetailService.getBookDetail(id, user.id)
+            val bookDetail = bookDetailService.getBookDetail(id, userId)
             if (bookDetail == null) {
                 call.respondError(ErrorCode.BOOK_NOT_FOUND)
                 return@get
