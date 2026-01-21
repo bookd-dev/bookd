@@ -3,6 +3,7 @@ package com.bookd.domain.service
 import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.BookshelfItemRepository
 import com.bookd.data.repository.BookshelfRepository
+import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.domain.model.*
 import org.slf4j.LoggerFactory
 
@@ -19,7 +20,8 @@ import org.slf4j.LoggerFactory
 class BookshelfService(
     private val bookshelfRepository: BookshelfRepository,
     private val bookshelfItemRepository: BookshelfItemRepository,
-    private val bookRepository: BookRepository
+    private val bookRepository: BookRepository,
+    private val readingProgressRepository: ReadingProgressRepository
 ) {
     private val logger = LoggerFactory.getLogger("BookshelfService")
     
@@ -54,9 +56,19 @@ class BookshelfService(
     /**
      * 获取用户的所有书架
      * 返回结果包含每个书架的书籍数量
+     * 
+     * 注意: 如果用户没有默认书架(老账号),会自动创建一个
      */
     fun getUserBookshelves(userId: Int): List<Bookshelf> {
-        val bookshelves = bookshelfRepository.findByUserId(userId)
+        var bookshelves = bookshelfRepository.findByUserId(userId)
+        
+        // 检查是否有默认书架，如果没有则自动创建（兼容老账号）
+        val hasDefaultBookshelf = bookshelves.any { it.isSystemDefault }
+        if (!hasDefaultBookshelf) {
+            logger.info("用户没有默认书架，自动创建, userId: $userId")
+            val defaultBookshelf = initializeUserBookshelves(userId)
+            bookshelves = listOf(defaultBookshelf) + bookshelves
+        }
         
         // 填充每个书架的书籍数量
         return bookshelves.map { bookshelf ->
@@ -198,6 +210,11 @@ class BookshelfService(
     
     /**
      * 获取书架中的书籍列表
+     * 
+     * 排序规则：
+     * 1. 按最新阅读时间(lastReadAt)降序排列，最近阅读的排在前面
+     * 2. 未开始阅读的书籍(没有阅读进度记录)排在最后
+     * 3. 未读书籍之间按添加到书架的时间排序
      */
     fun getBooksInBookshelf(userId: Int, bookshelfId: Int, limit: Int = 20, offset: Long = 0): Result<BooksInBookshelfResponse> {
         // 验证书架存在且属于该用户
@@ -208,16 +225,63 @@ class BookshelfService(
             return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
         }
         
-        // 获取书籍列表
-        val books = bookshelfItemRepository.findByBookshelf(bookshelfId, limit, offset)
-        val total = bookshelfItemRepository.countByBookshelf(bookshelfId)
+        // 1. 获取书架中所有书籍的ID（用于排序，不分页）
+        val allBookIds = bookshelfItemRepository.findBookIdsByBookshelf(
+            bookshelfId = bookshelfId,
+            limit = Int.MAX_VALUE,
+            offset = 0
+        )
+        
+        if (allBookIds.isEmpty()) {
+            return Result.success(BooksInBookshelfResponse(
+                books = emptyList(),
+                total = 0,
+                limit = limit,
+                offset = offset,
+                hasMore = false
+            ))
+        }
+        
+        // 2. 批量查询阅读进度（优化 N+1 问题）
+        val progressMap = readingProgressRepository.findByUserAndBooks(userId, allBookIds)
+        
+        // 3. 按最新阅读时间排序（未读的排在最后）
+        // 分离有进度和无进度的书籍
+        val (readBooks, unreadBooks) = allBookIds.partition { progressMap.containsKey(it) }
+        
+        // 有进度的按 lastReadAt 降序排序
+        val sortedReadBooks = readBooks.sortedByDescending { bookId ->
+            progressMap[bookId]?.lastReadAt
+        }
+        
+        // 未读书籍保持原有顺序（按添加到书架的时间，即 allBookIds 中的顺序）
+        // 合并：有进度的在前，未读的在后
+        val sortedBookIds = sortedReadBooks + unreadBooks
+        
+        // 4. 应用分页
+        val pagedBookIds = sortedBookIds.drop(offset.toInt()).take(limit)
+        
+        // 5. 获取完整的书籍信息（保持排序后的顺序）
+        val bookMap = pagedBookIds.mapNotNull { bookId ->
+            bookRepository.findById(bookId)?.let { bookId to it }
+        }.toMap()
+        
+        val books = pagedBookIds.mapNotNull { bookMap[it] }
+        
+        // 6. 组装带进度的书籍列表
+        val booksWithProgress = books.map { book ->
+            BookWithProgress(
+                book = book,
+                progress = progressMap[book.id]
+            )
+        }
         
         return Result.success(BooksInBookshelfResponse(
-            books = books,
-            total = total.toInt(),
+            books = booksWithProgress,
+            total = allBookIds.size,
             limit = limit,
             offset = offset,
-            hasMore = offset + books.size < total
+            hasMore = offset + booksWithProgress.size < allBookIds.size
         ))
     }
     
@@ -330,15 +394,3 @@ class BookshelfService(
  * 书架相关异常
  */
 class BookshelfException(val errorCode: ErrorCode) : Exception(errorCode.zhCN)
-
-/**
- * 书架中书籍列表响应
- */
-@kotlinx.serialization.Serializable
-data class BooksInBookshelfResponse(
-    val books: List<Book>,
-    val total: Int,
-    val limit: Int,
-    val offset: Long,
-    val hasMore: Boolean
-)

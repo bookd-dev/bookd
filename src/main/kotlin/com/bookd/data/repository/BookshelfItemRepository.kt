@@ -93,6 +93,23 @@ class BookshelfItemRepository {
     }
     
     /**
+     * 获取书架中的书籍ID列表（按添加时间排序）
+     * 用于后续按阅读进度排序
+     * 
+     * @param bookshelfId 书架ID
+     * @param limit 分页大小，如果需要获取所有ID可设置为 Int.MAX_VALUE
+     * @param offset 偏移量
+     * @return 书籍ID列表
+     */
+    fun findBookIdsByBookshelf(bookshelfId: Int, limit: Int = 20, offset: Long = 0): List<Int> = transaction {
+        BookshelfItems.selectAll()
+            .where { BookshelfItems.bookshelfId eq bookshelfId }
+            .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
+            .limit(limit, offset)
+            .map { it[BookshelfItems.bookId].value }
+    }
+    
+    /**
      * 查询书籍所在的所有书架
      */
     fun findBookshelvesForBook(bookId: Int): List<Bookshelf> = transaction {

@@ -91,6 +91,6 @@ val appModule = module {
     single { TagService(get(), get()) }
     single { ReadingService(get(), get(), get()) }
     single { BackgroundParseService(get(), get()) }
-    single { BookshelfService(get(), get(), get()) }
+    single { BookshelfService(get(), get(), get(), get()) }
     single { BookDetailService(get(), get(), get(), get()) }
 }
