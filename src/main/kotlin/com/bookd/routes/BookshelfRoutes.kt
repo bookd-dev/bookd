@@ -262,7 +262,7 @@ fun Route.bookshelfRoutes() {
                 return@post
             }
             
-            val request = call.receive<AddToBookshelvesRequest>()
+            val request = call.receive<BatchAddToBookshelvesRequest>()
             val result = bookshelfService.addBookToBookshelves(userId, bookId, request.bookshelfIds)
             
             result.fold(
