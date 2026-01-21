@@ -55,7 +55,7 @@ data class AddBookToBookshelfRequest(
 
 /**
  * 批量添加书籍到多个书架请求（旧版，保留兼容）
- * @deprecated 使用 [BatchAddToBookshelvesRequest] 代替
+ * @deprecated Use [BatchAddToBookshelvesRequest] instead
  */
 @Deprecated(
     message = "Use BatchAddToBookshelvesRequest instead",
