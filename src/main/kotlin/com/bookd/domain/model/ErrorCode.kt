@@ -244,6 +244,40 @@ enum class ErrorCode(
         "后台解析服务停止失败", "Failed to stop background parse service"
     ),
 
+    // ===== Bookshelf Errors (SHELF_xxx) =====
+    SHELF_NOT_FOUND(
+        "SHELF_001", HttpStatusCode.NotFound,
+        "书架不存在", "Bookshelf not found"
+    ),
+    SHELF_NAME_EXISTS(
+        "SHELF_002", HttpStatusCode.Conflict,
+        "书架名称已存在", "Bookshelf name already exists"
+    ),
+    SHELF_CANNOT_DELETE_SYSTEM(
+        "SHELF_003", HttpStatusCode.Forbidden,
+        "无法删除系统书架", "Cannot delete system bookshelf"
+    ),
+    SHELF_CANNOT_MODIFY_SYSTEM(
+        "SHELF_004", HttpStatusCode.Forbidden,
+        "无法修改系统书架", "Cannot modify system bookshelf"
+    ),
+    SHELF_BOOK_ALREADY_EXISTS(
+        "SHELF_005", HttpStatusCode.Conflict,
+        "书籍已在该书架中", "Book already in bookshelf"
+    ),
+    SHELF_BOOK_NOT_FOUND(
+        "SHELF_006", HttpStatusCode.NotFound,
+        "书籍不在该书架中", "Book not in bookshelf"
+    ),
+    SHELF_INVALID_ID(
+        "SHELF_007", HttpStatusCode.BadRequest,
+        "无效的书架ID", "Invalid bookshelf ID"
+    ),
+    SHELF_NAME_EMPTY(
+        "SHELF_008", HttpStatusCode.BadRequest,
+        "书架名称不能为空", "Bookshelf name cannot be empty"
+    ),
+
     // ===== General Errors (GEN_xxx) =====
     GEN_BAD_REQUEST(
         "GEN_001", HttpStatusCode.BadRequest,

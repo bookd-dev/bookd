@@ -46,7 +46,9 @@ fun Application.module() {
             com.bookd.data.entity.BookDocuments,
             com.bookd.data.entity.DocumentContents,
             com.bookd.data.entity.DocumentResources,
-            com.bookd.data.entity.TxtParseRules
+            com.bookd.data.entity.TxtParseRules,
+            com.bookd.data.entity.Bookshelves,
+            com.bookd.data.entity.BookshelfItems
         )
     }
     

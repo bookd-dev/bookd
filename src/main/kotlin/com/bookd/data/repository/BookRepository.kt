@@ -31,6 +31,18 @@ class BookRepository {
             .map { toBook(it) }
             .singleOrNull()
     }
+
+    /**
+     * 批量根据 ID 查询书籍
+     * 用于避免 N+1 查询问题
+     */
+    fun findAllById(ids: List<Int>): List<Book> = transaction {
+        if (ids.isEmpty()) return@transaction emptyList()
+        
+        Books.selectAll()
+            .where { Books.id inList ids }
+            .map { toBook(it) }
+    }
     
     fun findByFilePath(filePath: String): Book? = transaction {
         Books.selectAll().where { Books.filePath eq filePath }

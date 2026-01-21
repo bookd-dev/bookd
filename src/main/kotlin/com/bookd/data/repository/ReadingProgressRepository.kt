@@ -29,6 +29,24 @@ class ReadingProgressRepository {
             .map { toResponse(it) }
     }
     
+    /**
+     * 批量查询多本书的阅读进度
+     * 用于优化书架书籍列表的 N+1 查询问题
+     * 
+     * @param userId 用户ID
+     * @param bookIds 书籍ID列表
+     * @return Map<bookId, ReadingProgressResponse>
+     */
+    fun findByUserAndBooks(userId: Int, bookIds: List<Int>): Map<Int, ReadingProgressResponse> = transaction {
+        if (bookIds.isEmpty()) return@transaction emptyMap()
+        
+        ReadingProgress.selectAll()
+            .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId inList bookIds) }
+            .associate { row ->
+                row[ReadingProgress.bookId].value to toResponse(row)
+            }
+    }
+    
     fun upsert(
         userId: Int,
         bookId: Int,
