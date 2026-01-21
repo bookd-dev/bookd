@@ -278,6 +278,34 @@ fun Route.bookshelfRoutes() {
                 }
             )
         }
+        
+        // 批量从多个书架移除书籍
+        delete {
+            val userId = call.getAuthenticatedUserId() ?: return@delete
+            val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
+            
+            val bookId = call.parameters["bookId"]?.toIntOrNull()
+            if (bookId == null) {
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
+                return@delete
+            }
+            
+            val request = call.receive<BatchRemoveFromBookshelvesRequest>()
+            val result = bookshelfService.batchRemoveBookFromBookshelves(userId, bookId, request.bookshelfIds)
+            
+            result.fold(
+                onSuccess = {
+                    call.respondNoContent()
+                },
+                onFailure = { e ->
+                    if (e is BookshelfException) {
+                        call.respondError(e.errorCode)
+                    } else {
+                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
+                    }
+                }
+            )
+        }
     }
 }
 

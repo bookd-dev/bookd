@@ -368,6 +368,57 @@ class BookshelfService(
     }
     
     /**
+     * 批量从多个书架移除书籍
+     * 
+     * 规则:
+     * 1. 幂等操作 - 如果书籍不在某个书架中,跳过该书架
+     * 2. 不能移除系统默认书架("全部")中的关联,如需完全移除请直接从"全部"书架移除
+     * 3. 移除后检查:如果书籍不在任何非系统书架中,自动从"全部"书架移除
+     */
+    fun batchRemoveBookFromBookshelves(userId: Int, bookId: Int, bookshelfIds: List<Int>): Result<Unit> {
+        // 验证书籍存在
+        val book = bookRepository.findById(bookId)
+            ?: return Result.failure(BookshelfException(ErrorCode.BOOK_NOT_FOUND))
+        
+        // 获取用户的默认书架
+        val defaultBookshelf = bookshelfRepository.getDefaultBookshelf(userId)
+        
+        // 逐个从书架移除
+        for (bookshelfId in bookshelfIds) {
+            // 获取书架信息
+            val bookshelf = bookshelfRepository.findById(bookshelfId) ?: continue
+            
+            // 验证所有权
+            if (bookshelf.userId != userId) continue
+            
+            // 跳过系统默认书架(从"全部"移除需要调用专门的接口)
+            if (bookshelf.isSystemDefault) {
+                logger.warn("批量移除时跳过系统书架, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
+                continue
+            }
+            
+            // 从书架移除(幂等操作,不存在也不报错)
+            bookshelfItemRepository.removeBook(bookshelfId, bookId)
+        }
+        
+        // 检查书籍是否还在任何非系统书架中
+        // 如果不在任何非系统书架中,自动从"全部"书架移除
+        if (defaultBookshelf != null) {
+            val remainingBookshelves = bookshelfItemRepository.findUserBookshelvesForBook(userId, bookId)
+            val hasNonSystemBookshelf = remainingBookshelves.any { !it.isSystemDefault }
+            
+            if (!hasNonSystemBookshelf) {
+                // 书籍不在任何非系统书架中,从"全部"书架移除
+                bookshelfItemRepository.removeBook(defaultBookshelf.id, bookId)
+                logger.info("书籍不在任何非系统书架中,已从全部书架移除, userId: $userId, bookId: $bookId")
+            }
+        }
+        
+        logger.info("批量从书架移除书籍成功, userId: $userId, bookId: $bookId, bookshelfIds: $bookshelfIds")
+        return Result.success(Unit)
+    }
+    
+    /**
      * 获取书籍所在的所有书架
      */
     fun getBookshelvesForBook(userId: Int, bookId: Int): List<Bookshelf> {

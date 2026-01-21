@@ -54,10 +54,26 @@ data class AddBookToBookshelfRequest(
 )
 
 /**
- * 批量添加书籍到多个书架请求
+ * 批量添加书籍到多个书架请求（旧版，保留兼容）
  */
 @Serializable
 data class AddToBookshelvesRequest(
+    val bookshelfIds: List<Int>
+)
+
+/**
+ * 批量添加书籍到多个书架请求
+ */
+@Serializable
+data class BatchAddToBookshelvesRequest(
+    val bookshelfIds: List<Int>
+)
+
+/**
+ * 批量从多个书架移除书籍请求
+ */
+@Serializable
+data class BatchRemoveFromBookshelvesRequest(
     val bookshelfIds: List<Int>
 )
 
