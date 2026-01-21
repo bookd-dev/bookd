@@ -2,7 +2,6 @@ package com.bookd.routes
 
 import com.bookd.domain.model.*
 import com.bookd.domain.service.UserService
-import com.bookd.domain.service.BookshelfService
 import com.bookd.extension.*
 import com.bookd.infrastructure.i18n.MessageBundle
 import io.ktor.http.*
@@ -10,29 +9,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.application.*
-import org.koin.java.KoinJavaComponent.get
-import org.slf4j.LoggerFactory
-
-private val logger = LoggerFactory.getLogger("AuthRoutes")
-
-/**
- * Initialize bookshelves for a newly created user
- * @param userId The ID of the user to initialize bookshelves for
- * @param isAdmin Whether this is an admin user (for error handling)
- */
-private fun initializeUserBookshelves(userId: Int, isAdmin: Boolean = false) {
-    try {
-        val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
-        bookshelfService.initializeUserBookshelves(userId)
-    } catch (e: Exception) {
-        if (isAdmin) {
-            logger.error("初始化管理员书架失败", e)
-            throw e
-        } else {
-            logger.warn("初始化用户书架失败: ${e.message}")
-        }
-    }
-}
 
 fun Route.authRoutes(userService: UserService) {
     route("/api/auth") {
@@ -52,10 +28,6 @@ fun Route.authRoutes(userService: UserService) {
 
             try {
                 val admin = userService.createFirstAdmin(request.username, request.password, request.email)
-                
-                // 初始化用户书架
-                initializeUserBookshelves(admin.id, isAdmin = true)
-                
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(admin.id, admin.username, admin.email, admin.role))
             } catch (e: Exception) {
                 call.respondError(ErrorCode.AUTH_SETUP_FAILED, e.message)
@@ -86,10 +58,6 @@ fun Route.authRoutes(userService: UserService) {
 
             try {
                 val user = userService.registerGuest(request.username, request.password, request.email)
-                
-                // 初始化用户书架
-                initializeUserBookshelves(user.id)
-                
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(user.id, user.username, user.email, user.role))
             } catch (e: Exception) {
                 call.respondError(ErrorCode.AUTH_USERNAME_EXISTS)
@@ -107,9 +75,6 @@ fun Route.authRoutes(userService: UserService) {
             val user = userService.registerUser(request.username, request.password, request.email, request.inviteToken)
 
             if (user != null) {
-                // 初始化用户书架
-                initializeUserBookshelves(user.id)
-                
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(user.id, user.username, user.email, user.role))
             } else {
                 call.respondError(ErrorCode.AUTH_INVALID_INVITE)
