@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
 /**
- * BookDetailService 单元测试
+ * 书籍详情服务单元测试
  * 
  * 测试重点：
  * 1. 成功聚合所有服务的数据
