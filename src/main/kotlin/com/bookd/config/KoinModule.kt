@@ -9,6 +9,8 @@ import com.bookd.data.repository.BookmarkRepository
 import com.bookd.data.repository.ReaderSettingsRepository
 import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.TxtParseRuleRepository
+import com.bookd.data.repository.BookshelfRepository
+import com.bookd.data.repository.BookshelfItemRepository
 import com.bookd.domain.service.BookMetadataService
 import com.bookd.domain.service.BookScanService
 import com.bookd.domain.service.BookService
@@ -20,6 +22,8 @@ import com.bookd.domain.service.ReadingService
 import com.bookd.domain.service.BookContentService
 import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.domain.service.BackgroundParseService
+import com.bookd.domain.service.BookshelfService
+import com.bookd.domain.service.BookDetailService
 import com.bookd.domain.service.parser.TxtParser
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
@@ -37,6 +41,8 @@ val appModule = module {
     single { ReaderSettingsRepository() }
     single { BookDocumentRepository() }
     single { TxtParseRuleRepository() }
+    single { BookshelfRepository() }
+    single { BookshelfItemRepository() }
     
     // Storage
     single { BookImageStorage() }
@@ -85,4 +91,6 @@ val appModule = module {
     single { TagService(get(), get()) }
     single { ReadingService(get(), get(), get()) }
     single { BackgroundParseService(get(), get()) }
+    single { BookshelfService(get(), get(), get()) }
+    single { BookDetailService(get(), get(), get(), get()) }
 }

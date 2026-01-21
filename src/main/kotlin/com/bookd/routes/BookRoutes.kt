@@ -5,6 +5,8 @@ import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.CoverGeneratorService
+import com.bookd.domain.service.BookDetailService
+import com.bookd.domain.service.UserService
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.service.BookContentService
 import com.bookd.extension.*
@@ -132,6 +134,47 @@ fun Route.bookRoutes() {
                 )
                 call.respondSuccess(bookWithFullUrls)
             }
+        }
+
+        // 获取书籍详情（包含标签、阅读进度、书架信息）- 需要认证
+        get("/{id}/detail") {
+            val userService = get<UserService>(UserService::class.java)
+            val bookDetailService = get<BookDetailService>(BookDetailService::class.java)
+            
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null) {
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
+                return@get
+            }
+            
+            // 获取当前用户
+            val token = call.request.header("Authorization")?.removePrefix("Bearer ")
+            if (token == null) {
+                call.respondError(ErrorCode.AUTH_NO_TOKEN)
+                return@get
+            }
+            
+            val user = userService.validateToken(token)
+            if (user == null) {
+                call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
+                return@get
+            }
+            
+            val bookDetail = bookDetailService.getBookDetail(id, user.id)
+            if (bookDetail == null) {
+                call.respondError(ErrorCode.BOOK_NOT_FOUND)
+                return@get
+            }
+            
+            // 构建完整的封面 URL
+            val baseUrl = call.buildBaseUrl()
+            val bookWithFullUrls = bookDetail.book.copy(
+                coverPath = bookDetail.book.coverPath?.let { path ->
+                    if (path.startsWith("http")) path else "$baseUrl$path"
+                }
+            )
+            
+            call.respondSuccess(bookDetail.copy(book = bookWithFullUrls))
         }
 
         // 获取书籍章节列表（仅目录项）
