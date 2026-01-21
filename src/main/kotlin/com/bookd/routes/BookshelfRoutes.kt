@@ -39,18 +39,9 @@ fun Route.bookshelfRoutes() {
             val request = call.receive<CreateBookshelfRequest>()
             val result = bookshelfService.createBookshelf(userId, request)
             
-            result.fold(
-                onSuccess = { bookshelf ->
-                    call.respondSuccess(HttpStatusCode.Created, bookshelf)
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) { bookshelf ->
+                respondSuccess(HttpStatusCode.Created, bookshelf)
+            }
         }
         
         // 调整书架顺序
@@ -61,18 +52,9 @@ fun Route.bookshelfRoutes() {
             val request = call.receive<ReorderBookshelvesRequest>()
             val result = bookshelfService.reorderBookshelves(userId, request)
             
-            result.fold(
-                onSuccess = {
-                    call.respondNoContent()
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) {
+                respondNoContent()
+            }
         }
         
         // 更新书架信息
@@ -89,18 +71,9 @@ fun Route.bookshelfRoutes() {
             val request = call.receive<UpdateBookshelfRequest>()
             val result = bookshelfService.updateBookshelf(userId, bookshelfId, request)
             
-            result.fold(
-                onSuccess = { bookshelf ->
-                    call.respondSuccess(bookshelf)
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) { bookshelf ->
+                respondSuccess(bookshelf)
+            }
         }
         
         // 删除书架
@@ -116,18 +89,9 @@ fun Route.bookshelfRoutes() {
             
             val result = bookshelfService.deleteBookshelf(userId, bookshelfId)
             
-            result.fold(
-                onSuccess = {
-                    call.respondNoContent()
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) {
+                respondNoContent()
+            }
         }
         
         // 获取书架中的书籍列表
@@ -146,29 +110,20 @@ fun Route.bookshelfRoutes() {
             
             val result = bookshelfService.getBooksInBookshelf(userId, bookshelfId, limit, offset)
             
-            result.fold(
-                onSuccess = { response ->
-                    // 拼接完整封面 URL
-                    val baseUrl = call.buildBaseUrl()
-                    val booksWithFullCoverUrl = response.books.map { bookWithProgress ->
-                        val book = bookWithProgress.book
-                        val fullCoverPath = book.coverPath?.let { path ->
-                            if (path.startsWith("http")) path else "$baseUrl$path"
-                        }
-                        bookWithProgress.copy(
-                            book = book.copy(coverPath = fullCoverPath)
-                        )
+            call.handleResult(result) { response ->
+                // 拼接完整封面 URL
+                val baseUrl = buildBaseUrl()
+                val booksWithFullCoverUrl = response.books.map { bookWithProgress ->
+                    val book = bookWithProgress.book
+                    val fullCoverPath = book.coverPath?.let { path ->
+                        if (path.startsWith("http")) path else "$baseUrl$path"
                     }
-                    call.respondSuccess(response.copy(books = booksWithFullCoverUrl))
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
+                    bookWithProgress.copy(
+                        book = book.copy(coverPath = fullCoverPath)
+                    )
                 }
-            )
+                respondSuccess(response.copy(books = booksWithFullCoverUrl))
+            }
         }
         
         // 添加书籍到书架
@@ -185,18 +140,9 @@ fun Route.bookshelfRoutes() {
             val request = call.receive<AddBookToBookshelfRequest>()
             val result = bookshelfService.addBookToBookshelf(userId, bookshelfId, request.bookId)
             
-            result.fold(
-                onSuccess = {
-                    call.respondNoContent()
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) {
+                respondNoContent()
+            }
         }
         
         // 从书架移除书籍
@@ -219,18 +165,9 @@ fun Route.bookshelfRoutes() {
             
             val result = bookshelfService.removeBookFromBookshelf(userId, bookshelfId, bookId)
             
-            result.fold(
-                onSuccess = {
-                    call.respondNoContent()
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) {
+                respondNoContent()
+            }
         }
     }
     
@@ -265,18 +202,9 @@ fun Route.bookshelfRoutes() {
             val request = call.receive<AddToBookshelvesRequest>()
             val result = bookshelfService.addBookToBookshelves(userId, bookId, request.bookshelfIds)
             
-            result.fold(
-                onSuccess = {
-                    call.respondNoContent()
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) {
+                respondNoContent()
+            }
         }
         
         // 批量从多个书架移除书籍
@@ -293,18 +221,9 @@ fun Route.bookshelfRoutes() {
             val request = call.receive<BatchRemoveFromBookshelvesRequest>()
             val result = bookshelfService.batchRemoveBookFromBookshelves(userId, bookId, request.bookshelfIds)
             
-            result.fold(
-                onSuccess = {
-                    call.respondNoContent()
-                },
-                onFailure = { e ->
-                    if (e is BookshelfException) {
-                        call.respondError(e.errorCode)
-                    } else {
-                        call.respondError(ErrorCode.GEN_INTERNAL_ERROR, e.message)
-                    }
-                }
-            )
+            call.handleResult(result) {
+                respondNoContent()
+            }
         }
     }
 }

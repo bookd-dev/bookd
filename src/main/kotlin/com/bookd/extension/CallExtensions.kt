@@ -231,3 +231,38 @@ suspend fun ApplicationCall.getAuthenticatedUserId(): Int? {
     
     return user.id
 }
+
+// ===== Result 处理 =====
+
+/**
+ * 处理 BookshelfException 及其他异常的通用错误处理器
+ * 
+ * 如果异常是 BookshelfException，则使用其 errorCode 响应错误
+ * 否则响应通用的内部服务器错误
+ */
+suspend fun ApplicationCall.handleBookshelfError(exception: Throwable) {
+    when (exception) {
+        is com.bookd.domain.service.BookshelfException -> {
+            respondError(exception.errorCode)
+        }
+        else -> {
+            respondError(ErrorCode.GEN_INTERNAL_ERROR, exception.message)
+        }
+    }
+}
+
+/**
+ * 处理 Result<T> 的成功和失败情况，使用 BookshelfException 处理器
+ * 
+ * @param result Result 对象
+ * @param onSuccess 成功时的处理逻辑
+ */
+suspend inline fun <reified T : Any> ApplicationCall.handleResult(
+    result: Result<T>,
+    crossinline onSuccess: suspend ApplicationCall.(T) -> Unit
+) {
+    result.fold(
+        onSuccess = { value -> onSuccess(value) },
+        onFailure = { exception -> handleBookshelfError(exception) }
+    )
+}
