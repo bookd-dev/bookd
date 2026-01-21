@@ -259,7 +259,12 @@ class BookshelfService(
         val sortedBookIds = sortedReadBooks + unreadBooks
         
         // 4. 应用分页
-        val pagedBookIds = sortedBookIds.drop(offset.toInt()).take(limit)
+        val safeOffset = when {
+            offset <= 0L -> 0
+            offset >= Int.MAX_VALUE.toLong() -> Int.MAX_VALUE
+            else -> offset.toInt()
+        }
+        val pagedBookIds = sortedBookIds.drop(safeOffset).take(limit)
         
         // 5. 获取完整的书籍信息（保持排序后的顺序）
         val bookMap = pagedBookIds.mapNotNull { bookId ->
