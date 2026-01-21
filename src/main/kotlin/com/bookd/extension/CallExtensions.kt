@@ -4,6 +4,7 @@ import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.model.ErrorResponse
 import com.bookd.domain.model.MessageResponse
 import com.bookd.domain.model.SuccessResponse
+import com.bookd.domain.service.BookshelfException
 import com.bookd.domain.service.UserService
 import com.bookd.infrastructure.i18n.I18nException
 import com.bookd.infrastructure.i18n.Message
@@ -242,7 +243,7 @@ suspend fun ApplicationCall.getAuthenticatedUserId(): Int? {
  */
 suspend fun ApplicationCall.handleBookshelfError(exception: Throwable) {
     when (exception) {
-        is com.bookd.domain.service.BookshelfException -> {
+        is BookshelfException -> {
             respondError(exception.errorCode)
         }
         else -> {

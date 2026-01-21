@@ -273,7 +273,6 @@ class BookshelfService(
         
         // 6. 组装带进度的书籍列表
         val booksWithProgress = books.map { book ->
-        val booksWithProgress = books.map { book ->
             BookWithProgress(
                 book = book,
                 progress = progressMap[book.id]

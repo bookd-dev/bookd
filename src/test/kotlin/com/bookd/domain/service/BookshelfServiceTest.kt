@@ -72,9 +72,7 @@ class BookshelfServiceTest {
             2 to progress2,
             3 to progress3
         )
-        every { bookRepository.findById(1) } returns book1
-        every { bookRepository.findById(2) } returns book2
-        every { bookRepository.findById(3) } returns book3
+        every { bookRepository.findAllById(listOf(2, 1, 3)) } returns listOf(book2, book1, book3)
         
         // When
         val result = bookshelfService.getBooksInBookshelf(userId, bookshelfId, 20, 0)
@@ -115,9 +113,7 @@ class BookshelfServiceTest {
             3 to progress3
             // book2 没有进度记录
         )
-        every { bookRepository.findById(1) } returns book1
-        every { bookRepository.findById(2) } returns book2
-        every { bookRepository.findById(3) } returns book3
+        every { bookRepository.findAllById(listOf(1, 3, 2)) } returns listOf(book1, book3, book2)
         
         // When
         val result = bookshelfService.getBooksInBookshelf(userId, bookshelfId, 20, 0)
@@ -149,9 +145,7 @@ class BookshelfServiceTest {
         every { bookshelfRepository.findById(bookshelfId) } returns bookshelf
         every { bookshelfItemRepository.findBookIdsByBookshelf(bookshelfId, Int.MAX_VALUE, 0) } returns bookIds
         every { readingProgressRepository.findByUserAndBooks(userId, bookIds) } returns emptyMap()
-        every { bookRepository.findById(1) } returns book1
-        every { bookRepository.findById(2) } returns book2
-        every { bookRepository.findById(3) } returns book3
+        every { bookRepository.findAllById(listOf(1, 2, 3)) } returns listOf(book1, book2, book3)
         
         // When
         val result = bookshelfService.getBooksInBookshelf(userId, bookshelfId, 20, 0)
@@ -185,9 +179,7 @@ class BookshelfServiceTest {
         every { bookshelfRepository.findById(bookshelfId) } returns bookshelf
         every { bookshelfItemRepository.findBookIdsByBookshelf(bookshelfId, Int.MAX_VALUE, 0) } returns bookIds
         every { readingProgressRepository.findByUserAndBooks(userId, bookIds) } returns progresses
-        books.forEach { book ->
-            every { bookRepository.findById(book.id) } returns book
-        }
+        every { bookRepository.findAllById(listOf(3, 4)) } returns listOf(books[2], books[3])
         
         // When: 请求第2页
         val result = bookshelfService.getBooksInBookshelf(userId, bookshelfId, limit = 2, offset = 2)
@@ -236,7 +228,7 @@ class BookshelfServiceTest {
         every { bookshelfRepository.findById(bookshelfId) } returns bookshelf
         every { bookshelfItemRepository.findBookIdsByBookshelf(bookshelfId, Int.MAX_VALUE, 0) } returns bookIds
         every { readingProgressRepository.findByUserAndBooks(userId, bookIds) } returns emptyMap()
-        every { bookRepository.findById(any()) } returns createBook(1, "Book")
+        every { bookRepository.findAllById(bookIds) } returns listOf(createBook(1, "Book"), createBook(2, "Book"), createBook(3, "Book"))
         
         // When
         bookshelfService.getBooksInBookshelf(userId, bookshelfId, 20, 0)
