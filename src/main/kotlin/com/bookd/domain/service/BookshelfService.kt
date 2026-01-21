@@ -355,16 +355,35 @@ class BookshelfService(
         val book = bookRepository.findById(bookId)
             ?: return Result.failure(BookshelfException(ErrorCode.BOOK_NOT_FOUND))
         
+        var anySuccess = false
+        var firstFailure: Throwable? = null
+
         // 逐个添加到书架
         for (bookshelfId in bookshelfIds) {
             val result = addBookToBookshelf(userId, bookshelfId, bookId)
             if (result.isFailure) {
                 // 如果某个书架添加失败(如不存在),继续处理其他书架
-                logger.warn("批量添加书籍失败, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
+                val throwable = result.exceptionOrNull()
+                if (firstFailure == null && throwable != null) {
+                    firstFailure = throwable
+                }
+                logger.warn(
+                    "批量添加书籍失败, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId",
+                    throwable
+                )
+            } else {
+                anySuccess = true
             }
         }
         
-        return Result.success(Unit)
+        return if (anySuccess) {
+            // 至少有一个书架添加成功, 视为整体操作成功
+            Result.success(Unit)
+        } else {
+            // 所有书架添加均失败, 将第一个失败原因返回给调用方
+            firstFailure?.let { Result.failure(it) }
+                ?: Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
     }
     
     /**
