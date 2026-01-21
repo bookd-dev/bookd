@@ -308,25 +308,3 @@ fun Route.bookshelfRoutes() {
         }
     }
 }
-
-/**
- * 获取当前认证用户的 ID
- * 如果未认证则返回 null 并自动响应错误
- */
-private suspend fun ApplicationCall.getAuthenticatedUserId(): Int? {
-    val userService = get<UserService>(UserService::class.java)
-    val token = request.header("Authorization")?.removePrefix("Bearer ")
-    
-    if (token == null) {
-        respondError(ErrorCode.AUTH_NO_TOKEN)
-        return null
-    }
-    
-    val user = userService.validateToken(token)
-    if (user == null) {
-        respondError(ErrorCode.AUTH_INVALID_TOKEN)
-        return null
-    }
-    
-    return user.id
-}
