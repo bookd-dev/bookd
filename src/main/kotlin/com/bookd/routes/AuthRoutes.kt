@@ -15,6 +15,25 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("AuthRoutes")
 
+/**
+ * Initialize bookshelves for a newly created user
+ * @param userId The ID of the user to initialize bookshelves for
+ * @param isAdmin Whether this is an admin user (for error handling)
+ */
+private fun initializeUserBookshelves(userId: Int, isAdmin: Boolean = false) {
+    try {
+        val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
+        bookshelfService.initializeUserBookshelves(userId)
+    } catch (e: Exception) {
+        if (isAdmin) {
+            logger.error("初始化管理员书架失败", e)
+            throw e
+        } else {
+            logger.warn("初始化用户书架失败: ${e.message}")
+        }
+    }
+}
+
 fun Route.authRoutes(userService: UserService) {
     route("/api/auth") {
         // Check if admin exists (for first-time setup)
@@ -35,13 +54,7 @@ fun Route.authRoutes(userService: UserService) {
                 val admin = userService.createFirstAdmin(request.username, request.password, request.email)
                 
                 // 初始化用户书架
-                try {
-                    val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
-                    bookshelfService.initializeUserBookshelves(admin.id)
-                } catch (e: Exception) {
-                    logger.error("初始化管理员书架失败", e)
-                    throw e
-                }
+                initializeUserBookshelves(admin.id, isAdmin = true)
                 
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(admin.id, admin.username, admin.email, admin.role))
             } catch (e: Exception) {
@@ -75,12 +88,7 @@ fun Route.authRoutes(userService: UserService) {
                 val user = userService.registerGuest(request.username, request.password, request.email)
                 
                 // 初始化用户书架
-                try {
-                    val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
-                    bookshelfService.initializeUserBookshelves(user.id)
-                } catch (e: Exception) {
-                    logger.warn("初始化访客书架失败: ${e.message}")
-                }
+                initializeUserBookshelves(user.id)
                 
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(user.id, user.username, user.email, user.role))
             } catch (e: Exception) {
@@ -100,12 +108,7 @@ fun Route.authRoutes(userService: UserService) {
 
             if (user != null) {
                 // 初始化用户书架
-                try {
-                    val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
-                    bookshelfService.initializeUserBookshelves(user.id)
-                } catch (e: Exception) {
-                    logger.warn("初始化用户书架失败: ${e.message}")
-                }
+                initializeUserBookshelves(user.id)
                 
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(user.id, user.username, user.email, user.role))
             } else {
