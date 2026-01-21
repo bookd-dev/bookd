@@ -29,6 +29,5 @@ fun Application.configureRouting() {
         webRoutes()
         readingRoutes()
         appRoutes()
-        bookshelfRoutes()
     }
 }
