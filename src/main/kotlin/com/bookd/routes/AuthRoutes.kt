@@ -39,7 +39,8 @@ fun Route.authRoutes(userService: UserService) {
                     val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
                     bookshelfService.initializeUserBookshelves(admin.id)
                 } catch (e: Exception) {
-                    logger.warn("初始化管理员书架失败: ${e.message}")
+                    logger.error("初始化管理员书架失败", e)
+                    throw e
                 }
                 
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(admin.id, admin.username, admin.email, admin.role))
