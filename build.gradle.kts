@@ -41,6 +41,7 @@ dependencies {
     implementation("io.ktor:ktor-server-call-logging")
     implementation("io.ktor:ktor-server-cors")
     implementation("io.ktor:ktor-server-config-yaml")
+    implementation("io.ktor:ktor-server-forwarded-header")
     
     // Database
     implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
@@ -69,7 +70,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("org.mindrot:jbcrypt:0.4")
-    
+
     // Testing
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
