@@ -55,7 +55,10 @@ class ReadingProgressRepository {
         totalPages: Int?,
         cfiLocation: String?,
         documentId: String?,
-        deviceId: String?
+        deviceId: String?,
+        chapterPageIndex: Int? = null,
+        chapterTotalPages: Int? = null,
+        chapterScrollPercent: Double? = null
     ): ReadingProgressResponse = transaction {
         val now = TimeProvider.now()
         
@@ -71,6 +74,9 @@ class ReadingProgressRepository {
                 if (cfiLocation != null) it[ReadingProgress.cfiLocation] = cfiLocation
                 if (documentId != null) it[ReadingProgress.documentId] = documentId
                 if (deviceId != null) it[ReadingProgress.deviceId] = deviceId
+                if (chapterPageIndex != null) it[ReadingProgress.chapterPageIndex] = chapterPageIndex
+                if (chapterTotalPages != null) it[ReadingProgress.chapterTotalPages] = chapterTotalPages
+                if (chapterScrollPercent != null) it[ReadingProgress.chapterScrollPercent] = BigDecimal.valueOf(chapterScrollPercent)
                 it[lastReadAt] = now
             }
         } else {
@@ -83,6 +89,9 @@ class ReadingProgressRepository {
                 it[ReadingProgress.cfiLocation] = cfiLocation
                 it[ReadingProgress.documentId] = documentId
                 it[ReadingProgress.deviceId] = deviceId
+                it[ReadingProgress.chapterPageIndex] = chapterPageIndex
+                it[ReadingProgress.chapterTotalPages] = chapterTotalPages
+                it[ReadingProgress.chapterScrollPercent] = chapterScrollPercent?.let { BigDecimal.valueOf(it) }
                 it[lastReadAt] = now
             }
         }
@@ -130,6 +139,9 @@ class ReadingProgressRepository {
         cfiLocation = row[ReadingProgress.cfiLocation],
         documentId = row[ReadingProgress.documentId],
         deviceId = row[ReadingProgress.deviceId],
-        lastReadAt = row[ReadingProgress.lastReadAt]
+        lastReadAt = row[ReadingProgress.lastReadAt],
+        chapterPageIndex = row[ReadingProgress.chapterPageIndex],
+        chapterTotalPages = row[ReadingProgress.chapterTotalPages],
+        chapterScrollPercent = row[ReadingProgress.chapterScrollPercent]?.toDouble()
     )
 }

@@ -25,7 +25,10 @@ class ReadingService(
             totalPages = dto.totalPages,
             cfiLocation = dto.cfiLocation,
             documentId = dto.documentId,
-            deviceId = dto.deviceId
+            deviceId = dto.deviceId,
+            chapterPageIndex = dto.chapterPageIndex,
+            chapterTotalPages = dto.chapterTotalPages,
+            chapterScrollPercent = dto.chapterScrollPercent
         )
     }
     
@@ -98,13 +101,12 @@ class ReadingService(
             letterSpacing = dto.letterSpacing,
             paragraphSpacing = dto.paragraphSpacing,
             textAlign = dto.textAlign,
-            theme = dto.theme,
-            backgroundColor = dto.backgroundColor,
-            textColor = dto.textColor,
             pageMode = dto.pageMode,
             brightness = dto.brightness,
             marginHorizontal = dto.marginHorizontal,
-            marginVertical = dto.marginVertical
+            marginVertical = dto.marginVertical,
+            firstLineIndent = dto.firstLineIndent,
+            pageAnimationType = dto.pageAnimationType
         )
     }
     
@@ -117,13 +119,12 @@ class ReadingService(
         letterSpacing: Double? = null,
         paragraphSpacing: Int? = null,
         textAlign: String? = null,
-        theme: String? = null,
-        backgroundColor: String? = null,
-        textColor: String? = null,
         pageMode: String? = null,
         brightness: Int? = null,
         marginHorizontal: Int? = null,
-        marginVertical: Int? = null
+        marginVertical: Int? = null,
+        firstLineIndent: Boolean? = null,
+        pageAnimationType: String? = null
     ): ReaderSettingsResponse {
         return readerSettingsRepository.upsert(
             userId = userId,
@@ -134,13 +135,12 @@ class ReadingService(
             letterSpacing = letterSpacing,
             paragraphSpacing = paragraphSpacing,
             textAlign = textAlign,
-            theme = theme,
-            backgroundColor = backgroundColor,
-            textColor = textColor,
             pageMode = pageMode,
             brightness = brightness,
             marginHorizontal = marginHorizontal,
-            marginVertical = marginVertical
+            marginVertical = marginVertical,
+            firstLineIndent = firstLineIndent,
+            pageAnimationType = pageAnimationType
         )
     }
 }

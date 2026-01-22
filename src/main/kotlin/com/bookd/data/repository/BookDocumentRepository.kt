@@ -16,6 +16,50 @@ class BookDocumentRepository {
     
     private val json = Json { ignoreUnknownKeys = true }
     
+    // 旧类型名称到新类型名称的映射
+    private val typeNameMigrations = mapOf(
+        "com.bookd.domain.model.ContentElement.Paragraph" to "paragraph",
+        "com.bookd.domain.model.ContentElement.Heading" to "heading",
+        "com.bookd.domain.model.ContentElement.Image" to "image",
+        "com.bookd.domain.model.ContentElement.Quote" to "quote",
+        "com.bookd.domain.model.ContentElement.Code" to "code",
+        "com.bookd.domain.model.ContentElement.ListBlock" to "listBlock",
+        "com.bookd.domain.model.ContentElement.Divider" to "divider",
+        "com.bookd.domain.model.ContentElement.Footnote" to "footnote"
+    )
+    
+    /**
+     * 迁移旧的 ContentElement type 格式
+     * 将完整类名替换为简短名称
+     * @return 迁移的记录数
+     */
+    fun migrateContentElementTypes(): Int = transaction {
+        var migratedCount = 0
+        
+        DocumentContents.selectAll().forEach { row ->
+            val documentId = row[DocumentContents.documentId]
+            var content = row[DocumentContents.content]
+            var needsUpdate = false
+            
+            // 检查并替换所有旧类型名称
+            for ((oldName, newName) in typeNameMigrations) {
+                if (content.contains(oldName)) {
+                    content = content.replace("\"type\":\"$oldName\"", "\"type\":\"$newName\"")
+                    needsUpdate = true
+                }
+            }
+            
+            if (needsUpdate) {
+                DocumentContents.update({ DocumentContents.documentId eq documentId }) {
+                    it[DocumentContents.content] = content
+                }
+                migratedCount++
+            }
+        }
+        
+        migratedCount
+    }
+    
     /**
      * 获取书籍的所有文档（spine 顺序）
      */

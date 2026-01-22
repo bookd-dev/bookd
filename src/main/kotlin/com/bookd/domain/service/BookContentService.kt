@@ -2,6 +2,7 @@ package com.bookd.domain.service
 
 import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookRepository
+import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.domain.model.*
 import com.bookd.domain.service.parser.*
 import com.bookd.infrastructure.cache.BookCacheService
@@ -16,6 +17,7 @@ import java.util.concurrent.Executors
 class BookContentService(
     private val bookRepository: BookRepository,
     private val documentRepository: BookDocumentRepository,
+    private val readingProgressRepository: ReadingProgressRepository,
     private val txtParser: TxtParser,
     private val imageStorage: BookImageStorage,
     private val cacheService: BookCacheService?
@@ -342,6 +344,103 @@ class BookContentService(
                 isbn = book.isbn
             )
         )
+    }
+    
+    /**
+     * 获取带阅读进度的书籍清单
+     * 根据用户的阅读进度，为每个目录项填充 readStatus 和 readProgress
+     * 
+     * @param bookId 书籍ID
+     * @param userId 用户ID
+     * @return 带阅读进度的 BookManifest，如果书籍不存在则返回 null
+     */
+    fun getBookManifestWithProgress(bookId: Int, userId: Int): BookManifest? {
+        val manifest = getBookManifest(bookId) ?: return null
+        val progress = readingProgressRepository.findByUserAndBook(userId, bookId)
+        
+        // 如果没有阅读进度，直接返回原始清单
+        if (progress == null) {
+            return manifest
+        }
+        
+        val enrichedToc = enrichTocWithProgress(manifest.toc, progress)
+        return manifest.copy(toc = enrichedToc)
+    }
+    
+    /**
+     * 为目录项填充阅读状态和进度
+     * 
+     * 逻辑：
+     * - 当前阅读的章节 (currentPage == index)：状态为 "reading"，进度根据 chapterPageIndex/chapterScrollPercent 计算
+     * - 已跳过的章节 (index < currentPage)：状态为 "read"，进度 100%
+     * - 未读章节 (index > currentPage)：状态为 "unread"，进度 0%
+     */
+    private fun enrichTocWithProgress(
+        toc: List<TocItem>,
+        progress: ReadingProgressResponse
+    ): List<TocItem> {
+        val currentChapterIndex = progress.currentPage // currentPage 存储的是当前章节 index
+        
+        return toc.map { item ->
+            // 递归处理子目录
+            val enrichedChildren = enrichTocWithProgress(item.children, progress)
+            
+            when {
+                item.index == currentChapterIndex -> {
+                    // 当前正在阅读的章节
+                    val chapterProgress = calculateChapterProgress(progress)
+                    item.copy(
+                        readStatus = "reading",
+                        readProgress = chapterProgress,
+                        children = enrichedChildren
+                    )
+                }
+                item.index < currentChapterIndex -> {
+                    // 已经读过（或跳过）的章节
+                    item.copy(
+                        readStatus = "read",
+                        readProgress = 1.0,
+                        children = enrichedChildren
+                    )
+                }
+                else -> {
+                    // 还未读的章节
+                    item.copy(
+                        readStatus = "unread",
+                        readProgress = 0.0,
+                        children = enrichedChildren
+                    )
+                }
+            }
+        }
+    }
+    
+    /**
+     * 计算章节内的阅读进度
+     * 
+     * 优先使用页面模式的进度（chapterPageIndex / chapterTotalPages）
+     * 如果没有则使用滚动模式的进度（chapterScrollPercent）
+     * 
+     * @return 0.0-1.0 的进度值
+     */
+    private fun calculateChapterProgress(progress: ReadingProgressResponse): Double {
+        // 页面模式：使用 chapterPageIndex / chapterTotalPages
+        val totalPages = progress.chapterTotalPages
+        if (totalPages != null && totalPages > 0) {
+            val pageIndex = progress.chapterPageIndex ?: 0
+            // pageIndex 从 0 开始，当前页为 pageIndex，已读完 pageIndex 页
+            // 进度 = (pageIndex + 1) / totalPages
+            return ((pageIndex + 1).toDouble() / totalPages).coerceIn(0.0, 1.0)
+        }
+        
+        // 滚动模式：直接使用 chapterScrollPercent
+        val scrollPercent = progress.chapterScrollPercent
+        if (scrollPercent != null) {
+            return scrollPercent.coerceIn(0.0, 1.0)
+        }
+        
+        // 如果都没有，返回 0
+        return 0.0
     }
     
     /**

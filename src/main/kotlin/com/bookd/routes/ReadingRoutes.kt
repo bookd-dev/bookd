@@ -32,13 +32,12 @@ data class ReaderSettingsPatchRequest(
     val letterSpacing: Double? = null,
     val paragraphSpacing: Int? = null,
     val textAlign: String? = null,
-    val theme: String? = null,
-    val backgroundColor: String? = null,
-    val textColor: String? = null,
     val pageMode: String? = null,
     val brightness: Int? = null,
     val marginHorizontal: Int? = null,
-    val marginVertical: Int? = null
+    val marginVertical: Int? = null,
+    val firstLineIndent: Boolean? = null,
+    val pageAnimationType: String? = null
 )
 
 fun Route.readingRoutes() {
@@ -193,13 +192,12 @@ fun Route.readingRoutes() {
                 letterSpacing = request.letterSpacing,
                 paragraphSpacing = request.paragraphSpacing,
                 textAlign = request.textAlign,
-                theme = request.theme,
-                backgroundColor = request.backgroundColor,
-                textColor = request.textColor,
                 pageMode = request.pageMode,
                 brightness = request.brightness,
                 marginHorizontal = request.marginHorizontal,
-                marginVertical = request.marginVertical
+                marginVertical = request.marginVertical,
+                firstLineIndent = request.firstLineIndent,
+                pageAnimationType = request.pageAnimationType
             )
             call.respondSuccess(settings)
         }

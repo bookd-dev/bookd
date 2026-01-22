@@ -85,7 +85,7 @@ val appModule = module {
     single { CoverGeneratorService(get()) }
     single { TxtParseRuleService(get()) }
     single { TxtParser(get()) }
-    single { BookContentService(get(), get(), get(), get(), getOrNull<BookCacheService>()) }
+    single { BookContentService(get(), get(), get(), get(), get(), getOrNull<BookCacheService>()) }
     single { BookMetadataService(get(), get(), get()) }
     single { BookScanService(get(), get(), get(), get()) }
     single { TagService(get(), get()) }

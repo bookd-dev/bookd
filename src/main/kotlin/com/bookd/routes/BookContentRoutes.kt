@@ -30,6 +30,25 @@ fun Route.bookContentRoutes() {
                 call.respondSuccess(manifest)
             }
         }
+        
+        // 获取带阅读进度的书籍清单（需要认证）
+        get("/manifest-with-progress") {
+            val contentService = get<BookContentService>(BookContentService::class.java)
+            val bookId = call.parameters["id"]?.toIntOrNull()
+            val userId = call.getAuthenticatedUserId() ?: return@get
+            
+            if (bookId == null) {
+                call.respondError(ErrorCode.BOOK_INVALID_ID)
+                return@get
+            }
+            
+            val manifest = contentService.getBookManifestWithProgress(bookId, userId)
+            if (manifest == null) {
+                call.respondError(ErrorCode.BOOK_MANIFEST_NOT_FOUND)
+            } else {
+                call.respondSuccess(manifest)
+            }
+        }
 
         // 重新解析书籍内容
         post("/reparse") {

@@ -1,6 +1,9 @@
 package com.bookd.domain.model
 
 import kotlinx.datetime.LocalDateTime
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -34,6 +37,7 @@ data class BookManifest(
     val metadata: BookMetadata?
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class TocItem(
     val index: Int,
@@ -41,7 +45,9 @@ data class TocItem(
     val level: Int = 0,
     val wordCount: Int = 0,
     val imageCount: Int = 0,
-    val children: List<TocItem> = emptyList()
+    val children: List<TocItem> = emptyList(),
+    @EncodeDefault val readStatus: String = "unread",  // "unread" | "reading" | "read"
+    @EncodeDefault val readProgress: Double = 0.0      // 0.0-1.0，章节阅读进度
 )
 
 @Serializable
@@ -66,17 +72,20 @@ data class ChapterContent(
 sealed class ContentElement {
     
     @Serializable
+    @SerialName("paragraph")
     data class Paragraph(
         val spans: List<TextSpan>
     ) : ContentElement()
     
     @Serializable
+    @SerialName("heading")
     data class Heading(
         val level: Int,
         val text: String
     ) : ContentElement()
     
     @Serializable
+    @SerialName("image")
     data class Image(
         val src: String,
         val alt: String? = null,
@@ -85,26 +94,31 @@ sealed class ContentElement {
     ) : ContentElement()
     
     @Serializable
+    @SerialName("quote")
     data class Quote(
         val spans: List<TextSpan>
     ) : ContentElement()
     
     @Serializable
+    @SerialName("code")
     data class Code(
         val text: String,
         val language: String? = null
     ) : ContentElement()
     
     @Serializable
+    @SerialName("listBlock")
     data class ListBlock(
         val ordered: Boolean,
         val items: List<ListItem>
     ) : ContentElement()
     
     @Serializable
+    @SerialName("divider")
     data object Divider : ContentElement()
     
     @Serializable
+    @SerialName("footnote")
     data class Footnote(
         val id: String,
         val spans: List<TextSpan>

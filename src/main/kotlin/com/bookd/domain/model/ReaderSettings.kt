@@ -12,13 +12,12 @@ data class ReaderSettingsDTO(
     val letterSpacing: Double = 0.0,
     val paragraphSpacing: Int = 16,
     val textAlign: String = "justify",
-    val theme: String = "light",
-    val backgroundColor: String = "#FFFFFF",
-    val textColor: String = "#333333",
     val pageMode: String = "scroll",
     val brightness: Int = 100,
     val marginHorizontal: Int = 20,
-    val marginVertical: Int = 40
+    val marginVertical: Int = 40,
+    val firstLineIndent: Boolean = true,
+    val pageAnimationType: String = "native"
 )
 
 @Serializable
@@ -32,12 +31,11 @@ data class ReaderSettingsResponse(
     val letterSpacing: Double,
     val paragraphSpacing: Int,
     val textAlign: String,
-    val theme: String,
-    val backgroundColor: String,
-    val textColor: String,
     val pageMode: String,
     val brightness: Int,
     val marginHorizontal: Int,
     val marginVertical: Int,
+    val firstLineIndent: Boolean,
+    val pageAnimationType: String,
     val updatedAt: LocalDateTime
 )

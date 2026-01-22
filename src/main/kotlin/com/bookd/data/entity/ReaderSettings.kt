@@ -18,18 +18,17 @@ object ReaderSettings : IntIdTable("reader_settings") {
     val paragraphSpacing = integer("paragraph_spacing").default(16)
     val textAlign = varchar("text_align", 20).default("justify")
     
-    // 主题设置
-    val theme = varchar("theme", 20).default("light")
-    val backgroundColor = varchar("background_color", 20).default("#FFFFFF")
-    val textColor = varchar("text_color", 20).default("#333333")
-    
     // 阅读模式
     val pageMode = varchar("page_mode", 20).default("scroll")
     val brightness = integer("brightness").default(100)
+    val pageAnimationType = varchar("page_animation_type", 20).default("native")
     
     // 边距
     val marginHorizontal = integer("margin_horizontal").default(20)
     val marginVertical = integer("margin_vertical").default(40)
+    
+    // 首行缩进
+    val firstLineIndent = bool("first_line_indent").default(true)
     
     val updatedAt = datetime("updated_at")
 }
