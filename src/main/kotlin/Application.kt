@@ -5,12 +5,11 @@ import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.plugins.*
 import io.ktor.server.application.*
-import io.ktor.server.netty.EngineMain
+import io.ktor.server.netty.*
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.koin.ktor.ext.inject
-import java.io.File
 
 fun main(args: Array<String>) {
     EngineMain.main(args)
