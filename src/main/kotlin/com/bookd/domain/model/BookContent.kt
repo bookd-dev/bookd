@@ -121,8 +121,13 @@ sealed class ContentElement {
     @Serializable
     @SerialName("footnote")
     data class Footnote(
-        val id: String,
-        val spans: List<TextSpan>
+        val footnoteId: String,
+        val footnoteImage: String? = null,  // 脚注图片 URL
+        val footnoteSpan: TextSpan? = null,  // 脚注图片对应的文本（如果有）
+        val width: Int? = null,  // 图片宽度
+        val height: Int? = null,  // 图片高度
+        val aspectRatio: Double? = null,  // 宽高比 (width / height)
+        val contentSpans: List<TextSpan>  // 脚注内容文本
     ) : ContentElement()
 }
 
@@ -131,8 +136,7 @@ data class TextSpan(
     val text: String,
     val styles: List<TextStyle> = emptyList(),
     val link: String? = null,
-    val footnoteId: String? = null,  // 脚注引用 ID
-    val footnoteImage: String? = null  // 脚注原始图片路径
+    val footnoteId: String? = null  // 脚注引用 ID（引用对应的 Footnote）
 )
 
 @Serializable

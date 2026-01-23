@@ -521,26 +521,47 @@ class BookContentService(
                 })
             }
             is ContentElement.Footnote -> {
-                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+                // 转换脚注内容文本
+                val transformedContentSpans = element.contentSpans.map { transformSpan(it, bookId, baseUrl) }
+                
+                // 转换脚注图片路径和尺寸
+                if (element.footnoteImage != null) {
+                    val resource = documentRepository.findResource(bookId, element.footnoteImage)
+                    if (resource != null) {
+                        val imagePath = "/book_images/${resource.storedPath}"
+                        val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+                        
+                        // 计算宽高比
+                        val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
+                            resource.width.toDouble() / resource.height
+                        } else {
+                            null
+                        }
+                        
+                        element.copy(
+                            footnoteImage = fullPath,
+                            width = resource.width,
+                            height = resource.height,
+                            aspectRatio = aspectRatio,
+                            contentSpans = transformedContentSpans
+                        )
+                    } else {
+                        element.copy(contentSpans = transformedContentSpans)
+                    }
+                } else {
+                    element.copy(contentSpans = transformedContentSpans)
+                }
             }
             else -> element
         }
     }
     
     /**
-     * 转换 TextSpan 中的 footnoteImage 路径为完整 URL
+     * 转换 TextSpan（目前只是占位符，未来可能需要转换其他属性）
      */
     private fun transformSpan(span: TextSpan, bookId: Int, baseUrl: String?): TextSpan {
-        if (span.footnoteImage == null) return span
-        
-        val resource = documentRepository.findResource(bookId, span.footnoteImage)
-        return if (resource != null) {
-            val imagePath = "/book_images/${resource.storedPath}"
-            val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-            span.copy(footnoteImage = fullPath)
-        } else {
-            span
-        }
+        // TextSpan 不再包含 footnoteImage，直接返回
+        return span
     }
     
     /**

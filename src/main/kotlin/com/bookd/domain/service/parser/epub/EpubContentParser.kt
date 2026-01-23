@@ -33,11 +33,39 @@ class EpubContentParser(
             body.children().forEach { element ->
                 parseElement(element, elements, chapterHref)
             }
+            
+            // 获取所有脚注引用信息
+            val footnoteRefs = inlineParser.getFootnoteReferences()
+            
+            // 遍历 elements，找到所有 Footnote 并填充图片信息
+            enrichFootnotesWithImages(elements, footnoteRefs)
         } catch (e: Exception) {
             logger.error("Failed to parse HTML to elements", e)
         }
         
         return elements
+    }
+    
+    /**
+     * 为脚注元素填充图片信息和序号
+     */
+    private fun enrichFootnotesWithImages(
+        elements: MutableList<ContentElement>,
+        footnoteRefs: Map<String, FootnoteReference>
+    ) {
+        for (i in elements.indices) {
+            val element = elements[i]
+            if (element is ContentElement.Footnote) {
+                val ref = footnoteRefs[element.footnoteId]
+                if (ref != null) {
+                    // footnoteSpan 始终使用序号标记 [1], [2], [3]...
+                    elements[i] = element.copy(
+                        footnoteImage = ref.footnoteImage,
+                        footnoteSpan = TextSpan(text = "[${ref.footnoteIndex}]", styles = listOf())
+                    )
+                }
+            }
+        }
     }
     
     /**
@@ -91,7 +119,10 @@ class EpubContentParser(
         if (footnoteId != null) {
             val spans = inlineParser.parse(element, chapterHref)
             if (spans.isNotEmpty()) {
-                elements.add(ContentElement.Footnote(footnoteId, spans))
+                elements.add(ContentElement.Footnote(
+                    footnoteId = footnoteId,
+                    contentSpans = spans
+                ))
             }
             return
         }
@@ -200,7 +231,10 @@ class EpubContentParser(
                 if (id.isNotEmpty()) {
                     val spans = inlineParser.parse(li, chapterHref)
                     if (spans.isNotEmpty()) {
-                        elements.add(ContentElement.Footnote(id, spans))
+                        elements.add(ContentElement.Footnote(
+                            footnoteId = id,
+                            contentSpans = spans
+                        ))
                     }
                 }
             }
@@ -210,7 +244,10 @@ class EpubContentParser(
             if (id.isNotEmpty()) {
                 val spans = inlineParser.parse(container, chapterHref)
                 if (spans.isNotEmpty()) {
-                    elements.add(ContentElement.Footnote(id, spans))
+                    elements.add(ContentElement.Footnote(
+                        footnoteId = id,
+                        contentSpans = spans
+                    ))
                 }
             }
         }
@@ -239,7 +276,10 @@ class EpubContentParser(
         if (footnoteId != null) {
             val spans = inlineParser.parse(element, chapterHref)
             if (spans.isNotEmpty()) {
-                elements.add(ContentElement.Footnote(footnoteId, spans))
+                elements.add(ContentElement.Footnote(
+                    footnoteId = footnoteId,
+                    contentSpans = spans
+                ))
             }
             return
         }

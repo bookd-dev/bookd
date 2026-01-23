@@ -6,6 +6,15 @@ import org.jsoup.nodes.Element
 import org.jsoup.nodes.TextNode
 
 /**
+ * 脚注引用信息
+ */
+data class FootnoteReference(
+    val footnoteId: String,
+    val footnoteImage: String?,  // 正规化后的图片路径
+    val footnoteIndex: Int  // 脚注序号（1, 2, 3...）
+)
+
+/**
  * 行内元素解析器
  * 负责将 HTML 行内元素解析为 TextSpan 列表
  */
@@ -14,11 +23,22 @@ class InlineParser {
     // 脚注计数器，用于生成默认脚注标记 [1], [2], [3]...
     private var footnoteCounter = 0
     
+    // 脚注引用信息映射 (footnoteId -> FootnoteReference)
+    private val footnoteReferences = mutableMapOf<String, FootnoteReference>()
+    
     /**
      * 重置脚注计数器（每章开始时调用）
      */
     fun resetFootnoteCounter() {
         footnoteCounter = 0
+        footnoteReferences.clear()
+    }
+    
+    /**
+     * 获取收集到的脚注引用信息
+     */
+    fun getFootnoteReferences(): Map<String, FootnoteReference> {
+        return footnoteReferences.toMap()
     }
     
     /**
@@ -55,14 +75,25 @@ class InlineParser {
             val footnoteId = FootnoteParser.extractFootnoteId(node)
             if (footnoteId != null) {
                 val footnoteImage = FootnoteParser.extractFootnoteImage(node, chapterHref)
-                // 保留原始脚注标记文本（如 [1]、*、† 等），若为空则生成序号标记
-                val originalText = node.text().trim().takeIf { it.isNotEmpty() }
-                    ?: "[${++footnoteCounter}]"
-                spans.add(TextSpan(
-                    text = originalText,
-                    styles = listOf(TextStyle.BOLD),
+                
+                // 递增脚注计数器并生成序号标记
+                val footnoteIndex = ++footnoteCounter
+                val indexText = "[$footnoteIndex]"
+                
+                // 如果原文有文本（不是纯图片），使用原文；否则使用序号
+                val displayText = node.text().trim().takeIf { it.isNotEmpty() } ?: indexText
+                
+                // 记录脚注引用信息（始终使用序号，不管原文显示什么）
+                footnoteReferences[footnoteId] = FootnoteReference(
                     footnoteId = footnoteId,
-                    footnoteImage = footnoteImage
+                    footnoteImage = footnoteImage,
+                    footnoteIndex = footnoteIndex
+                )
+                
+                spans.add(TextSpan(
+                    text = displayText,
+                    styles = listOf(TextStyle.BOLD),
+                    footnoteId = footnoteId
                 ))
             }
             return
