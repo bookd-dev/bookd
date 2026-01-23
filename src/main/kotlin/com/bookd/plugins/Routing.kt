@@ -30,5 +30,6 @@ fun Application.configureRouting() {
         readingRoutes()
         appRoutes()
         bookshelfRoutes()
+        adminRoutes()
     }
 }

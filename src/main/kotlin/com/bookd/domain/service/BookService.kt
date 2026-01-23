@@ -62,16 +62,30 @@ class BookService(
         val documents = documentRepository.findByBookId(book.id)
         
         if (documents.isEmpty()) {
-            return book
+            // 计算封面宽高比
+            val coverAspectRatio = if (book.coverWidth != null && book.coverHeight != null && book.coverHeight > 0) {
+                book.coverWidth.toDouble() / book.coverHeight
+            } else {
+                null
+            }
+            return book.copy(coverAspectRatio = coverAspectRatio)
         }
         
         val totalWordCount = documents.sumOf { it.wordCount }
         val totalImageCount = documents.sumOf { it.imageCount }
         
+        // 计算封面宽高比
+        val coverAspectRatio = if (book.coverWidth != null && book.coverHeight != null && book.coverHeight > 0) {
+            book.coverWidth.toDouble() / book.coverHeight
+        } else {
+            null
+        }
+        
         return book.copy(
             chapterCount = documents.count { it.inToc }, // 只统计目录项
             totalWordCount = totalWordCount,
-            totalImageCount = totalImageCount
+            totalImageCount = totalImageCount,
+            coverAspectRatio = coverAspectRatio
         )
     }
 }

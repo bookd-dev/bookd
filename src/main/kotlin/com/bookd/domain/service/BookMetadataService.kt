@@ -72,7 +72,8 @@ class BookMetadataService(
                 if (coverPath == null) {
                     logger.info("No cover found for book ID: $bookId, generating text-based cover")
                     val bookTitle = metadata.title ?: "Unknown"
-                    coverPath = coverGeneratorService.generateCover(bookId, bookTitle, metadata.author)
+                    val result = coverGeneratorService.generateCover(bookId, bookTitle, metadata.author)
+                    coverPath = result?.first
                     if (coverPath != null) {
                         logger.info("Generated text-based cover for book ID: $bookId")
                     }

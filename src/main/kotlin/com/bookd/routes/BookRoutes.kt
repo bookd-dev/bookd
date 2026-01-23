@@ -266,6 +266,8 @@ fun Route.bookRoutes() {
 
             var coverPath: String? = null
             var uploadError: String? = null
+            var coverWidth: Int? = null
+            var coverHeight: Int? = null
 
             try {
                 val multipart = call.receiveMultipart()
@@ -277,10 +279,17 @@ fun Route.bookRoutes() {
                                     val fileBytes = part.provider().toInputStream().readBytes()
                                     val ext = part.originalFileName?.substringAfterLast('.') ?: "jpg"
 
+                                    // 提取封面尺寸
+                                    val dimensions = imageStorage.extractImageDimensions(fileBytes)
+                                    if (dimensions != null) {
+                                        coverWidth = dimensions.first
+                                        coverHeight = dimensions.second
+                                    }
+
                                     // 使用 BookImageStorage 保存封面
                                     coverPath = imageStorage.saveCover(id, "cover.$ext", fileBytes, isGenerated = false)
 
-                                    logger.info("Uploaded cover for book $id: $coverPath")
+                                    logger.info("Uploaded cover for book $id: $coverPath (${coverWidth}x${coverHeight})")
                                 } catch (e: Exception) {
                                     uploadError = e.message
                                     logger.error("Error saving cover for book $id", e)
@@ -298,7 +307,7 @@ fun Route.bookRoutes() {
 
             val finalCoverPath = coverPath
             if (finalCoverPath != null) {
-                bookRepository.updateMetadata(id, coverPath = finalCoverPath)
+                bookRepository.updateCoverPath(id, finalCoverPath, coverWidth, coverHeight)
                 call.respondSuccess(CoverUploadResponse(success = true, coverPath = finalCoverPath))
             } else {
                 if (uploadError != null) {
@@ -325,10 +334,13 @@ fun Route.bookRoutes() {
                 return@post
             }
 
-            val generatedCoverPath = coverGenerator.generateCover(id, book.title, book.author)
-            if (generatedCoverPath != null) {
-                // Update book with generated cover path
-                bookRepository.updateMetadata(id, coverPath = generatedCoverPath)
+            val result = coverGenerator.generateCover(id, book.title, book.author)
+            if (result != null) {
+                val (generatedCoverPath, dimensions) = result
+                val (width, height) = dimensions
+                
+                // Update book with generated cover path and dimensions
+                bookRepository.updateCoverPath(id, generatedCoverPath, width, height)
                 call.respondSuccess(CoverGenerateResponse(success = true, coverPath = generatedCoverPath))
             } else {
                 call.respondError(ErrorCode.BOOK_COVER_GENERATION_FAILED)

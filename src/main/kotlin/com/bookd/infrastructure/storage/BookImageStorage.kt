@@ -3,6 +3,8 @@ package com.bookd.infrastructure.storage
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.security.MessageDigest
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 
 /**
  * 书籍图片存储服务
@@ -175,6 +177,40 @@ class BookImageStorage(
             "svg" -> "image/svg+xml"
             "bmp" -> "image/bmp"
             else -> "application/octet-stream"
+        }
+    }
+    
+    /**
+     * 从图片数据中提取尺寸信息
+     * @param imageData 图片二进制数据
+     * @return Pair<width, height> 或 null（无法读取或非位图格式，如 SVG）
+     */
+    fun extractImageDimensions(imageData: ByteArray): Pair<Int, Int>? {
+        return try {
+            val inputStream = imageData.inputStream()
+            val image: BufferedImage = ImageIO.read(inputStream) ?: return null
+            Pair(image.width, image.height)
+        } catch (e: Exception) {
+            logger.debug("Failed to extract image dimensions (possibly SVG or unsupported format)", e)
+            null
+        }
+    }
+    
+    /**
+     * 从已存储的图片文件中提取尺寸信息
+     * @param relativePath 相对路径，格式: {bookId}/{filename} 或 covers/{filename}
+     * @return Pair<width, height> 或 null
+     */
+    fun extractImageDimensionsFromFile(relativePath: String): Pair<Int, Int>? {
+        return try {
+            val file = File(baseDir, relativePath)
+            if (!file.exists() || !file.isFile) return null
+            
+            val image: BufferedImage = ImageIO.read(file) ?: return null
+            Pair(image.width, image.height)
+        } catch (e: Exception) {
+            logger.debug("Failed to extract image dimensions from file: $relativePath", e)
+            null
         }
     }
 }

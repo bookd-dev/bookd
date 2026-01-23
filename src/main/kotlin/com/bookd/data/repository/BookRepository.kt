@@ -106,6 +106,8 @@ class BookRepository {
         format = row[Books.format],
         filePath = row[Books.filePath],
         coverPath = row[Books.coverPath],
+        coverWidth = row[Books.coverWidth],
+        coverHeight = row[Books.coverHeight],
         fileSize = row[Books.fileSize],
         isbn = row[Books.isbn],
         publisher = row[Books.publisher],
@@ -153,6 +155,19 @@ class BookRepository {
             if (isbn != null) it[Books.isbn] = isbn
             if (publisher != null) it[Books.publisher] = publisher
             if (description != null) it[Books.description] = description
+            it[updatedAt] = now
+        }
+    }
+    
+    /**
+     * 更新书籍封面路径和尺寸
+     */
+    fun updateCoverPath(bookId: Int, coverPath: String?, width: Int? = null, height: Int? = null): Int = transaction {
+        val now = TimeProvider.now()
+        Books.update({ Books.id eq bookId }) {
+            it[Books.coverPath] = coverPath
+            it[coverWidth] = width
+            it[coverHeight] = height
             it[updatedAt] = now
         }
     }

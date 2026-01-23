@@ -12,6 +12,9 @@ data class Book(
     val filePath: String,
     val fileSize: Long,
     val coverPath: String? = null,
+    val coverWidth: Int? = null,         // 封面宽度
+    val coverHeight: Int? = null,        // 封面高度
+    val coverAspectRatio: Double? = null, // 封面宽高比（由 Service 层计算）
     val isbn: String? = null,
     val publisher: String? = null,
     val description: String? = null,

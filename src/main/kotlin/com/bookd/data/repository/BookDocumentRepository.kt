@@ -177,12 +177,17 @@ class BookDocumentRepository {
     
     // === Resource Operations ===
     
+    /**
+     * 保存书籍资源（图片），包含宽高信息
+     */
     fun saveResource(
         bookId: Int,
         path: String,
         storedPath: String,
         mediaType: String,
-        size: Long
+        size: Long,
+        width: Int? = null,
+        height: Int? = null
     ) = transaction {
         DocumentResources.insert {
             it[DocumentResources.bookId] = bookId
@@ -190,13 +195,26 @@ class BookDocumentRepository {
             it[DocumentResources.storedPath] = storedPath
             it[DocumentResources.mediaType] = mediaType
             it[DocumentResources.size] = size
+            it[DocumentResources.width] = width
+            it[DocumentResources.height] = height
         }
     }
     
-    fun findResource(bookId: Int, path: String): Pair<String, String>? = transaction {
+    /**
+     * 查找资源，返回包含宽高的信息
+     * @return ResourceInfo 或 null
+     */
+    fun findResource(bookId: Int, path: String): ResourceInfo? = transaction {
         DocumentResources.selectAll()
             .where { (DocumentResources.bookId eq bookId) and (DocumentResources.path eq path) }
-            .map { it[DocumentResources.storedPath] to it[DocumentResources.mediaType] }
+            .map { 
+                ResourceInfo(
+                    storedPath = it[DocumentResources.storedPath],
+                    mediaType = it[DocumentResources.mediaType],
+                    width = it[DocumentResources.width],
+                    height = it[DocumentResources.height]
+                )
+            }
             .singleOrNull()
     }
     
@@ -218,3 +236,13 @@ class BookDocumentRepository {
         updatedAt = row[BookDocuments.updatedAt]
     )
 }
+
+/**
+ * 资源信息数据类
+ */
+data class ResourceInfo(
+    val storedPath: String,
+    val mediaType: String,
+    val width: Int?,
+    val height: Int?
+)

@@ -90,7 +90,8 @@ sealed class ContentElement {
         val src: String,
         val alt: String? = null,
         val width: Int? = null,
-        val height: Int? = null
+        val height: Int? = null,
+        val aspectRatio: Double? = null  // 宽高比 (width / height)
     ) : ContentElement()
     
     @Serializable

@@ -294,16 +294,26 @@ class BookContentService(
                 val extension = path.substringAfterLast(".")
                 val mediaType = imageStorage.detectMediaType(extension)
                 
+                // 提取图片尺寸
+                val dimensions = imageStorage.extractImageDimensions(bytes)
+                val (width, height) = dimensions ?: (null to null)
+                
                 // 保存到数据库，记录原始路径和存储路径的映射
                 documentRepository.saveResource(
                     bookId = bookId,
                     path = path,
                     storedPath = storedPath,  // 存储相对路径，如 "14/abc123.jpg"
                     mediaType = mediaType,
-                    size = bytes.size.toLong()
+                    size = bytes.size.toLong(),
+                    width = width,
+                    height = height
                 )
                 
-                logger.debug("Saved resource: $path -> $storedPath")
+                if (width != null && height != null) {
+                    logger.debug("Saved resource: $path -> $storedPath (${width}x${height})")
+                } else {
+                    logger.debug("Saved resource: $path -> $storedPath (no dimensions)")
+                }
             } catch (e: Exception) {
                 logger.error("Failed to save resource: $path", e)
             }
@@ -479,10 +489,22 @@ class BookContentService(
             is ContentElement.Image -> {
                 val resource = documentRepository.findResource(bookId, element.src)
                 if (resource != null) {
-                    val (storedPath, _) = resource
-                    val imagePath = "/book_images/$storedPath"
+                    val imagePath = "/book_images/${resource.storedPath}"
                     val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-                    element.copy(src = fullPath)
+                    
+                    // 计算宽高比
+                    val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
+                        resource.width.toDouble() / resource.height
+                    } else {
+                        null
+                    }
+                    
+                    element.copy(
+                        src = fullPath,
+                        width = resource.width,
+                        height = resource.height,
+                        aspectRatio = aspectRatio
+                    )
                 } else {
                     element
                 }
@@ -513,8 +535,7 @@ class BookContentService(
         
         val resource = documentRepository.findResource(bookId, span.footnoteImage)
         return if (resource != null) {
-            val (storedPath, _) = resource
-            val imagePath = "/book_images/$storedPath"
+            val imagePath = "/book_images/${resource.storedPath}"
             val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
             span.copy(footnoteImage = fullPath)
         } else {

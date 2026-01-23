@@ -24,6 +24,7 @@ import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.BookshelfService
 import com.bookd.domain.service.BookDetailService
+import com.bookd.domain.service.ImageDimensionMigrationService
 import com.bookd.domain.service.parser.TxtParser
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
@@ -93,4 +94,5 @@ val appModule = module {
     single { BackgroundParseService(get(), get()) }
     single { BookshelfService(get(), get(), get(), get()) }
     single { BookDetailService(get(), get(), get(), get()) }
+    single { ImageDimensionMigrationService(get()) }
 }

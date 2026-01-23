@@ -10,6 +10,8 @@ object Books : IntIdTable("books") {
     val format = varchar("format", 10)
     val filePath = varchar("file_path", 500).uniqueIndex()
     val coverPath = varchar("cover_path", 500).nullable()
+    val coverWidth = integer("cover_width").nullable() // 封面宽度
+    val coverHeight = integer("cover_height").nullable() // 封面高度
     val fileSize = long("file_size")
     val isbn = varchar("isbn", 20).nullable()
     val publisher = varchar("publisher", 255).nullable()

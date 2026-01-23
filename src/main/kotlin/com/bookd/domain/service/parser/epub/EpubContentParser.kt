@@ -55,6 +55,9 @@ class EpubContentParser(
             "img" -> {
                 parseImage(element, elements, chapterHref)
             }
+            "figure" -> {
+                parseFigure(element, elements, chapterHref)
+            }
             "aside" -> {
                 parseAside(element, elements, chapterHref)
             }
@@ -126,6 +129,47 @@ class EpubContentParser(
         if (src.isNotEmpty()) {
             val normalizedSrc = EpubPathUtils.normalizeImagePath(src, chapterHref)
             elements.add(ContentElement.Image(normalizedSrc, alt))
+        }
+    }
+    
+    /**
+     * 解析 figure 元素（可能包含 img 或 SVG 中的 image）
+     */
+    private fun parseFigure(element: Element, elements: MutableList<ContentElement>, chapterHref: String) {
+        // 查找普通的 img 标签
+        val imgElements = element.select("img")
+        if (imgElements.isNotEmpty()) {
+            imgElements.forEach { img ->
+                if (!FootnoteParser.isFootnoteImage(img)) {
+                    val src = img.attr("src")
+                    val alt = img.attr("alt")
+                    if (src.isNotEmpty()) {
+                        val normalizedSrc = EpubPathUtils.normalizeImagePath(src, chapterHref)
+                        elements.add(ContentElement.Image(normalizedSrc, alt))
+                    }
+                }
+            }
+            return
+        }
+        
+        // 查找 SVG 中的 image 标签
+        val svgImages = element.select("svg image")
+        if (svgImages.isNotEmpty()) {
+            svgImages.forEach { img ->
+                // SVG image 使用 xlink:href 或 href 属性
+                val src = img.attr("xlink:href").takeIf { it.isNotEmpty() } 
+                    ?: img.attr("href")
+                if (src.isNotEmpty()) {
+                    val normalizedSrc = EpubPathUtils.normalizeImagePath(src, chapterHref)
+                    elements.add(ContentElement.Image(normalizedSrc, ""))
+                }
+            }
+            return
+        }
+        
+        // 如果没有找到图片，递归处理子元素
+        element.children().forEach { child ->
+            parseElement(child, elements, chapterHref)
         }
     }
     
