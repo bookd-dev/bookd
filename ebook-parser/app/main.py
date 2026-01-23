@@ -10,7 +10,10 @@ from app.models import (
     ParseRequest, 
     BookMetadataResponse, 
     CoverExtractionResponse,
-    HealthResponse
+    HealthResponse,
+    BookStructureResponse,
+    ParseContentRequest,
+    ChapterContentResponse
 )
 from app.parser import EpubParser
 from app.config import config
@@ -113,6 +116,72 @@ async def extract_cover(request: ParseRequest):
             success=False,
             error=f"Unexpected error: {str(e)}"
         )
+
+
+@app.post("/api/parse/structure", response_model=BookStructureResponse)
+async def parse_structure(request: ParseRequest):
+    """Parse EPUB structure (chapters and TOC).
+    
+    Args:
+        request: ParseRequest with file_path and book_id
+        
+    Returns:
+        BookStructureResponse with chapter list
+        
+    Raises:
+        HTTPException: If parsing fails
+    """
+    try:
+        logger.info(f"Received structure parsing request for: {request.file_path}")
+        result = parser.parse_structure(request.file_path, request.book_id)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error)
+        
+        logger.info(f"Successfully parsed structure for book ID {request.book_id}")
+        return result
+        
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {request.file_path}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to parse structure: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to parse structure: {str(e)}")
+
+
+@app.post("/api/parse/content", response_model=ChapterContentResponse, response_model_exclude_none=True)
+async def parse_chapter_content(request: ParseContentRequest):
+    """Parse chapter content to structured elements.
+    
+    Args:
+        request: ParseContentRequest with file_path, book_id, and chapter_href
+        
+    Returns:
+        ChapterContentResponse with content elements
+        
+    Raises:
+        HTTPException: If parsing fails
+    """
+    try:
+        logger.info(f"Received content parsing request for: {request.file_path}, chapter: {request.chapter_href}")
+        result = parser.parse_chapter_content(request.file_path, request.book_id, request.chapter_href)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error)
+        
+        logger.info(f"Successfully parsed content for book ID {request.book_id}, chapter: {request.chapter_href}")
+        return result
+        
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {request.file_path}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to parse content: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to parse content: {str(e)}")
 
 
 @app.exception_handler(Exception)

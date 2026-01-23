@@ -8,14 +8,25 @@ import io
 from ebooklib import epub
 from PIL import Image
 
-from app.models import BookMetadataResponse, CoverExtractionResponse
+from app.models import (
+    BookMetadataResponse, 
+    CoverExtractionResponse,
+    BookStructureResponse,
+    ChapterContentResponse
+)
 from app.config import config
+from app.structure_parser import StructureParser
+from app.content_parser import ContentParser
 
 logger = logging.getLogger(__name__)
 
 
 class EpubParser:
     """EPUB file parser using ebooklib library."""
+    
+    def __init__(self):
+        self.structure_parser = StructureParser()
+        self.content_parser = ContentParser()
     
     def extract_metadata(self, file_path: str) -> BookMetadataResponse:
         """Extract metadata from EPUB file.
@@ -274,3 +285,114 @@ class EpubParser:
         except Exception as e:
             logger.warning(f"Failed to get image dimensions: {e}")
             return None, None, None
+    
+    def parse_structure(self, file_path: str, book_id: int) -> BookStructureResponse:
+        """Parse EPUB structure (chapters and TOC).
+        
+        Args:
+            file_path: Absolute path to EPUB file
+            book_id: Book ID
+            
+        Returns:
+            BookStructureResponse with chapter list
+        """
+        try:
+            logger.info(f"Parsing structure from: {file_path}")
+            chapters, total = self.structure_parser.parse_structure(file_path)
+            
+            logger.info(f"Successfully parsed structure: {total} chapters")
+            return BookStructureResponse(
+                chapters=chapters,
+                total_chapters=total,
+                success=True
+            )
+            
+        except FileNotFoundError as e:
+            logger.error(f"File not found: {file_path}")
+            return BookStructureResponse(
+                chapters=[],
+                total_chapters=0,
+                success=False,
+                error=str(e)
+            )
+        except Exception as e:
+            logger.error(f"Failed to parse structure: {e}", exc_info=True)
+            return BookStructureResponse(
+                chapters=[],
+                total_chapters=0,
+                success=False,
+                error=str(e)
+            )
+    
+    def parse_chapter_content(self, file_path: str, book_id: int, chapter_href: str) -> ChapterContentResponse:
+        """Parse chapter content to structured elements.
+        
+        Args:
+            file_path: Absolute path to EPUB file
+            book_id: Book ID
+            chapter_href: Chapter file path (e.g., 'chapter1.xhtml')
+            
+        Returns:
+            ChapterContentResponse with content elements
+        """
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            logger.error(f"File not found: {file_path}")
+            return ChapterContentResponse(
+                elements=[],
+                word_count=0,
+                image_count=0,
+                success=False,
+                error=f"File not found: {file_path}"
+            )
+        
+        try:
+            logger.info(f"Parsing chapter content: {chapter_href}")
+            book = epub.read_epub(str(file_path_obj))
+            
+            # Get chapter item
+            chapter_item = book.get_item_with_href(chapter_href)
+            if not chapter_item:
+                # Try without leading slash
+                chapter_href = chapter_href.lstrip('/')
+                chapter_item = book.get_item_with_href(chapter_href)
+            
+            if not chapter_item:
+                logger.error(f"Chapter not found: {chapter_href}")
+                return ChapterContentResponse(
+                    elements=[],
+                    word_count=0,
+                    image_count=0,
+                    success=False,
+                    error=f"Chapter not found: {chapter_href}"
+                )
+            
+            # Get HTML content
+            html = chapter_item.get_content().decode('utf-8')
+            
+            # Parse HTML to ContentElement list
+            elements = self.content_parser.parse_html(html, chapter_href)
+            
+            # Count words and images
+            word_count = self.content_parser.count_words(elements)
+            image_count = self.content_parser.count_images(elements)
+            
+            logger.info(f"Successfully parsed chapter: {len(elements)} elements, {word_count} words, {image_count} images")
+            
+            return ChapterContentResponse(
+                elements=elements,
+                word_count=word_count,
+                image_count=image_count,
+                success=True
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to parse chapter content: {e}", exc_info=True)
+            return ChapterContentResponse(
+                elements=[],
+                word_count=0,
+                image_count=0,
+                success=False,
+                error=str(e)
+            )
+

@@ -1,6 +1,7 @@
 package com.bookd.domain.service.metadata
 
 import com.bookd.config.EbookParserConfig
+import com.bookd.domain.model.ContentElement
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
@@ -21,7 +22,10 @@ class EbookParserClient(private val config: EbookParserConfig) {
     
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
-            json()
+            json(kotlinx.serialization.json.Json {
+                ignoreUnknownKeys = true  // 忽略 Python 返回的 null 字段
+                isLenient = true
+            })
         }
         install(HttpTimeout) {
             requestTimeoutMillis = config.timeoutMs
@@ -106,6 +110,76 @@ class EbookParserClient(private val config: EbookParserConfig) {
     }
     
     /**
+     * 解析 EPUB 结构（章节列表和目录）
+     */
+    suspend fun parseStructure(filePath: String, bookId: Int): BookStructureResponse? {
+        if (!config.enabled) {
+            logger.debug("eBook Parser service is disabled")
+            return null
+        }
+        
+        return try {
+            logger.debug("Calling eBook Parser service for structure: $filePath")
+            
+            val response = client.post("${config.serviceUrl}/api/parse/structure") {
+                contentType(ContentType.Application.Json)
+                setBody(ParseRequest(filePath, bookId))
+            }
+            
+            if (response.status == HttpStatusCode.OK) {
+                val result: BookStructureResponse = response.body()
+                logger.info("Successfully parsed structure via microservice for book $bookId: ${result.total_chapters} chapters")
+                result
+            } else {
+                logger.warn("eBook Parser service returned status ${response.status}")
+                null
+            }
+            
+        } catch (e: HttpRequestTimeoutException) {
+            logger.error("eBook Parser service timeout for $filePath", e)
+            null
+        } catch (e: Exception) {
+            logger.error("Failed to call eBook Parser service for $filePath", e)
+            null
+        }
+    }
+    
+    /**
+     * 解析 EPUB 章节内容
+     */
+    suspend fun parseChapterContent(filePath: String, bookId: Int, chapterHref: String): ChapterContentResponse? {
+        if (!config.enabled) {
+            logger.debug("eBook Parser service is disabled")
+            return null
+        }
+        
+        return try {
+            logger.debug("Calling eBook Parser service for chapter content: $chapterHref")
+            
+            val response = client.post("${config.serviceUrl}/api/parse/content") {
+                contentType(ContentType.Application.Json)
+                setBody(ParseContentRequest(filePath, bookId, chapterHref))
+            }
+            
+            if (response.status == HttpStatusCode.OK) {
+                val result: ChapterContentResponse = response.body()
+                logger.info("Successfully parsed chapter content via microservice for book $bookId, chapter $chapterHref")
+                result
+            } else {
+                logger.warn("eBook Parser service returned status ${response.status}")
+                null
+            }
+            
+        } catch (e: HttpRequestTimeoutException) {
+            logger.error("eBook Parser service timeout for chapter $chapterHref", e)
+            null
+        } catch (e: Exception) {
+            logger.error("Failed to call eBook Parser service for chapter $chapterHref", e)
+            null
+        }
+    }
+    
+    /**
      * 健康检查
      */
     suspend fun healthCheck(): Boolean {
@@ -174,3 +248,41 @@ data class CoverExtractionResponse(
     val success: Boolean = false,
     val error: String? = null
 )
+
+// ==================== 章节结构 DTO ====================
+
+@Serializable
+data class ChapterInfoDto(
+    val index: Int,
+    val href: String,
+    val in_toc: Boolean,
+    val title: String? = null,
+    val level: Int = 0
+)
+
+@Serializable
+data class BookStructureResponse(
+    val chapters: List<ChapterInfoDto> = emptyList(),
+    val total_chapters: Int,
+    val success: Boolean = true,
+    val error: String? = null
+)
+
+// ==================== 章节内容 DTO ====================
+
+@Serializable
+data class ParseContentRequest(
+    val file_path: String,
+    val book_id: Int,
+    val chapter_href: String
+)
+
+@Serializable
+data class ChapterContentResponse(
+    val elements: List<ContentElement> = emptyList(),
+    val word_count: Int = 0,
+    val image_count: Int = 0,
+    val success: Boolean = true,
+    val error: String? = null
+)
+

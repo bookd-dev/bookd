@@ -5,6 +5,7 @@ import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.domain.model.*
 import com.bookd.domain.service.parser.*
+import com.bookd.domain.service.metadata.EbookParserClient
 import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
 import kotlinx.coroutines.*
@@ -20,12 +21,13 @@ class BookContentService(
     private val readingProgressRepository: ReadingProgressRepository,
     private val txtParser: TxtParser,
     private val imageStorage: BookImageStorage,
-    private val cacheService: BookCacheService?
+    private val cacheService: BookCacheService?,
+    private val ebookParserClient: EbookParserClient?
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
     // 解析器工厂
-    private val parserFactory = ParserFactory(txtParser)
+    private val parserFactory = ParserFactory(txtParser, ebookParserClient)
     
     // 专用的内容解析线程池
     private val contentDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()

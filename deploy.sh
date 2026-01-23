@@ -33,7 +33,7 @@ local_deploy() {
     
     echo ""
     echo "🐍 2/4 构建 eBook Parser 微服务..."
-    docker-compose build ebook-parser
+    docker build -t bookd-ebook-parser:local ./ebook-parser
     
     echo ""
     echo "🐳 3/4 构建 Bookd 服务镜像..."
@@ -57,7 +57,7 @@ update_local() {
     
     echo ""
     echo "🐍 2/5 重建 eBook Parser 微服务..."
-    docker-compose build ebook-parser
+    docker build -t bookd-ebook-parser:local ./ebook-parser
     
     echo ""
     echo "🐳 3/5 构建 Bookd 服务镜像..."

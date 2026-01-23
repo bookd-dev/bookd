@@ -29,7 +29,10 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
     uvicorn[standard]==0.34.0 \
     ebooklib==0.18 \
     Pillow==11.1.0 \
-    pydantic==2.10.5
+    pydantic==2.10.5 \
+    beautifulsoup4==4.12.0 \
+    lxml==5.1.0 \
+    python-multipart==0.0.9
 
 # 复制应用代码
 COPY app/ ./app/

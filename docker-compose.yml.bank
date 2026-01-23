@@ -26,46 +26,8 @@ services:
     networks:
       - bookd-network
 
-  ebook-parser:
-    build: ./ebook-parser
-    image: bookd-ebook-parser:local
-    container_name: bookd-ebook-parser
-    restart: always
-    ports:
-      - "7920:7920"
-    environment:
-      HOST: "0.0.0.0"
-      PORT: "7920"
-      LOG_LEVEL: "info"
-      COVERS_DIR: "/app/covers"
-      BOOK_IMAGES_DIR: "/app/book_images"
-      TZ: "Asia/Shanghai"
-    volumes:
-      # 共享封面和图片存储卷
-      - covers_data:/app/covers
-      - book_images_data:/app/book_images
-
-      # NAS 全目录挂载（推荐用于 NAS 部署）
-      # 群晖 NAS: 取消下面两行注释
-      # - /volume1:/volume1:ro
-      # - /volume2:/volume2:ro
-
-      # 威联通 NAS: 取消下面注释
-      # - /share:/share:ro
-
-      # Mac/Linux 开发环境: 取消下面注释
-      - /Users:/Users:ro
-    networks:
-      - bookd-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7920/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
   bookd-server:
-    image: bookd:local
+    image: bookddev/bookd:latest
     container_name: bookd-server
     restart: always
     ports:
@@ -83,10 +45,6 @@ services:
       PARSE_BACKGROUND_ENABLED: "true"
       PARSE_BACKGROUND_INTERVAL: "60"
       PARSE_BACKGROUND_BATCH_SIZE: "5"
-      # eBook Parser Service 配置
-      EBOOK_PARSER_ENABLED: "true"
-      EBOOK_PARSER_SERVICE_URL: "http://ebook-parser:7920"
-      EBOOK_PARSER_TIMEOUT_MS: "30000"
     # Memory and resource limits
     deploy:
       resources:
@@ -97,24 +55,12 @@ services:
     volumes:
       # 书籍封面持久化存储
       - covers_data:/app/covers
-      
       # 书籍内部图片持久化存储
       - book_images_data:/app/book_images
-      
-      # NAS 全目录挂载（推荐用于 NAS 部署）
-      # 群晖 NAS: 取消下面两行注释
-      # - /volume1:/volume1:ro
-      # - /volume2:/volume2:ro
-      
-      # 威联通 NAS: 取消下面注释
-      # - /share:/share:ro
-      
-      # Mac/Linux 开发环境: 取消下面注释
-      - /Users:/Users:ro
+      - /volume1:/volume1:ro
     depends_on:
       - postgres
       - redis
-      - ebook-parser
     networks:
       - bookd-network
 
