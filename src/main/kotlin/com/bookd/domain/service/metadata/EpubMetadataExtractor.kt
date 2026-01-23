@@ -1,5 +1,7 @@
 package com.bookd.domain.service.metadata
 
+import com.bookd.config.EbookParserConfig
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import java.io.File
@@ -8,13 +10,48 @@ import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * EPUB 元数据提取器
+ * EPUB 元数据提取器（支持微服务降级）
+ * 
+ * 优先使用 Python ebooklib 微服务解析，失败时降级到本地 Kotlin 解析器
  */
-class EpubMetadataExtractor : MetadataExtractor {
+class EpubMetadataExtractor(
+    private val parserClient: EbookParserClient?,
+    private val config: EbookParserConfig
+) : MetadataExtractor {
     
     private val logger = LoggerFactory.getLogger(EpubMetadataExtractor::class.java)
     
     override fun extractMetadata(file: File): BookMetadata? {
+        // 优先使用微服务
+        if (config.enabled && parserClient != null) {
+            return runBlocking {
+                try {
+                    // 注意：这里需要一个 bookId，但在这个阶段可能还没有
+                    // 使用文件哈希码作为临时 ID
+                    val tempBookId = file.absolutePath.hashCode()
+                    val result = parserClient.extractMetadata(file.absolutePath, tempBookId)
+                    if (result != null) {
+                        logger.info("Successfully extracted metadata via eBook Parser service: ${file.name}")
+                        return@runBlocking result
+                    } else {
+                        logger.warn("eBook Parser service returned null, falling back to local parser")
+                    }
+                } catch (e: Exception) {
+                    logger.warn("eBook Parser service failed, falling back to local parser: ${e.message}")
+                }
+                null
+            }?.let { return it }
+        }
+        
+        // 降级到本地实现
+        logger.debug("Using local EPUB parser for: ${file.name}")
+        return extractMetadataLocal(file)
+    }
+    
+    /**
+     * 本地 EPUB 元数据提取实现（原有逻辑）
+     */
+    private fun extractMetadataLocal(file: File): BookMetadata? {
         return try {
             ZipFile(file).use { zipFile ->
                 // Find container.xml to locate content.opf
@@ -60,6 +97,33 @@ class EpubMetadataExtractor : MetadataExtractor {
     }
     
     override fun extractCover(file: File, bookId: Int): String? {
+        // 优先使用微服务
+        if (config.enabled && parserClient != null) {
+            return runBlocking {
+                try {
+                    val result = parserClient.extractCover(file.absolutePath, bookId)
+                    if (result != null) {
+                        logger.info("Successfully extracted cover via EPUB Parser service: ${file.name}")
+                        return@runBlocking result
+                    } else {
+                        logger.warn("EPUB Parser service failed to extract cover, falling back to local parser")
+                    }
+                } catch (e: Exception) {
+                    logger.warn("EPUB Parser service failed, falling back to local parser: ${e.message}")
+                }
+                null
+            }?.let { return it }
+        }
+        
+        // 降级到本地实现
+        logger.debug("Using local EPUB cover extractor for: ${file.name}")
+        return extractCoverLocal(file, bookId)
+    }
+    
+    /**
+     * 本地 EPUB 封面提取实现（原有逻辑）
+     */
+    private fun extractCoverLocal(file: File, bookId: Int): String? {
         return try {
             ZipFile(file).use { zipFile ->
                 // 1. 先尝试从 OPF 的 manifest 中查找封面定义 (标准方式)

@@ -1,8 +1,10 @@
 package com.bookd.domain.service
 
+import com.bookd.config.EbookParserConfig
 import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.TagRepository
 import com.bookd.domain.service.metadata.BookMetadata
+import com.bookd.domain.service.metadata.EbookParserClient
 import com.bookd.domain.service.metadata.MetadataExtractorFactory
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
@@ -12,10 +14,12 @@ import java.util.concurrent.Executors
 class BookMetadataService(
     private val bookRepository: BookRepository,
     private val coverGeneratorService: CoverGeneratorService,
-    private val tagRepository: TagRepository
+    private val tagRepository: TagRepository,
+    private val parserClient: EbookParserClient?,
+    private val config: EbookParserConfig
 ) {
     private val logger = LoggerFactory.getLogger(BookMetadataService::class.java)
-    private val extractorFactory = MetadataExtractorFactory()
+    private val extractorFactory = MetadataExtractorFactory(parserClient, config)
     
     // Create a dedicated dispatcher for metadata extraction with a thread pool
     private val metadataDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()

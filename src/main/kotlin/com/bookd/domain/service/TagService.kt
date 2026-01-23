@@ -1,18 +1,22 @@
 package com.bookd.domain.service
 
+import com.bookd.config.EbookParserConfig
 import com.bookd.data.repository.TagRepository
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.Tag
+import com.bookd.domain.service.metadata.EbookParserClient
 import com.bookd.domain.service.metadata.MetadataExtractorFactory
 import org.slf4j.LoggerFactory
 import java.io.File
 
 class TagService(
     private val tagRepository: TagRepository,
-    private val bookRepository: BookRepository
+    private val bookRepository: BookRepository,
+    private val parserClient: EbookParserClient?,
+    private val config: EbookParserConfig
 ) {
     private val logger = LoggerFactory.getLogger(TagService::class.java)
-    private val extractorFactory = MetadataExtractorFactory()
+    private val extractorFactory = MetadataExtractorFactory(parserClient, config)
     
     /**
      * Extract tags from filename

@@ -26,6 +26,7 @@ import com.bookd.domain.service.BookshelfService
 import com.bookd.domain.service.BookDetailService
 import com.bookd.domain.service.ImageDimensionMigrationService
 import com.bookd.domain.service.parser.TxtParser
+import com.bookd.domain.service.metadata.EbookParserClient
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
@@ -77,7 +78,33 @@ val appModule = module {
         }
     }
     
-    single<BookCacheService> { BookCacheService(getOrNull()) }
+    single<BookCacheService?> {
+        val redis = getOrNull<RedisService>()
+        if (redis != null) {
+            BookCacheService(redis)
+        } else {
+            null
+        }
+    }
+    
+    // eBook Parser 微服务配置
+    single { EbookParserConfig() }
+    single<EbookParserClient?> {
+        try {
+            val config = get<EbookParserConfig>()
+            if (config.enabled) {
+                val client = EbookParserClient(config)
+                println("✅ eBook Parser Service enabled: ${config.serviceUrl}")
+                client
+            } else {
+                println("ℹ️  eBook Parser Service disabled, using local parser")
+                null
+            }
+        } catch (e: Exception) {
+            println("⚠️  eBook Parser Service initialization failed: ${e.message}, using local parser")
+            null
+        }
+    }
     
     // Services
     single { UserService(get()) }
@@ -87,9 +114,9 @@ val appModule = module {
     single { TxtParseRuleService(get()) }
     single { TxtParser(get()) }
     single { BookContentService(get(), get(), get(), get(), get(), getOrNull<BookCacheService>()) }
-    single { BookMetadataService(get(), get(), get()) }
+    single { BookMetadataService(get(), get(), get(), getOrNull(), get()) }
     single { BookScanService(get(), get(), get(), get()) }
-    single { TagService(get(), get()) }
+    single { TagService(get(), get(), getOrNull(), get()) }
     single { ReadingService(get(), get(), get()) }
     single { BackgroundParseService(get(), get()) }
     single { BookshelfService(get(), get(), get(), get()) }

@@ -33,16 +33,44 @@
 |------|------|
 | 后端框架 | Kotlin 2.x + Ktor 3.x |
 | 数据库 | PostgreSQL 16 + Exposed ORM |
+| 缓存 | Redis 7.x（可选） |
+| 微服务 | Python 3.11 + FastAPI（eBook Parser） |
 | 依赖注入 | Koin |
 | 容器化 | Docker + Docker Compose |
 | 运行时 | Eclipse Temurin JRE 21 |
 
+## 🏗️ 系统架构
+
+Bookd 采用微服务架构，包含以下组件：
+
+- **Bookd Server** (Kotlin/Ktor): 主服务，处理业务逻辑、API 请求和用户认证
+- **eBook Parser** (Python/FastAPI): 电子书解析微服务，提供高性能的元数据提取和封面提取
+- **PostgreSQL**: 主数据库，存储书籍、用户、阅读进度等数据
+- **Redis** (可选): 缓存层，提升查询性能
+
+### eBook Parser 微服务
+
+Python 实现的独立微服务，使用 `ebooklib` 库提供强大的 EPUB 解析能力：
+
+**特性**：
+- 🚀 高性能元数据提取（标题、作者、出版社、ISBN、语言、标签等）
+- 📸 封面图片提取和自动优化
+- 🔄 优雅降级：服务不可用时自动回退到 Kotlin 解析器
+- 🐳 Docker 部署，支持多架构 (amd64/arm64)
+
+**API 端点**：
+- `POST /api/parse/metadata` - 提取元数据
+- `POST /api/parse/cover` - 提取封面
+- `GET /health` - 健康检查
+
 ## 📄 支持格式
 
-| 格式 | 扩展名 | 元数据提取 |
-|------|--------|------------|
-| EPUB | .epub | ✅ 完整支持 |
-| TXT | .txt | ⚠️ 基础支持 |
+| 格式 | 扩展名 | 元数据提取 | 解析器 |
+|------|--------|------------|--------|
+| EPUB | .epub | ✅ 完整支持 | Python (ebooklib) + Kotlin (fallback) |
+| TXT | .txt | ⚠️ 基础支持 | Kotlin |
+
+> **注意**：EPUB 元数据提取优先使用 Python 微服务（更准确、性能更好），若服务不可用则自动降级到 Kotlin 解析器。
 
 ---
 
@@ -65,11 +93,16 @@
 ### 手动部署
 
 ```bash
-# 构建项目
+# 1. 构建 Kotlin 应用
 ./gradlew clean build -x test
 
-# 构建镜像并启动
+# 2. 构建 eBook Parser 微服务
+docker-compose build ebook-parser
+
+# 3. 构建 Bookd Server 镜像
 docker build -t bookd:local .
+
+# 4. 启动所有服务
 docker-compose up -d
 ```
 
@@ -109,6 +142,21 @@ docker-compose up -d
          - ./postgres_data:/var/lib/postgresql/data
        restart: unless-stopped
 
+     redis:
+       image: redis:7-alpine
+       container_name: bookd-redis
+       restart: unless-stopped
+
+     ebook-parser:
+       image: yourusername/bookd-ebook-parser:latest
+       container_name: bookd-ebook-parser
+       restart: unless-stopped
+       healthcheck:
+         test: ["CMD", "curl", "-f", "http://localhost:7920/health"]
+         interval: 30s
+         timeout: 10s
+         retries: 3
+
      bookd-server:
        image: yourusername/bookd:latest  # 或使用本地构建的镜像
        container_name: bookd-server
@@ -119,12 +167,19 @@ docker-compose up -d
          DATABASE_URL: "jdbc:postgresql://postgres:5432/bookd"
          DATABASE_USER: "bookd"
          DATABASE_PASSWORD: "your_secure_password"
+         REDIS_ENABLED: "true"
+         REDIS_HOST: "redis"
+         REDIS_PORT: "6379"
+         EBOOK_PARSER_ENABLED: "true"
+         EBOOK_PARSER_SERVICE_URL: "http://ebook-parser:7920"
        volumes:
          - ./covers:/app/covers
          - /volume1:/volume1:ro          # 挂载书籍目录（只读）
          - /volume2:/volume2:ro          # 可选：挂载其他卷
        depends_on:
          - postgres
+         - redis
+         - ebook-parser
        restart: unless-stopped
    ```
 
@@ -189,13 +244,30 @@ docker buildx create --name multiarch --use
 docker buildx inspect --bootstrap
 ```
 
-#### 构建并推送
+#### 使用部署脚本构建（推荐）
 
 ```bash
-# 构建项目
+./deploy.sh
+# 选择 "3) 构建并推送到 Docker Hub"
+# 脚本会自动构建 Bookd Server 和 eBook Parser 的多架构镜像
+```
+
+#### 手动构建
+
+```bash
+# 1. 构建 Kotlin 应用
 ./gradlew clean build -x test
 
-# 构建多架构镜像并推送到 Docker Hub
+# 2. 构建 eBook Parser 多架构镜像
+cd ebook-parser
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t yourusername/bookd-ebook-parser:latest \
+  --push \
+  .
+cd ..
+
+# 3. 构建 Bookd Server 多架构镜像
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t yourusername/bookd:latest \
@@ -209,6 +281,7 @@ docker buildx build \
 ```bash
 # 构建当前架构镜像
 docker buildx build --load -t bookd:local .
+docker-compose build ebook-parser
 ```
 
 ### 为不同 NAS 构建
@@ -341,13 +414,28 @@ docker manifest inspect yourusername/bookd:latest
 
 ### 环境变量
 
+#### Bookd Server
+
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | 7919 | 服务端口 |
 | `DATABASE_URL` | jdbc:postgresql://localhost:5432/bookd | 数据库连接 |
 | `DATABASE_USER` | bookd | 数据库用户 |
 | `DATABASE_PASSWORD` | bookd | 数据库密码 |
+| `REDIS_ENABLED` | false | 是否启用 Redis 缓存 |
+| `REDIS_HOST` | localhost | Redis 主机 |
+| `REDIS_PORT` | 6379 | Redis 端口 |
+| `EBOOK_PARSER_ENABLED` | true | 是否启用 eBook Parser 微服务 |
+| `EBOOK_PARSER_SERVICE_URL` | http://localhost:7920 | eBook Parser 服务地址 |
+| `EBOOK_PARSER_TIMEOUT_MS` | 30000 | 解析超时时间（毫秒） |
 | `TZ` | Asia/Shanghai | 时区 |
+
+#### eBook Parser
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `COVERS_DIR` | /app/covers | 封面存储目录 |
+| `TEMP_DIR` | /tmp/ebook-parser-* | 临时文件目录 |
 
 ### 目录挂载建议
 
@@ -368,7 +456,19 @@ volumes:
 
 **容器无法启动**
 ```bash
+# 查看 Bookd Server 日志
 docker-compose logs bookd-server
+
+# 查看 eBook Parser 日志
+docker-compose logs ebook-parser
+```
+
+**eBook Parser 服务不可用**
+```bash
+# 检查服务健康状态
+curl http://localhost:7920/health
+
+# 系统会自动降级到 Kotlin 解析器，不影响核心功能
 ```
 
 **数据库连接失败**
@@ -386,10 +486,15 @@ docker exec -it bookd-postgres psql -U bookd -d bookd -c "SELECT 1;"
 
 ---
 
+## 📚 相关文档
+
+- [eBook Parser 微服务文档](./ebook-parser/README.md)
+- [开发者指南](./AGENTS.md)
+
 ## 📄 License
 
 MIT License
 
 ---
 
-**版本**: 0.1.1 | **更新**: 2025-12-30
+**版本**: 0.2.0 | **更新**: 2026-01-23

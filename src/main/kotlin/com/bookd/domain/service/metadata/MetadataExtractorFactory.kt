@@ -1,18 +1,22 @@
 package com.bookd.domain.service.metadata
 
+import com.bookd.config.EbookParserConfig
 import org.slf4j.LoggerFactory
 import java.io.File
 
 /**
  * 元数据提取器工厂
  */
-class MetadataExtractorFactory {
+class MetadataExtractorFactory(
+    private val parserClient: EbookParserClient?,
+    private val config: EbookParserConfig
+) {
     
     private val logger = LoggerFactory.getLogger(MetadataExtractorFactory::class.java)
     
     // 缓存提取器实例
     private val tikaExtractor = TikaMetadataExtractor()
-    private val epubExtractor = EpubMetadataExtractor()
+    private val epubExtractor = EpubMetadataExtractor(parserClient, config)
     private val txtExtractor = TxtMetadataExtractor()
     
     /**
