@@ -82,7 +82,7 @@ services:
       PARSE_AUTO_ON_SCAN: "false"
       PARSE_BACKGROUND_ENABLED: "true"
       PARSE_BACKGROUND_INTERVAL: "60"
-      PARSE_BACKGROUND_BATCH_SIZE: "5"
+      PARSE_BACKGROUND_BATCH_SIZE: "15"
       # eBook Parser Service 配置
       EBOOK_PARSER_ENABLED: "true"
       EBOOK_PARSER_SERVICE_URL: "http://ebook-parser:7920"

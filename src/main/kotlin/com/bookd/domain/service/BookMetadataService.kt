@@ -22,7 +22,7 @@ class BookMetadataService(
     private val extractorFactory = MetadataExtractorFactory(parserClient, config)
     
     // Create a dedicated dispatcher for metadata extraction with a thread pool
-    private val metadataDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+    private val metadataDispatcher = Executors.newFixedThreadPool(20).asCoroutineDispatcher()
     private val scope = CoroutineScope(metadataDispatcher + SupervisorJob())
     
     /**
@@ -51,64 +51,62 @@ class BookMetadataService(
             return
         }
         
-        withContext(Dispatchers.IO) {
-            try {
-                logger.info("Extracting metadata from: $filePath")
-                
-                // 使用工厂创建对应格式的提取器
-                val extractor = extractorFactory.createExtractor(file)
-                
-                // 提取元数据
-                var metadata = extractor.extractMetadata(file)
-                
-                // 如果标题为空,使用文件名作为标题
-                if (metadata?.title == null) {
-                    val fileNameWithoutExt = file.nameWithoutExtension
-                    logger.info("No title found in metadata, using filename: $fileNameWithoutExt")
-                    metadata = metadata?.copy(title = fileNameWithoutExt) 
-                        ?: BookMetadata(title = fileNameWithoutExt)
-                }
-                
-                // 提取封面
-                var coverPath = extractor.extractCover(file, bookId)
-                
-                // 如果没有提取到封面,生成文字封面
-                if (coverPath == null) {
-                    logger.info("No cover found for book ID: $bookId, generating text-based cover")
-                    val bookTitle = metadata.title ?: "Unknown"
-                    val result = coverGeneratorService.generateCover(bookId, bookTitle, metadata.author)
-                    coverPath = result?.first
-                    if (coverPath != null) {
-                        logger.info("Generated text-based cover for book ID: $bookId")
-                    }
-                }
-                
-                logger.info("Extracted metadata for ${file.name} - author: ${metadata?.author}, title: ${metadata?.title}, publisher: ${metadata?.publisher}, coverPath: $coverPath")
-
-                val updated = bookRepository.updateMetadata(
-                    id = bookId,
-                    title = metadata.title,  // 更新标题
-                    author = metadata.author,
-                    coverPath = coverPath,
-                    isbn = metadata.isbn,
-                    publisher = metadata.publisher,
-                    description = metadata.description?.take(1000) // Limit description length
-                )
-
-                if (updated > 0) {
-                    logger.info("Successfully updated metadata for book ID: $bookId (${file.name})")
-                    
-                    // 从元数据中提取并添加标签
-                    if (metadata.tags.isNotEmpty()) {
-                        processMetadataTags(bookId, metadata.tags)
-                    }
-                } else {
-                    logger.warn("Failed to update database for book ID: $bookId (${file.name})")
-                }
-            } catch (e: Exception) {
-                logger.error("Error extracting metadata from file: ${file.name} - ${e.javaClass.simpleName}: ${e.message}")
-                e.printStackTrace()
+        try {
+            logger.info("Extracting metadata from: $filePath")
+            
+            // 使用工厂创建对应格式的提取器
+            val extractor = extractorFactory.createExtractor(file)
+            
+            // 提取元数据（现在是 suspend 函数，不需要 withContext）
+            var metadata = extractor.extractMetadata(file)
+            
+            // 如果标题为空,使用文件名作为标题
+            if (metadata?.title == null) {
+                val fileNameWithoutExt = file.nameWithoutExtension
+                logger.info("No title found in metadata, using filename: $fileNameWithoutExt")
+                metadata = metadata?.copy(title = fileNameWithoutExt) 
+                    ?: BookMetadata(title = fileNameWithoutExt)
             }
+            
+            // 提取封面（现在是 suspend 函数，不需要 withContext）
+            var coverPath = extractor.extractCover(file, bookId)
+            
+            // 如果没有提取到封面,生成文字封面
+            if (coverPath == null) {
+                logger.info("No cover found for book ID: $bookId, generating text-based cover")
+                val bookTitle = metadata.title ?: "Unknown"
+                val result = coverGeneratorService.generateCover(bookId, bookTitle, metadata.author)
+                coverPath = result?.first
+                if (coverPath != null) {
+                    logger.info("Generated text-based cover for book ID: $bookId")
+                }
+            }
+            
+            logger.info("Extracted metadata for ${file.name} - author: ${metadata.author}, title: ${metadata.title}, publisher: ${metadata.publisher}, coverPath: $coverPath")
+
+            val updated = bookRepository.updateMetadata(
+                id = bookId,
+                title = metadata.title,  // 更新标题
+                author = metadata.author,
+                coverPath = coverPath,
+                isbn = metadata.isbn,
+                publisher = metadata.publisher,
+                description = metadata.description?.take(1000) // Limit description length
+            )
+
+            if (updated > 0) {
+                logger.info("Successfully updated metadata for book ID: $bookId (${file.name})")
+                
+                // 从元数据中提取并添加标签
+                if (metadata.tags.isNotEmpty()) {
+                    processMetadataTags(bookId, metadata.tags)
+                }
+            } else {
+                logger.warn("Failed to update database for book ID: $bookId (${file.name})")
+            }
+        } catch (e: Exception) {
+            logger.error("Error extracting metadata from file: ${file.name} - ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
         }
     }
     

@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Tuple
 import io
+import hashlib
 
 from ebooklib import epub
 from PIL import Image
@@ -12,7 +13,8 @@ from app.models import (
     BookMetadataResponse, 
     CoverExtractionResponse,
     BookStructureResponse,
-    ChapterContentResponse
+    ChapterContentResponse,
+    ContentElement
 )
 from app.config import config
 from app.structure_parser import StructureParser
@@ -373,6 +375,9 @@ class EpubParser:
             # Parse HTML to ContentElement list
             elements = self.content_parser.parse_html(html, chapter_href)
             
+            # Persist images and update their paths
+            elements = self._persist_chapter_images(book, book_id, elements)
+            
             # Count words and images
             word_count = self.content_parser.count_words(elements)
             image_count = self.content_parser.count_images(elements)
@@ -395,4 +400,144 @@ class EpubParser:
                 success=False,
                 error=str(e)
             )
+    
+    def _persist_chapter_images(self, book: epub.EpubBook, book_id: int, elements: List[ContentElement]) -> List[ContentElement]:
+        """Persist images found in chapter content and update their paths.
+        
+        Args:
+            book: EpubBook instance
+            book_id: Book ID for organizing images
+            elements: List of ContentElement objects
+            
+        Returns:
+            Updated list of ContentElement with persisted image paths
+        """
+        updated_elements = []
+        
+        for element in elements:
+            if element.type == 'image' and element.src:
+                # Try to get image data from EPUB
+                image_data = self._get_image_data_from_epub(book, element.src)
+                
+                if image_data:
+                    # Persist image and get new path
+                    persisted_path = self._save_chapter_image(book_id, element.src, image_data)
+                    
+                    if persisted_path:
+                        # Get image dimensions
+                        width, height, aspect_ratio = self._get_image_dimensions(image_data)
+                        
+                        # Create updated image element
+                        updated_element = ContentElement(
+                            type='image',
+                            src=persisted_path,
+                            alt=element.alt,
+                            width=width,
+                            height=height,
+                            aspect_ratio=aspect_ratio
+                        )
+                        updated_elements.append(updated_element)
+                        logger.debug(f"Persisted image: {element.src} -> {persisted_path}")
+                    else:
+                        # Failed to persist, keep original
+                        updated_elements.append(element)
+                        logger.warning(f"Failed to persist image: {element.src}")
+                else:
+                    # Image not found in EPUB, keep original
+                    updated_elements.append(element)
+                    logger.warning(f"Image not found in EPUB: {element.src}")
+            else:
+                # Not an image element, keep as is
+                updated_elements.append(element)
+        
+        return updated_elements
+    
+    def _get_image_data_from_epub(self, book: epub.EpubBook, image_path: str) -> Optional[bytes]:
+        """Extract image data from EPUB by path.
+        
+        Args:
+            book: EpubBook instance
+            image_path: Image path within EPUB (e.g., 'images/chapter1-img1.png')
+            
+        Returns:
+            Image binary data or None if not found
+        """
+        try:
+            # Try to get image item by href
+            image_item = book.get_item_with_href(image_path)
+            
+            if not image_item:
+                # Try without leading slash
+                image_path_stripped = image_path.lstrip('/')
+                image_item = book.get_item_with_href(image_path_stripped)
+            
+            if not image_item:
+                # Try with leading slash
+                if not image_path.startswith('/'):
+                    image_item = book.get_item_with_href('/' + image_path)
+            
+            if image_item:
+                image_data = image_item.get_content()
+                if image_data:
+                    return image_data
+            
+            # If still not found, search through all items
+            for item in book.get_items():
+                if item.get_type() and item.get_type().startswith('image/'):
+                    item_name = item.get_name()
+                    # Check if the item name ends with our image path (handles different base paths)
+                    if item_name.endswith(image_path) or item_name.endswith(image_path.lstrip('/')):
+                        return item.get_content()
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to extract image data for {image_path}: {e}")
+            return None
+    
+    def _save_chapter_image(self, book_id: int, original_path: str, image_data: bytes) -> Optional[str]:
+        """Save chapter image to persistent storage.
+        
+        Args:
+            book_id: Book ID
+            original_path: Original image path (used to extract extension)
+            image_data: Image binary data
+            
+        Returns:
+            Relative path to saved image (e.g., '16/abc123.jpg') or None if failed
+        """
+        try:
+            # Create book-specific directory
+            book_images_dir = config.get_book_images_dir() / str(book_id)
+            book_images_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get extension from original path
+            extension = Path(original_path).suffix
+            if not extension or extension not in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp']:
+                extension = '.jpg'  # Default to jpg
+            
+            # Use SHA-256 hash of image data as filename (avoid duplicates)
+            hash_obj = hashlib.sha256(image_data)
+            hash_hex = hash_obj.hexdigest()[:16]  # Use first 16 characters
+            
+            filename = f"{hash_hex}{extension}"
+            image_file_path = book_images_dir / filename
+            
+            # Check if file already exists (same content)
+            if image_file_path.exists():
+                logger.debug(f"Image already exists: {book_id}/{filename}")
+                return f"{book_id}/{filename}"
+            
+            # Save image data
+            with open(image_file_path, 'wb') as f:
+                f.write(image_data)
+            
+            logger.debug(f"Saved chapter image: {book_id}/{filename} ({len(image_data)} bytes)")
+            
+            # Return relative path (bookId/filename)
+            return f"{book_id}/{filename}"
+            
+        except Exception as e:
+            logger.error(f"Failed to save chapter image: {e}", exc_info=True)
+            return None
 

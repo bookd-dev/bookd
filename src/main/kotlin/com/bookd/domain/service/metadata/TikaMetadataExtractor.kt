@@ -1,5 +1,7 @@
 package com.bookd.domain.service.metadata
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.apache.tika.metadata.Metadata
 import org.apache.tika.parser.AutoDetectParser
 import org.apache.tika.sax.BodyContentHandler
@@ -15,8 +17,8 @@ class TikaMetadataExtractor : MetadataExtractor {
     private val logger = LoggerFactory.getLogger(TikaMetadataExtractor::class.java)
     private val parser = AutoDetectParser()
     
-    override fun extractMetadata(file: File): BookMetadata? {
-        return try {
+    override suspend fun extractMetadata(file: File): BookMetadata? = withContext(Dispatchers.IO) {
+        return@withContext try {
             val metadata = Metadata()
             val handler = BodyContentHandler(10 * 1024 * 1024) // 10MB limit
             
@@ -30,7 +32,7 @@ class TikaMetadataExtractor : MetadataExtractor {
                 logger.debug("Tika found ${keys.size} metadata keys for ${file.name}")
             } else {
                 logger.warn("Tika found no metadata in ${file.name}")
-                return null
+                return@withContext null
             }
             
             // 提取标签/关键词
@@ -65,7 +67,7 @@ class TikaMetadataExtractor : MetadataExtractor {
         }
     }
     
-    override fun extractCover(file: File, bookId: Int): String? {
+    override suspend fun extractCover(file: File, bookId: Int): String? {
         // Tika 不支持封面提取
         return null
     }

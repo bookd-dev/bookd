@@ -1,38 +1,76 @@
 package com.bookd.domain.service.parser
 
 import com.bookd.domain.model.ContentElement
+import com.bookd.domain.service.TxtParseRuleService
+import com.bookd.domain.service.metadata.EbookParserClient
+import com.bookd.domain.service.metadata.TxtParseRule
 import java.io.File
 
 /**
  * TXT 格式解析器
+ * 
+ * 使用 Python 微服务进行 TXT 解析，支持自定义规则
  */
 class TxtBookParser(
-    private val txtParser: TxtParser
+    private val ebookParserClient: EbookParserClient,
+    private val txtParseRuleService: TxtParseRuleService
 ) : BookParser {
     
-    private var cachedStructure: TxtParser.TxtStructure? = null
-    
     override suspend fun parseStructure(file: File): BookParser.BookStructure? {
-        val structure = txtParser.parseStructure(file) ?: return null
-        cachedStructure = structure
+        // 获取启用的解析规则
+        val rules = txtParseRuleService.getEnabledRules().map { rule ->
+            TxtParseRule(
+                name = rule.name,
+                rule = rule.rule,
+                example = rule.example,
+                enabled = rule.enabled,
+                priority = rule.priority
+            )
+        }
         
-        val chapters = structure.chapters.map { chapter ->
+        // 调用 Python 微服务解析结构
+        val response = ebookParserClient.parseTxtStructure(
+            file.absolutePath,
+            0, // bookId 暂时用 0，实际使用时会传入正确的 ID
+            rules
+        ) ?: run {
+            throw Exception("Failed to parse TXT structure via microservice")
+        }
+        
+        if (!response.success) {
+            throw Exception("TXT structure parsing failed: ${response.error}")
+        }
+        
+        // 转换为 BookStructure
+        val chapters = response.chapters.map { dto ->
             BookParser.ChapterInfo(
-                index = chapter.index,
-                title = cleanTitle(chapter.title),
-                level = chapter.level,
-                startPos = chapter.startPos,
-                endPos = chapter.endPos
+                index = dto.index,
+                title = cleanTitle(dto.title ?: ""),
+                level = dto.level,
+                startPos = dto.start_pos,
+                endPos = dto.end_pos
             )
         }
         
         return BookParser.BookStructure(chapters = chapters)
     }
     
-    override suspend fun parseChapterContent(file: File, chapter: BookParser.ChapterInfo): List<ContentElement> {
-        val structure = cachedStructure ?: txtParser.parseStructure(file) ?: return emptyList()
+    override suspend fun parseChapterContent(file: File, chapter: BookParser.ChapterInfo, bookId: Int): List<ContentElement> {
+        // 调用 Python 微服务解析章节内容
+        val response = ebookParserClient.parseTxtChapterContent(
+            file.absolutePath,
+            bookId,
+            chapter.startPos ?: 0,
+            chapter.endPos ?: 0,
+            chapter.title
+        ) ?: run {
+            throw Exception("Failed to parse TXT chapter content via microservice")
+        }
         
-        val txtChapter = structure.chapters.find { it.index == chapter.index } ?: return emptyList()
-        return txtParser.extractChapterContent(structure.fullText, txtChapter)
+        if (!response.success) {
+            throw Exception("TXT chapter content parsing failed: ${response.error}")
+        }
+        
+        return response.elements
     }
 }

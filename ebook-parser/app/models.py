@@ -130,3 +130,56 @@ class ChapterContentResponse(BaseModel):
     image_count: int = Field(default=0, description="Number of images in chapter")
     success: bool = Field(default=True, description="Whether parsing succeeded")
     error: Optional[str] = Field(None, description="Error message if failed")
+
+
+# ==================== TXT Parse Rules Models ====================
+
+class TxtParseRule(BaseModel):
+    """TXT parse rule model for chapter detection."""
+    name: str = Field(..., description="Rule name")
+    rule: str = Field(..., description="Regex pattern for chapter detection")
+    example: Optional[str] = Field(None, description="Example text that matches this rule")
+    enabled: bool = Field(default=True, description="Whether this rule is enabled")
+    priority: int = Field(default=0, description="Rule priority (lower number = higher priority)")
+
+
+class TxtParseRequest(BaseModel):
+    """Request model for TXT parsing operations."""
+    file_path: str = Field(..., description="Absolute path to the TXT file")
+    book_id: int = Field(..., description="Book ID")
+    rules: List[TxtParseRule] = Field(default_factory=list, description="Custom parse rules (empty = use fallback patterns)")
+
+
+class TxtChapterInfo(BaseModel):
+    """TXT chapter information model."""
+    index: int = Field(..., description="Chapter index")
+    title: Optional[str] = Field(None, description="Chapter title")
+    start_pos: int = Field(..., description="Start position in file (character index)")
+    end_pos: int = Field(..., description="End position in file (character index)")
+    level: int = Field(default=0, description="Chapter level")
+
+
+class TxtStructureResponse(BaseModel):
+    """Response model for TXT structure parsing."""
+    chapters: List[TxtChapterInfo] = Field(default_factory=list, description="List of detected chapters")
+    total_chapters: int = Field(..., description="Total number of chapters")
+    full_text_length: int = Field(..., description="Total length of text file")
+    success: bool = Field(default=True, description="Whether parsing succeeded")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+
+class TxtContentRequest(BaseModel):
+    """Request model for TXT chapter content extraction."""
+    file_path: str = Field(..., description="Absolute path to the TXT file")
+    book_id: int = Field(..., description="Book ID")
+    start_pos: int = Field(..., description="Start position in file (character index)")
+    end_pos: int = Field(..., description="End position in file (character index)")
+    chapter_title: Optional[str] = Field(None, description="Chapter title")
+
+
+class TxtContentResponse(BaseModel):
+    """Response model for TXT chapter content extraction."""
+    elements: List[ContentElement] = Field(default_factory=list, description="Parsed content elements")
+    word_count: int = Field(default=0, description="Word count in chapter")
+    success: bool = Field(default=True, description="Whether parsing succeeded")
+    error: Optional[str] = Field(None, description="Error message if failed")

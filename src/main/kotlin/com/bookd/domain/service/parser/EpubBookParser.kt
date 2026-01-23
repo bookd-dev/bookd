@@ -40,11 +40,11 @@ class EpubBookParser(
         )
     }
     
-    override suspend fun parseChapterContent(file: File, chapter: BookParser.ChapterInfo): List<ContentElement> {
+    override suspend fun parseChapterContent(file: File, chapter: BookParser.ChapterInfo, bookId: Int): List<ContentElement> {
         // 调用 Python 微服务解析章节内容
         val response = ebookParserClient.parseChapterContent(
             file.absolutePath,
-            0,
+            bookId,
             chapter.href ?: ""
         ) ?: run {
             throw Exception("Failed to parse chapter content via microservice")

@@ -1,7 +1,6 @@
 package com.bookd.domain.service.metadata
 
 import com.bookd.config.EbookParserConfig
-import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import java.io.File
@@ -21,26 +20,23 @@ class EpubMetadataExtractor(
     
     private val logger = LoggerFactory.getLogger(EpubMetadataExtractor::class.java)
     
-    override fun extractMetadata(file: File): BookMetadata? {
+    override suspend fun extractMetadata(file: File): BookMetadata? {
         // 优先使用微服务
         if (config.enabled && parserClient != null) {
-            return runBlocking {
-                try {
-                    // 注意：这里需要一个 bookId，但在这个阶段可能还没有
-                    // 使用文件哈希码作为临时 ID
-                    val tempBookId = file.absolutePath.hashCode()
-                    val result = parserClient.extractMetadata(file.absolutePath, tempBookId)
-                    if (result != null) {
-                        logger.info("Successfully extracted metadata via eBook Parser service: ${file.name}")
-                        return@runBlocking result
-                    } else {
-                        logger.warn("eBook Parser service returned null, falling back to local parser")
-                    }
-                } catch (e: Exception) {
-                    logger.warn("eBook Parser service failed, falling back to local parser: ${e.message}")
+            try {
+                // 注意：这里需要一个 bookId，但在这个阶段可能还没有
+                // 使用文件哈希码作为临时 ID
+                val tempBookId = file.absolutePath.hashCode()
+                val result = parserClient.extractMetadata(file.absolutePath, tempBookId)
+                if (result != null) {
+                    logger.info("Successfully extracted metadata via eBook Parser service: ${file.name}")
+                    return result
+                } else {
+                    logger.warn("eBook Parser service returned null, falling back to local parser")
                 }
-                null
-            }?.let { return it }
+            } catch (e: Exception) {
+                logger.warn("eBook Parser service failed, falling back to local parser: ${e.message}")
+            }
         }
         
         // 降级到本地实现
@@ -96,23 +92,20 @@ class EpubMetadataExtractor(
         }
     }
     
-    override fun extractCover(file: File, bookId: Int): String? {
+    override suspend fun extractCover(file: File, bookId: Int): String? {
         // 优先使用微服务
         if (config.enabled && parserClient != null) {
-            return runBlocking {
-                try {
-                    val result = parserClient.extractCover(file.absolutePath, bookId)
-                    if (result != null) {
-                        logger.info("Successfully extracted cover via EPUB Parser service: ${file.name}")
-                        return@runBlocking result
-                    } else {
-                        logger.warn("EPUB Parser service failed to extract cover, falling back to local parser")
-                    }
-                } catch (e: Exception) {
-                    logger.warn("EPUB Parser service failed, falling back to local parser: ${e.message}")
+            try {
+                val result = parserClient.extractCover(file.absolutePath, bookId)
+                if (result != null) {
+                    logger.info("Successfully extracted cover via EPUB Parser service: ${file.name}")
+                    return result
+                } else {
+                    logger.warn("EPUB Parser service failed to extract cover, falling back to local parser")
                 }
-                null
-            }?.let { return it }
+            } catch (e: Exception) {
+                logger.warn("EPUB Parser service failed, falling back to local parser: ${e.message}")
+            }
         }
         
         // 降级到本地实现

@@ -76,7 +76,7 @@ class TagService(
     /**
      * Auto-tag a book from metadata (new method)
      */
-    fun autoTagBook(bookId: Int): List<Tag> {
+    suspend fun autoTagBook(bookId: Int): List<Tag> {
         val book = bookRepository.findById(bookId) ?: return emptyList()
         val file = File(book.filePath)
         
@@ -132,7 +132,7 @@ class TagService(
     /**
      * Auto-tag all books from metadata
      */
-    fun autoTagAllBooks(): Map<String, Int> {
+    suspend fun autoTagAllBooks(): Map<String, Int> {
         val books = bookRepository.findAll()
         var booksTagged = 0
         var tagsCreated = 0

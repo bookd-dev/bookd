@@ -9,12 +9,12 @@ interface MetadataExtractor {
     /**
      * 提取元数据
      */
-    fun extractMetadata(file: File): BookMetadata?
+    suspend fun extractMetadata(file: File): BookMetadata?
     
     /**
      * 提取封面
      */
-    fun extractCover(file: File, bookId: Int): String?
+    suspend fun extractCover(file: File, bookId: Int): String?
 }
 
 /**

@@ -1,5 +1,6 @@
 package com.bookd.domain.service.parser
 
+import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.domain.service.metadata.EbookParserClient
 import java.io.File
 
@@ -7,7 +8,7 @@ import java.io.File
  * 解析器工厂
  */
 class ParserFactory(
-    private val txtParser: TxtParser,
+    private val txtParseRuleService: TxtParseRuleService,
     private val ebookParserClient: EbookParserClient?
 ) {
     /**
@@ -23,7 +24,13 @@ class ParserFactory(
                     throw IllegalStateException("eBook Parser service is not available")
                 }
             }
-            "txt" -> TxtBookParser(txtParser)
+            "txt" -> {
+                if (ebookParserClient != null) {
+                    TxtBookParser(ebookParserClient, txtParseRuleService)
+                } else {
+                    throw IllegalStateException("eBook Parser service is not available")
+                }
+            }
             else -> null
         }
     }

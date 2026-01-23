@@ -13,9 +13,14 @@ from app.models import (
     HealthResponse,
     BookStructureResponse,
     ParseContentRequest,
-    ChapterContentResponse
+    ChapterContentResponse,
+    TxtParseRequest,
+    TxtStructureResponse,
+    TxtContentRequest,
+    TxtContentResponse
 )
 from app.parser import EpubParser
+from app.txt_parser import TxtParser
 from app.config import config
 from app import __version__
 
@@ -45,8 +50,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Initialize parser
-parser = EpubParser()
+# Initialize parsers
+epub_parser = EpubParser()
+txt_parser = TxtParser()
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -76,7 +82,7 @@ async def parse_metadata(request: ParseRequest):
     """
     try:
         logger.info(f"Received metadata extraction request for: {request.file_path}")
-        metadata = parser.extract_metadata(request.file_path)
+        metadata = epub_parser.extract_metadata(request.file_path)
         logger.info(f"Successfully extracted metadata for book ID {request.book_id}")
         return metadata
         
@@ -101,7 +107,7 @@ async def extract_cover(request: ParseRequest):
     """
     try:
         logger.info(f"Received cover extraction request for: {request.file_path}")
-        result = parser.extract_cover(request.file_path, request.book_id)
+        result = epub_parser.extract_cover(request.file_path, request.book_id)
         
         if result.success:
             logger.info(f"Successfully extracted cover for book ID {request.book_id}")
@@ -133,7 +139,7 @@ async def parse_structure(request: ParseRequest):
     """
     try:
         logger.info(f"Received structure parsing request for: {request.file_path}")
-        result = parser.parse_structure(request.file_path, request.book_id)
+        result = epub_parser.parse_structure(request.file_path, request.book_id)
         
         if not result.success:
             raise HTTPException(status_code=500, detail=result.error)
@@ -166,7 +172,7 @@ async def parse_chapter_content(request: ParseContentRequest):
     """
     try:
         logger.info(f"Received content parsing request for: {request.file_path}, chapter: {request.chapter_href}")
-        result = parser.parse_chapter_content(request.file_path, request.book_id, request.chapter_href)
+        result = epub_parser.parse_chapter_content(request.file_path, request.book_id, request.chapter_href)
         
         if not result.success:
             raise HTTPException(status_code=500, detail=result.error)
@@ -192,6 +198,79 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
+
+
+# ==================== TXT Parsing Endpoints ====================
+
+@app.post("/api/parse/txt/structure", response_model=TxtStructureResponse)
+async def parse_txt_structure(request: TxtParseRequest):
+    """Parse TXT file structure to detect chapters.
+    
+    Args:
+        request: TxtParseRequest with file_path, book_id, and parse rules
+        
+    Returns:
+        TxtStructureResponse with detected chapters
+        
+    Raises:
+        HTTPException: If parsing fails
+    """
+    try:
+        logger.info(f"Received TXT structure parsing request for: {request.file_path}")
+        result = txt_parser.parse_structure(request.file_path, request.rules)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error)
+        
+        logger.info(f"Successfully parsed TXT structure for book ID {request.book_id}: {result.total_chapters} chapters")
+        return result
+        
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {request.file_path}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to parse TXT structure: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to parse TXT structure: {str(e)}")
+
+
+@app.post("/api/parse/txt/content", response_model=TxtContentResponse)
+async def parse_txt_content(request: TxtContentRequest):
+    """Extract chapter content from TXT file.
+    
+    Args:
+        request: TxtContentRequest with file_path, book_id, start_pos, end_pos, and chapter_title
+        
+    Returns:
+        TxtContentResponse with content elements
+        
+    Raises:
+        HTTPException: If parsing fails
+    """
+    try:
+        logger.info(f"Received TXT content extraction request for: {request.file_path}, range: {request.start_pos}-{request.end_pos}")
+        result = txt_parser.extract_chapter_content(
+            request.file_path,
+            request.start_pos,
+            request.end_pos,
+            request.chapter_title
+        )
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error)
+        
+        logger.info(f"Successfully extracted TXT content for book ID {request.book_id}, word count: {result.word_count}")
+        return result
+        
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {request.file_path}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to extract TXT content: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to extract TXT content: {str(e)}")
 
 
 if __name__ == "__main__":

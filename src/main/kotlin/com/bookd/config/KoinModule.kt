@@ -25,7 +25,6 @@ import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.BookshelfService
 import com.bookd.domain.service.BookDetailService
 import com.bookd.domain.service.ImageDimensionMigrationService
-import com.bookd.domain.service.parser.TxtParser
 import com.bookd.domain.service.metadata.EbookParserClient
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
@@ -112,7 +111,6 @@ val appModule = module {
     single { BookSourceService(get()) }
     single { CoverGeneratorService(get()) }
     single { TxtParseRuleService(get()) }
-    single { TxtParser(get()) }
     single { BookContentService(get(), get(), get(), get(), get(), getOrNull<BookCacheService>(), getOrNull<EbookParserClient>()) }
     single { BookMetadataService(get(), get(), get(), getOrNull(), get()) }
     single { BookScanService(get(), get(), get(), get()) }

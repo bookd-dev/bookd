@@ -35,8 +35,11 @@ interface BookParser {
     
     /**
      * 解析单个章节内容
+     * @param file 书籍文件
+     * @param chapter 章节信息
+     * @param bookId 书籍ID（用于图片持久化等场景）
      */
-    suspend fun parseChapterContent(file: File, chapter: ChapterInfo): List<ContentElement>
+    suspend fun parseChapterContent(file: File, chapter: ChapterInfo, bookId: Int = 0): List<ContentElement>
     
     /**
      * 统计字数

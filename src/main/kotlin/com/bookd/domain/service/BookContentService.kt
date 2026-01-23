@@ -19,7 +19,7 @@ class BookContentService(
     private val bookRepository: BookRepository,
     private val documentRepository: BookDocumentRepository,
     private val readingProgressRepository: ReadingProgressRepository,
-    private val txtParser: TxtParser,
+    private val txtParseRuleService: TxtParseRuleService,
     private val imageStorage: BookImageStorage,
     private val cacheService: BookCacheService?,
     private val ebookParserClient: EbookParserClient?
@@ -27,7 +27,7 @@ class BookContentService(
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
     // 解析器工厂
-    private val parserFactory = ParserFactory(txtParser, ebookParserClient)
+    private val parserFactory = ParserFactory(txtParseRuleService, ebookParserClient)
     
     // 专用的内容解析线程池
     private val contentDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
@@ -269,7 +269,7 @@ class BookContentService(
             }
             
             // 解析文档内容
-            val elements = parser.parseChapterContent(file, chapterInfo)
+            val elements = parser.parseChapterContent(file, chapterInfo, bookId)
             
             // 统计字数和图片数
             val wordCount = parser.countWords(elements)
@@ -489,26 +489,38 @@ class BookContentService(
     private fun transformElement(element: ContentElement, bookId: Int, baseUrl: String?): ContentElement {
         return when (element) {
             is ContentElement.Image -> {
-                val resource = documentRepository.findResource(bookId, element.src)
-                if (resource != null) {
-                    val imagePath = "/book_images/${resource.storedPath}"
+                // 检查是否已经是持久化后的路径（格式：bookId/hash.ext）
+                val isPersistedPath = element.src.matches(Regex("^\\d+/[a-f0-9]+\\.[a-z]+$"))
+                
+                if (isPersistedPath) {
+                    // 已经是持久化路径，直接使用
+                    val imagePath = "/book_images/${element.src}"
                     val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
                     
-                    // 计算宽高比
-                    val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
-                        resource.width.toDouble() / resource.height
-                    } else {
-                        null
-                    }
-                    
-                    element.copy(
-                        src = fullPath,
-                        width = resource.width,
-                        height = resource.height,
-                        aspectRatio = aspectRatio
-                    )
+                    element.copy(src = fullPath)
                 } else {
-                    element
+                    // EPUB 内部路径，需要查询 resources 表
+                    val resource = documentRepository.findResource(bookId, element.src)
+                    if (resource != null) {
+                        val imagePath = "/book_images/${resource.storedPath}"
+                        val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
+                        
+                        // 计算宽高比
+                        val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
+                            resource.width.toDouble() / resource.height
+                        } else {
+                            null
+                        }
+                        
+                        element.copy(
+                            src = fullPath,
+                            width = resource.width,
+                            height = resource.height,
+                            aspectRatio = aspectRatio
+                        )
+                    } else {
+                        element
+                    }
                 }
             }
             is ContentElement.Paragraph -> {

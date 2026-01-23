@@ -5,17 +5,17 @@ import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 import org.jetbrains.exposed.sql.ReferenceOption
 
 object Books : IntIdTable("books") {
-    val title = varchar("title", 255)
-    val author = varchar("author", 255).nullable()
-    val format = varchar("format", 10)
-    val filePath = varchar("file_path", 500).uniqueIndex()
-    val coverPath = varchar("cover_path", 500).nullable()
+    val title = varchar("title", 500)  // 255 -> 500
+    val author = varchar("author", 500).nullable()  // 255 -> 500
+    val format = varchar("format", 20)  // 10 -> 20
+    val filePath = varchar("file_path", 1000).uniqueIndex()  // 500 -> 1000
+    val coverPath = varchar("cover_path", 1000).nullable()  // 500 -> 1000
     val coverWidth = integer("cover_width").nullable() // 封面宽度
     val coverHeight = integer("cover_height").nullable() // 封面高度
     val fileSize = long("file_size")
-    val isbn = varchar("isbn", 20).nullable()
-    val publisher = varchar("publisher", 255).nullable()
-    val publishDate = varchar("publish_date", 20).nullable()
+    val isbn = varchar("isbn", 100).nullable()  // 50 -> 100
+    val publisher = varchar("publisher", 500).nullable()  // 255 -> 500
+    val publishDate = varchar("publish_date", 100).nullable()  // 50 -> 100
     val description = text("description").nullable()
     val sourceId = reference("source_id", BookSources, onDelete = ReferenceOption.CASCADE).nullable()
     
@@ -23,7 +23,7 @@ object Books : IntIdTable("books") {
     val chaptersParsed = bool("chapters_parsed").default(false)
     val chaptersCount = integer("chapters_count").default(0)
     val lastParsedAt = datetime("last_parsed_at").nullable()
-    val parseStatus = varchar("parse_status", 20).nullable() // pending, parsing, completed, failed
+    val parseStatus = varchar("parse_status", 50).nullable() // 20 -> 50
     val parseProgress = integer("parse_progress").default(0) // 0-100
     
     val createdAt = datetime("created_at")

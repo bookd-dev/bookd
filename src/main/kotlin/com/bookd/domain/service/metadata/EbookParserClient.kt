@@ -202,6 +202,84 @@ class EbookParserClient(private val config: EbookParserConfig) {
         }
     }
     
+    // ==================== TXT 解析方法 ====================
+    
+    /**
+     * 解析 TXT 结构（章节列表）
+     */
+    suspend fun parseTxtStructure(filePath: String, bookId: Int, rules: List<TxtParseRule>): TxtStructureResponse? {
+        if (!config.enabled) {
+            logger.debug("eBook Parser service is disabled")
+            return null
+        }
+        
+        return try {
+            logger.debug("Calling eBook Parser service for TXT structure: $filePath")
+            
+            val response = client.post("${config.serviceUrl}/api/parse/txt/structure") {
+                contentType(ContentType.Application.Json)
+                setBody(TxtParseRequest(filePath, bookId, rules))
+            }
+            
+            if (response.status == HttpStatusCode.OK) {
+                val result: TxtStructureResponse = response.body()
+                logger.info("Successfully parsed TXT structure via microservice for book $bookId: ${result.total_chapters} chapters")
+                result
+            } else {
+                logger.warn("eBook Parser service returned status ${response.status}")
+                null
+            }
+            
+        } catch (e: HttpRequestTimeoutException) {
+            logger.error("eBook Parser service timeout for $filePath", e)
+            null
+        } catch (e: Exception) {
+            logger.error("Failed to call eBook Parser service for TXT structure $filePath", e)
+            null
+        }
+    }
+    
+    /**
+     * 解析 TXT 章节内容
+     */
+    suspend fun parseTxtChapterContent(
+        filePath: String,
+        bookId: Int,
+        startPos: Int,
+        endPos: Int,
+        chapterTitle: String?
+    ): TxtContentResponse? {
+        if (!config.enabled) {
+            logger.debug("eBook Parser service is disabled")
+            return null
+        }
+        
+        return try {
+            logger.debug("Calling eBook Parser service for TXT chapter content: $startPos-$endPos")
+            
+            val response = client.post("${config.serviceUrl}/api/parse/txt/content") {
+                contentType(ContentType.Application.Json)
+                setBody(TxtContentRequest(filePath, bookId, startPos, endPos, chapterTitle))
+            }
+            
+            if (response.status == HttpStatusCode.OK) {
+                val result: TxtContentResponse = response.body()
+                logger.info("Successfully parsed TXT chapter content via microservice for book $bookId")
+                result
+            } else {
+                logger.warn("eBook Parser service returned status ${response.status}")
+                null
+            }
+            
+        } catch (e: HttpRequestTimeoutException) {
+            logger.error("eBook Parser service timeout for TXT chapter content", e)
+            null
+        } catch (e: Exception) {
+            logger.error("Failed to call eBook Parser service for TXT chapter content", e)
+            null
+        }
+    }
+    
     /**
      * 关闭客户端
      */
@@ -282,6 +360,59 @@ data class ChapterContentResponse(
     val elements: List<ContentElement> = emptyList(),
     val word_count: Int = 0,
     val image_count: Int = 0,
+    val success: Boolean = true,
+    val error: String? = null
+)
+
+// ==================== TXT 解析 DTO ====================
+
+@Serializable
+data class TxtParseRule(
+    val name: String,
+    val rule: String,
+    val example: String? = null,
+    val enabled: Boolean = true,
+    val priority: Int = 0
+)
+
+@Serializable
+data class TxtParseRequest(
+    val file_path: String,
+    val book_id: Int,
+    val rules: List<TxtParseRule> = emptyList()
+)
+
+@Serializable
+data class TxtChapterInfo(
+    val index: Int,
+    val title: String? = null,
+    val start_pos: Int,
+    val end_pos: Int,
+    val level: Int = 0
+)
+
+@Serializable
+data class TxtStructureResponse(
+    val chapters: List<TxtChapterInfo> = emptyList(),
+    val total_chapters: Int,
+    val full_text_length: Int,
+    val success: Boolean = true,
+    val error: String? = null
+)
+
+@Serializable
+data class TxtContentRequest(
+    val file_path: String,
+    val book_id: Int,
+    val start_pos: Int,
+    val end_pos: Int,
+    val chapter_title: String? = null
+)
+
+@Serializable
+data class TxtContentResponse(
+    val elements: List<ContentElement> = emptyList(),
+    val word_count: Int = 0,
     val success: Boolean = true,
     val error: String? = null
 )

@@ -47,7 +47,7 @@ private class CompositeMetadataExtractor(
     
     private val logger = LoggerFactory.getLogger(CompositeMetadataExtractor::class.java)
     
-    override fun extractMetadata(file: File): BookMetadata? {
+    override suspend fun extractMetadata(file: File): BookMetadata? {
         for (extractor in extractors) {
             val metadata = extractor.extractMetadata(file)
             if (metadata != null && (metadata.title != null || metadata.author != null)) {
@@ -58,7 +58,7 @@ private class CompositeMetadataExtractor(
         return null
     }
     
-    override fun extractCover(file: File, bookId: Int): String? {
+    override suspend fun extractCover(file: File, bookId: Int): String? {
         for (extractor in extractors) {
             val cover = extractor.extractCover(file, bookId)
             if (cover != null) {

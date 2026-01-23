@@ -11,12 +11,12 @@ class TxtMetadataExtractor : MetadataExtractor {
     
     private val logger = LoggerFactory.getLogger(TxtMetadataExtractor::class.java)
     
-    override fun extractMetadata(file: File): BookMetadata? {
+    override suspend fun extractMetadata(file: File): BookMetadata? {
         logger.debug("TXT files don't have embedded metadata, skipping for ${file.name}")
         return null
     }
     
-    override fun extractCover(file: File, bookId: Int): String? {
+    override suspend fun extractCover(file: File, bookId: Int): String? {
         // TXT 文件没有封面
         return null
     }

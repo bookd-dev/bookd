@@ -15,6 +15,9 @@ fun Application.configureRouting() {
         // Static files for covers (Docker: /app/covers, Local: ./covers)
         staticFiles("/covers", File("covers"))
         
+        // Static files for book images (Docker: /app/book_images, Local: ./book_images)
+        staticFiles("/book_images", File("book_images"))
+        
         healthRoutes()
         authRoutes(userService)
         userManagementRoutes(userService)
