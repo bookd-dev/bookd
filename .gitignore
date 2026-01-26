@@ -34,3 +34,5 @@ replay_pid*
 build/
 .github/
 *.DS_Store
+AGENTS.md
+**/AGENTS.md
