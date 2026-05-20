@@ -4,12 +4,13 @@ import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.data.entity.ReadingProgress
 import com.bookd.domain.model.ReadingProgressResponse
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.math.BigDecimal
 
 class ReadingProgressRepository {
@@ -25,7 +26,7 @@ class ReadingProgressRepository {
         ReadingProgress.selectAll()
             .where { ReadingProgress.userId eq userId }
             .orderBy(ReadingProgress.lastReadAt, SortOrder.DESC)
-            .limit(limit, offset)
+            .limit(limit).offset(offset)
             .map { toResponse(it) }
     }
     

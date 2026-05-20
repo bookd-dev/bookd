@@ -321,7 +321,10 @@ class BookshelfServiceTest {
             cfiLocation = null,
             documentId = null,
             deviceId = null,
-            lastReadAt = lastReadAt
+            lastReadAt = lastReadAt,
+            chapterPageIndex = null,
+            chapterTotalPages = null,
+            chapterScrollPercent = null
         )
     }
 }

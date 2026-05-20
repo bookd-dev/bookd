@@ -1,7 +1,7 @@
 package com.bookd.data.entity
 
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.kotlin.datetime.datetime
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.datetime.datetime
 
 object InviteTokens : IntIdTable("invite_tokens") {
     val token = varchar("token", 255).uniqueIndex()

@@ -344,7 +344,10 @@ class BookDetailServiceTest {
             cfiLocation = null,
             documentId = null,
             deviceId = null,
-            lastReadAt = LocalDateTime(2026, 1, 21, 10, 0)
+            lastReadAt = LocalDateTime(2026, 1, 21, 10, 0),
+            chapterPageIndex = null,
+            chapterTotalPages = null,
+            chapterScrollPercent = null
         )
     }
     

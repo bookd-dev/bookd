@@ -1,7 +1,7 @@
 package com.bookd.data.entity
 
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.ReferenceOption
 
 object DocumentResources : IntIdTable("document_resources") {
     val bookId = reference("book_id", Books, onDelete = ReferenceOption.CASCADE)

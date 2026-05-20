@@ -7,10 +7,11 @@ import com.bookd.domain.model.Book
 import com.bookd.domain.model.Bookshelf
 import com.bookd.domain.model.BookshelfItem
 import com.bookd.infrastructure.time.TimeProvider
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 /**
  * 书架项目(书架-书籍关联)数据仓库
@@ -88,7 +89,7 @@ class BookshelfItemRepository {
             .selectAll()
             .where { BookshelfItems.bookshelfId eq bookshelfId }
             .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
-            .limit(limit, offset)
+            .limit(limit).offset(offset)
             .map { toBook(it) }
     }
     
@@ -105,7 +106,7 @@ class BookshelfItemRepository {
         BookshelfItems.selectAll()
             .where { BookshelfItems.bookshelfId eq bookshelfId }
             .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
-            .limit(limit, offset)
+            .limit(limit).offset(offset)
             .map { it[BookshelfItems.bookId].value }
     }
     

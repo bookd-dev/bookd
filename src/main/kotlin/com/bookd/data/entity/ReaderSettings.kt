@@ -1,8 +1,8 @@
 package com.bookd.data.entity
 
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.kotlin.datetime.datetime
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.datetime.datetime
 
 object ReaderSettings : IntIdTable("reader_settings") {
     val userId = reference("user_id", Users, onDelete = ReferenceOption.CASCADE).uniqueIndex()

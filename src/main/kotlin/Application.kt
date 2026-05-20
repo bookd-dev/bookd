@@ -7,8 +7,8 @@ import com.bookd.plugins.*
 import io.ktor.server.application.*
 import io.ktor.server.netty.*
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.ktor.ext.inject
 
 fun main(args: Array<String>) {

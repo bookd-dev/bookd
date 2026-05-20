@@ -4,9 +4,10 @@ import com.bookd.data.entity.BookshelfItems
 import com.bookd.data.entity.Bookshelves
 import com.bookd.domain.model.Bookshelf
 import com.bookd.infrastructure.time.TimeProvider
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 /**
  * 书架数据仓库
