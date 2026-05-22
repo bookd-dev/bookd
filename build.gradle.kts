@@ -21,6 +21,10 @@ application {
     mainClass = "io.ktor.server.netty.EngineMain"
 }
 
+val webProjectDir = layout.projectDirectory.dir("../bookd-web")
+val webDistDir = webProjectDir.dir("dist")
+val generatedWebResourcesDir = layout.buildDirectory.dir("generated/resources/bookd-web")
+
 repositories {
     mavenCentral()
 }
@@ -83,6 +87,45 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+val npmInstall by tasks.registering(Exec::class) {
+    workingDir = webProjectDir.asFile
+    commandLine("npm", "ci")
+    inputs.file(webProjectDir.file("package.json"))
+    inputs.file(webProjectDir.file("package-lock.json"))
+    outputs.dir(webProjectDir.dir("node_modules"))
+}
+
+val buildBookdWeb by tasks.registering(Exec::class) {
+    dependsOn(npmInstall)
+    workingDir = webProjectDir.asFile
+    commandLine("npm", "run", "build")
+    inputs.file(webProjectDir.file("package.json"))
+    inputs.file(webProjectDir.file("package-lock.json"))
+    inputs.file(webProjectDir.file("index.html"))
+    inputs.file(webProjectDir.file("vite.config.ts"))
+    inputs.file(webProjectDir.file("tsconfig.json"))
+    inputs.file(webProjectDir.file("tsconfig.app.json"))
+    inputs.file(webProjectDir.file("tsconfig.node.json"))
+    inputs.dir(webProjectDir.dir("src"))
+    outputs.dir(webDistDir)
+}
+
+val copyBookdWebResources by tasks.registering(Copy::class) {
+    dependsOn(buildBookdWeb)
+    from(webDistDir)
+    into(generatedWebResourcesDir.map { it.dir("static/web") })
+}
+
+sourceSets {
+    main {
+        resources.srcDir(generatedWebResourcesDir)
+    }
+}
+
+tasks.named("processResources") {
+    dependsOn(copyBookdWebResources)
 }
 
 jib {

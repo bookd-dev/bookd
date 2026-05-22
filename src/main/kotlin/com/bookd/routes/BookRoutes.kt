@@ -46,6 +46,7 @@ data class ChaptersResponse(
 
 @Serializable
 data class UpdateMetadataRequest(
+    val title: String? = null,
     val author: String? = null,
     val coverPath: String? = null,
     val isbn: String? = null,
@@ -228,9 +229,14 @@ fun Route.bookRoutes() {
             }
 
             val request = call.receive<UpdateMetadataRequest>()
+            if (request.title != null && request.title.isBlank()) {
+                call.respondError(ErrorCode.BOOK_INVALID_PARAMS)
+                return@put
+            }
 
             val updated = bookRepository.updateMetadata(
                 id = id,
+                title = request.title?.trim(),
                 author = request.author,
                 coverPath = request.coverPath,
                 isbn = request.isbn,
