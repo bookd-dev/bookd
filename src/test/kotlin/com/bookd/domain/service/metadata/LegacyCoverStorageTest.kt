@@ -6,9 +6,13 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import javax.imageio.ImageIO
 
 class LegacyCoverStorageTest {
 
@@ -18,13 +22,13 @@ class LegacyCoverStorageTest {
     @Test
     fun `given existing legacy cover when saving replacement then target contains complete replacement`() {
         val storage = LegacyCoverStorage(tempDir)
-        val targetFile = File(tempDir, "book_7.jpg")
+        val targetFile = File(tempDir, "book_7.png")
         targetFile.writeBytes(byteArrayOf(1, 2, 3))
-        val replacement = byteArrayOf(9, 8, 7, 6)
+        val replacement = pngBytes()
 
-        val path = storage.saveCover(7, "JPG", replacement.inputStream())
+        val path = storage.saveCover(7, "PNG", replacement.inputStream())
 
-        assertEquals("/covers/book_7.jpg", path)
+        assertEquals("/covers/book_7.png", path)
         assertArrayEquals(replacement, targetFile.readBytes())
         assertTrue(tempDir.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
     }
@@ -42,6 +46,29 @@ class LegacyCoverStorageTest {
 
         assertArrayEquals(existing, targetFile.readBytes())
         assertTrue(tempDir.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
+    }
+
+    @Test
+    fun `given invalid cover bytes when saving replacement then existing cover remains and temp file is cleaned`() {
+        val storage = LegacyCoverStorage(tempDir)
+        val targetFile = File(tempDir, "book_9.jpg")
+        val existing = pngBytes()
+        targetFile.writeBytes(existing)
+
+        assertThrows(IOException::class.java) {
+            storage.saveCover(9, "jpg", "TEST2".byteInputStream())
+        }
+
+        assertArrayEquals(existing, targetFile.readBytes())
+        assertTrue(tempDir.listFiles().orEmpty().none { it.name.endsWith(".tmp") })
+    }
+
+    private fun pngBytes(): ByteArray {
+        val image = BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB)
+        image.setRGB(0, 0, Color.WHITE.rgb)
+        val output = ByteArrayOutputStream()
+        ImageIO.write(image, "png", output)
+        return output.toByteArray()
     }
 
     private class FailingInputStream(

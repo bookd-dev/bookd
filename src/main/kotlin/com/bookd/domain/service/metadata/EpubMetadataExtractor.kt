@@ -3,12 +3,14 @@ package com.bookd.domain.service.metadata
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import javax.imageio.ImageIO
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -264,6 +266,7 @@ internal class LegacyCoverStorage(
             tempFile.outputStream().use { output ->
                 input.copyTo(output)
             }
+            validateCoverImage(tempFile)
             publish(tempFile, targetFile)
         } catch (e: Exception) {
             tempFile.delete()
@@ -271,6 +274,14 @@ internal class LegacyCoverStorage(
         }
 
         return "/covers/book_${bookId}.$normalizedExtension"
+    }
+
+    private fun validateCoverImage(imageFile: File) {
+        val image = ImageIO.read(imageFile)
+            ?: throw IOException("Invalid cover image data")
+        if (image.width <= 0 || image.height <= 0) {
+            throw IOException("Invalid cover image dimensions")
+        }
     }
 
     private fun publish(tempFile: File, targetFile: File) {
