@@ -4,9 +4,12 @@ import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.TagRepository
 import com.bookd.domain.model.Book
 import com.bookd.domain.model.Tag
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -40,5 +43,35 @@ class TagServiceTest {
         verify(exactly = 1) { tagRepository.findOrCreateTags(listOf("科幻", "冒险")) }
         verify(exactly = 1) { tagRepository.addTagsToBook(5, match { it.toSet() == setOf(1, 2) }) }
         verify(exactly = 0) { tagRepository.addTagToBook(any(), any()) }
+    }
+
+    @Test
+    fun `given filename tags when async auto tagging from filename then tag links are batched`() = runBlocking {
+        val tagRepository = mockk<TagRepository>()
+        val bookRepository = mockk<BookRepository>()
+        val service = TagService(tagRepository, bookRepository)
+        val firstTag = Tag(id = 1, name = "科幻")
+        val secondTag = Tag(id = 2, name = "冒险")
+
+        coEvery { bookRepository.findByIdAsync(5) } returns Book(
+            id = 5,
+            title = "Book",
+            author = null,
+            format = "epub",
+            filePath = "/library/Book-123-Author-科幻,冒险.epub",
+            fileSize = 100
+        )
+        coEvery { tagRepository.findOrCreateTagsAsync(listOf("科幻", "冒险")) } returns mapOf(
+            "科幻" to firstTag,
+            "冒险" to secondTag
+        )
+        coEvery { tagRepository.addTagsToBookAsync(5, match { it.toSet() == setOf(1, 2) }) } returns setOf(1, 2)
+
+        val result = service.autoTagBookFromFilenameAsync(5)
+
+        assertEquals(listOf(firstTag, secondTag), result)
+        coVerify(exactly = 1) { tagRepository.findOrCreateTagsAsync(listOf("科幻", "冒险")) }
+        coVerify(exactly = 1) { tagRepository.addTagsToBookAsync(5, match { it.toSet() == setOf(1, 2) }) }
+        coVerify(exactly = 0) { tagRepository.addTagToBookAsync(any(), any()) }
     }
 }

@@ -238,7 +238,7 @@ suspend fun ApplicationCall.getAuthenticatedUser(userService: UserService): User
         return null
     }
 
-    val user = userService.validateToken(token)
+    val user = userService.validateTokenAsync(token)
     if (user == null) {
         respondError(ErrorCode.AUTH_INVALID_TOKEN)
         return null
@@ -264,7 +264,7 @@ suspend fun ApplicationCall.requireAdminUser(userService: UserService): User? {
         return null
     }
 
-    val user = userService.validateToken(token)
+    val user = userService.validateTokenAsync(token)
     if (user == null || user.role != UserRole.ADMIN.value) {
         respondError(ErrorCode.AUTH_ADMIN_REQUIRED)
         return null

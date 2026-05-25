@@ -16,12 +16,12 @@ fun Route.authRoutes(userService: UserService) {
     route("/api/auth") {
         // Check if admin exists (for first-time setup)
         get("/has-admin") {
-            call.respondSuccess(mapOf("hasAdmin" to userService.hasAdmin()))
+            call.respondSuccess(mapOf("hasAdmin" to userService.hasAdminAsync()))
         }
 
         // First-time setup - create admin
         post("/setup") {
-            if (userService.hasAdmin()) {
+            if (userService.hasAdminAsync()) {
                 call.respondError(ErrorCode.AUTH_ADMIN_EXISTS)
                 return@post
             }
@@ -29,7 +29,7 @@ fun Route.authRoutes(userService: UserService) {
             val request = call.receive<RegisterRequest>()
 
             try {
-                val admin = userService.createFirstAdmin(request.username, request.password, request.email)
+                val admin = userService.createFirstAdminAsync(request.username, request.password, request.email)
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(admin.id, admin.username, admin.email, admin.role))
             } catch (e: Exception) {
                 logger.error("初次管理员设置失败", e)
@@ -39,7 +39,7 @@ fun Route.authRoutes(userService: UserService) {
 
         post("/login") {
             val request = call.receive<LoginRequest>()
-            val response = userService.login(request.username, request.password)
+            val response = userService.loginAsync(request.username, request.password)
 
             if (response != null) {
                 call.respondSuccess(response)
@@ -51,7 +51,7 @@ fun Route.authRoutes(userService: UserService) {
         post("/logout") {
             val token = call.request.header("Authorization")?.removePrefix("Bearer ")
             if (token != null) {
-                userService.logout(token)
+                userService.logoutAsync(token)
             }
             call.respondSuccessMessage(MessageBundle.Success.LOGGED_OUT)
         }
@@ -60,7 +60,7 @@ fun Route.authRoutes(userService: UserService) {
             val request = call.receive<RegisterRequest>()
 
             try {
-                val user = userService.registerGuest(request.username, request.password, request.email)
+                val user = userService.registerGuestAsync(request.username, request.password, request.email)
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(user.id, user.username, user.email, user.role))
             } catch (e: Exception) {
                 call.respondError(ErrorCode.AUTH_USERNAME_EXISTS)
@@ -75,7 +75,7 @@ fun Route.authRoutes(userService: UserService) {
                 return@post
             }
 
-            val user = userService.registerUser(request.username, request.password, request.email, request.inviteToken)
+            val user = userService.registerUserAsync(request.username, request.password, request.email, request.inviteToken)
 
             if (user != null) {
                 call.respondSuccess(HttpStatusCode.Created, UserResponse(user.id, user.username, user.email, user.role))
@@ -91,7 +91,7 @@ fun Route.authRoutes(userService: UserService) {
                 return@get
             }
 
-            val user = userService.validateToken(token)
+            val user = userService.validateTokenAsync(token)
             if (user != null) {
                 call.respondSuccess(UserResponse(user.id, user.username, user.email, user.role))
             } else {
@@ -107,20 +107,16 @@ fun Route.userManagementRoutes(userService: UserService) {
         get {
             call.requireAdminUser(userService) ?: return@get
 
-            val users = userService.findAll()
+            val users = userService.findAllAsync()
             call.respondSuccess(users.map { UserResponse(it.id, it.username, it.email, it.role) })
         }
 
         delete("/{id}") {
             call.requireAdminUser(userService) ?: return@delete
 
-            val userId = call.parameters["id"]?.toIntOrNull()
-            if (userId == null) {
-                call.respondError(ErrorCode.USER_INVALID_ID)
-                return@delete
-            }
+            val userId = call.requiredIntParameter("id", ErrorCode.USER_INVALID_ID) ?: return@delete
 
-            val success = userService.deleteUser(userId)
+            val success = userService.deleteUserAsync(userId)
             if (success) {
                 call.respondSuccessMessage(MessageBundle.Success.USER_DELETED)
             } else {
@@ -131,7 +127,7 @@ fun Route.userManagementRoutes(userService: UserService) {
         post("/invite-tokens") {
             val user = call.requireAdminUser(userService) ?: return@post
 
-            val inviteToken = userService.createInviteToken(user.id)
+            val inviteToken = userService.createInviteTokenAsync(user.id)
             if (inviteToken != null) {
                 call.respondSuccess(HttpStatusCode.Created, inviteToken)
             } else {
@@ -142,7 +138,7 @@ fun Route.userManagementRoutes(userService: UserService) {
         get("/invite-tokens") {
             val user = call.requireAdminUser(userService) ?: return@get
 
-            val tokens = userService.getInviteTokens(user.id)
+            val tokens = userService.getInviteTokensAsync(user.id)
             call.respondSuccess(tokens)
         }
     }

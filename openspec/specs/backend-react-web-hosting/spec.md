@@ -2,9 +2,7 @@
 
 ## Purpose
 Define backend requirements for serving the React web application, packaging its build output, and preserving metadata API compatibility required by the web migration.
-
 ## Requirements
-
 ### Requirement: Backend serves React web routes
 The backend SHALL serve the React application document for known web document routes.
 
@@ -37,3 +35,17 @@ The book metadata API SHALL support updating a book title while preserving exist
 #### Scenario: Metadata request includes blank title
 - **WHEN** `PUT /api/books/{id}/metadata` receives a blank `title`
 - **THEN** the backend SHALL reject the request with a bad-request book parameter error.
+
+### Requirement: Legacy cover replacement is safe for static media reads
+The backend SHALL replace existing legacy cover files served through `/covers/*` without exposing partially written file contents to static media responses.
+
+#### Scenario: Existing legacy cover file is replaced
+- **WHEN** EPUB metadata extraction replaces an existing `/covers/book_<id>.*` file
+- **THEN** the served `/covers/*` path SHALL continue to reference a complete image file
+- **AND** the URL path and static media route behavior SHALL remain unchanged.
+
+#### Scenario: Cover replacement preparation fails
+- **WHEN** EPUB metadata extraction cannot finish preparing a replacement cover file
+- **THEN** the existing `/covers/*` cover file SHALL remain available unchanged
+- **AND** temporary files SHALL NOT become public cover URLs.
+

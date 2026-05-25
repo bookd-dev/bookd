@@ -10,9 +10,12 @@ import com.bookd.domain.model.BookWithProgress
 import com.bookd.domain.model.Bookshelf
 import com.bookd.domain.model.BookshelfMembershipSummary
 import com.bookd.domain.model.ReadingProgressResponse
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDateTime
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -78,6 +81,39 @@ class BookshelfServiceTest {
         assertFalse(response.hasMore)
         verify(exactly = 1) {
             bookshelfItemRepository.findBooksWithProgressByBookshelf(userId, bookshelfId, 20, 0)
+        }
+    }
+
+    @Test
+    fun `given ordered repository page when async listing bookshelf books then response preserves order and progress`() = runBlocking {
+        val bookshelf = createBookshelf()
+        val progress2 = createProgress(2, LocalDateTime(2026, 1, 21, 10, 0))
+        val progress1 = createProgress(1, LocalDateTime(2026, 1, 20, 10, 0))
+        val page = BookshelfBooksPage(
+            books = listOf(
+                BookWithProgress(createBook(2, "Book 2"), progress2),
+                BookWithProgress(createBook(1, "Book 1"), progress1),
+                BookWithProgress(createBook(3, "Book 3"), null)
+            ),
+            total = 3
+        )
+
+        coEvery { bookshelfRepository.findByIdAsync(bookshelfId) } returns bookshelf
+        coEvery {
+            bookshelfItemRepository.findBooksWithProgressByBookshelfAsync(userId, bookshelfId, 20, 0)
+        } returns page
+
+        val result = bookshelfService.getBooksInBookshelfAsync(userId, bookshelfId, 20, 0)
+
+        assertTrue(result.isSuccess)
+        val response = result.getOrNull()!!
+        assertEquals(listOf(2, 1, 3), response.books.map { it.book.id })
+        assertNotNull(response.books[0].progress)
+        assertNull(response.books[2].progress)
+        assertEquals(3, response.total)
+        assertFalse(response.hasMore)
+        coVerify(exactly = 1) {
+            bookshelfItemRepository.findBooksWithProgressByBookshelfAsync(userId, bookshelfId, 20, 0)
         }
     }
 

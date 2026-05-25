@@ -12,9 +12,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.testing.*
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -56,7 +54,7 @@ class AdminRoutesAuthTest {
     fun `given non admin token when admin migration requested then migration is not executed`() = testApplication {
         val userService = mockk<UserService>()
         val migrationService = mockk<ImageDimensionMigrationService>(relaxed = true)
-        every { userService.validateToken("user-token") } returns User(
+        coEvery { userService.validateTokenAsync("user-token") } returns User(
             id = 2,
             username = "reader",
             password = "hash",
@@ -80,7 +78,7 @@ class AdminRoutesAuthTest {
         }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
-        verify(exactly = 1) { userService.validateToken("user-token") }
+        coVerify(exactly = 1) { userService.validateTokenAsync("user-token") }
         coVerify(exactly = 0) { migrationService.migrateResourceDimensions() }
         coVerify(exactly = 0) { migrationService.migrateCoverDimensions() }
     }
@@ -89,7 +87,7 @@ class AdminRoutesAuthTest {
     fun `given admin token when admin migration requested then migration is executed`() = testApplication {
         val userService = mockk<UserService>()
         val migrationService = mockk<ImageDimensionMigrationService>()
-        every { userService.validateToken("admin-token") } returns User(
+        coEvery { userService.validateTokenAsync("admin-token") } returns User(
             id = 1,
             username = "admin",
             password = "hash",
@@ -144,7 +142,7 @@ class AdminRoutesAuthTest {
     @Test
     fun `given invalid token when users requested then shared admin auth rejects request`() = testApplication {
         val userService = mockk<UserService>(relaxed = true)
-        every { userService.validateToken("bad-token") } returns null
+        coEvery { userService.validateTokenAsync("bad-token") } returns null
         startKoin {
             modules(module { single { userService } })
         }
@@ -159,7 +157,7 @@ class AdminRoutesAuthTest {
         }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
-        verify(exactly = 1) { userService.validateToken("bad-token") }
-        verify(exactly = 0) { userService.findAll() }
+        coVerify(exactly = 1) { userService.validateTokenAsync("bad-token") }
+        coVerify(exactly = 0) { userService.findAllAsync() }
     }
 }

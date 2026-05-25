@@ -52,6 +52,24 @@ class BookshelfService(
             sortOrder = -1  // 确保排在最前面
         )
     }
+
+    suspend fun initializeUserBookshelvesAsync(userId: Int): Bookshelf {
+        logger.info("初始化用户书架, userId: $userId")
+
+        val existing = bookshelfRepository.getDefaultBookshelfAsync(userId)
+        if (existing != null) {
+            logger.info("用户默认书架已存在, userId: $userId")
+            return existing
+        }
+
+        return bookshelfRepository.createAsync(
+            userId = userId,
+            name = DEFAULT_BOOKSHELF_NAME,
+            description = null,
+            isSystemDefault = true,
+            sortOrder = -1
+        )
+    }
     
     /**
      * 获取用户的所有书架
@@ -76,12 +94,32 @@ class BookshelfService(
             bookshelf.copy(bookCount = countsByBookshelfId[bookshelf.id]?.toInt() ?: 0)
         }
     }
+
+    suspend fun getUserBookshelvesAsync(userId: Int): List<Bookshelf> {
+        var bookshelves = bookshelfRepository.findByUserIdAsync(userId)
+
+        val hasDefaultBookshelf = bookshelves.any { it.isSystemDefault }
+        if (!hasDefaultBookshelf) {
+            logger.info("用户没有默认书架，自动创建, userId: $userId")
+            val defaultBookshelf = initializeUserBookshelvesAsync(userId)
+            bookshelves = listOf(defaultBookshelf) + bookshelves
+        }
+
+        val countsByBookshelfId = bookshelfItemRepository.countByBookshelfIdsAsync(bookshelves.map { it.id })
+        return bookshelves.map { bookshelf ->
+            bookshelf.copy(bookCount = countsByBookshelfId[bookshelf.id]?.toInt() ?: 0)
+        }
+    }
     
     /**
      * 获取用户的默认书架("全部"书架)
      */
     fun getDefaultBookshelf(userId: Int): Bookshelf? {
         return bookshelfRepository.getDefaultBookshelf(userId)
+    }
+
+    suspend fun getDefaultBookshelfAsync(userId: Int): Bookshelf? {
+        return bookshelfRepository.getDefaultBookshelfAsync(userId)
     }
     
     /**
@@ -116,6 +154,33 @@ class BookshelfService(
             sortOrder = maxSortOrder + 1
         )
         
+        logger.info("创建书架成功, userId: $userId, bookshelfId: ${bookshelf.id}, name: ${bookshelf.name}")
+        return Result.success(bookshelf)
+    }
+
+    suspend fun createBookshelfAsync(userId: Int, request: CreateBookshelfRequest): Result<Bookshelf> {
+        if (request.name.isBlank()) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NAME_EMPTY))
+        }
+
+        if (request.name == DEFAULT_BOOKSHELF_NAME) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NAME_EXISTS))
+        }
+
+        val existing = bookshelfRepository.findByUserIdAndNameAsync(userId, request.name)
+        if (existing != null) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NAME_EXISTS))
+        }
+
+        val maxSortOrder = bookshelfRepository.getMaxSortOrderAsync(userId)
+        val bookshelf = bookshelfRepository.createAsync(
+            userId = userId,
+            name = request.name,
+            description = request.description,
+            isSystemDefault = false,
+            sortOrder = maxSortOrder + 1
+        )
+
         logger.info("创建书架成功, userId: $userId, bookshelfId: ${bookshelf.id}, name: ${bookshelf.name}")
         return Result.success(bookshelf)
     }
@@ -160,6 +225,38 @@ class BookshelfService(
         logger.info("更新书架成功, userId: $userId, bookshelfId: $bookshelfId")
         return Result.success(updated)
     }
+
+    suspend fun updateBookshelfAsync(userId: Int, bookshelfId: Int, request: UpdateBookshelfRequest): Result<Bookshelf> {
+        val bookshelf = bookshelfRepository.findByIdAsync(bookshelfId)
+            ?: return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+
+        if (bookshelf.userId != userId) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
+
+        if (bookshelf.isSystemDefault) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_CANNOT_MODIFY_SYSTEM))
+        }
+
+        if (request.name != null) {
+            if (request.name.isBlank()) {
+                return Result.failure(BookshelfException(ErrorCode.SHELF_NAME_EMPTY))
+            }
+            if (request.name == DEFAULT_BOOKSHELF_NAME) {
+                return Result.failure(BookshelfException(ErrorCode.SHELF_NAME_EXISTS))
+            }
+            val existing = bookshelfRepository.findByUserIdAndNameAsync(userId, request.name)
+            if (existing != null && existing.id != bookshelfId) {
+                return Result.failure(BookshelfException(ErrorCode.SHELF_NAME_EXISTS))
+            }
+        }
+
+        val updated = bookshelfRepository.updateAsync(bookshelfId, request.name, request.description)
+            ?: return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+
+        logger.info("更新书架成功, userId: $userId, bookshelfId: $bookshelfId")
+        return Result.success(updated)
+    }
     
     /**
      * 删除书架
@@ -186,6 +283,24 @@ class BookshelfService(
         logger.info("删除书架成功, userId: $userId, bookshelfId: $bookshelfId")
         return Result.success(Unit)
     }
+
+    suspend fun deleteBookshelfAsync(userId: Int, bookshelfId: Int): Result<Unit> {
+        val bookshelf = bookshelfRepository.findByIdAsync(bookshelfId)
+            ?: return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+
+        if (bookshelf.userId != userId) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
+
+        if (bookshelf.isSystemDefault) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_CANNOT_DELETE_SYSTEM))
+        }
+
+        bookshelfRepository.deleteAsync(bookshelfId)
+
+        logger.info("删除书架成功, userId: $userId, bookshelfId: $bookshelfId")
+        return Result.success(Unit)
+    }
     
     /**
      * 调整书架顺序
@@ -204,6 +319,22 @@ class BookshelfService(
         // 更新排序
         bookshelfRepository.reorderBookshelves(userId, request.bookshelfIds)
         
+        logger.info("调整书架顺序成功, userId: $userId, bookshelfIds: ${request.bookshelfIds}")
+        return Result.success(Unit)
+    }
+
+    suspend fun reorderBookshelvesAsync(userId: Int, request: ReorderBookshelvesRequest): Result<Unit> {
+        val userBookshelves = bookshelfRepository.findByUserIdAsync(userId)
+        val userBookshelfIds = userBookshelves.filter { !it.isSystemDefault }.map { it.id }.toSet()
+
+        for (id in request.bookshelfIds) {
+            if (id !in userBookshelfIds) {
+                return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+            }
+        }
+
+        bookshelfRepository.reorderBookshelvesAsync(userId, request.bookshelfIds)
+
         logger.info("调整书架顺序成功, userId: $userId, bookshelfIds: ${request.bookshelfIds}")
         return Result.success(Unit)
     }
@@ -226,6 +357,45 @@ class BookshelfService(
         }
         
         val page = bookshelfItemRepository.findBooksWithProgressByBookshelf(
+            userId = userId,
+            bookshelfId = bookshelfId,
+            limit = limit,
+            offset = offset
+        )
+
+        if (page.total == 0) {
+            return Result.success(BooksInBookshelfResponse(
+                books = emptyList(),
+                total = 0,
+                limit = limit,
+                offset = offset,
+                hasMore = false
+            ))
+        }
+
+        return Result.success(BooksInBookshelfResponse(
+            books = page.books,
+            total = page.total,
+            limit = limit,
+            offset = offset,
+            hasMore = offset + page.books.size < page.total
+        ))
+    }
+
+    suspend fun getBooksInBookshelfAsync(
+        userId: Int,
+        bookshelfId: Int,
+        limit: Int = 20,
+        offset: Long = 0
+    ): Result<BooksInBookshelfResponse> {
+        val bookshelf = bookshelfRepository.findByIdAsync(bookshelfId)
+            ?: return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+
+        if (bookshelf.userId != userId) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
+
+        val page = bookshelfItemRepository.findBooksWithProgressByBookshelfAsync(
             userId = userId,
             bookshelfId = bookshelfId,
             limit = limit,
@@ -283,6 +453,30 @@ class BookshelfService(
         logger.info("添加书籍到书架成功, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
         return Result.success(Unit)
     }
+
+    suspend fun addBookToBookshelfAsync(userId: Int, bookshelfId: Int, bookId: Int): Result<Unit> {
+        val bookshelf = bookshelfRepository.findByIdAsync(bookshelfId)
+            ?: return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+
+        if (bookshelf.userId != userId) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
+
+        bookRepository.findByIdAsync(bookId)
+            ?: return Result.failure(BookshelfException(ErrorCode.BOOK_NOT_FOUND))
+
+        bookshelfItemRepository.addBookAsync(bookshelfId, bookId)
+
+        if (!bookshelf.isSystemDefault) {
+            val defaultBookshelf = bookshelfRepository.getDefaultBookshelfAsync(userId)
+            if (defaultBookshelf != null) {
+                bookshelfItemRepository.addBookAsync(defaultBookshelf.id, bookId)
+            }
+        }
+
+        logger.info("添加书籍到书架成功, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
+        return Result.success(Unit)
+    }
     
     /**
      * 从书架移除书籍
@@ -310,6 +504,28 @@ class BookshelfService(
             logger.info("从书架移除书籍成功, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
         }
         
+        return Result.success(Unit)
+    }
+
+    suspend fun removeBookFromBookshelfAsync(userId: Int, bookshelfId: Int, bookId: Int): Result<Unit> {
+        val bookshelf = bookshelfRepository.findByIdAsync(bookshelfId)
+            ?: return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+
+        if (bookshelf.userId != userId) {
+            return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
+
+        if (bookshelf.isSystemDefault) {
+            val deleted = bookshelfItemRepository.removeBookFromAllUserBookshelvesAsync(userId, bookId)
+            logger.info("从所有书架移除书籍成功(级联删除), userId: $userId, bookId: $bookId, deletedCount: $deleted")
+        } else {
+            val deleted = bookshelfItemRepository.removeBookAsync(bookshelfId, bookId)
+            if (deleted == 0) {
+                return Result.failure(BookshelfException(ErrorCode.SHELF_BOOK_NOT_FOUND))
+            }
+            logger.info("从书架移除书籍成功, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
+        }
+
         return Result.success(Unit)
     }
     
@@ -347,6 +563,37 @@ class BookshelfService(
             Result.success(Unit)
         } else {
             // 所有书架添加均失败, 将第一个失败原因返回给调用方
+            firstFailure?.let { Result.failure(it) }
+                ?: Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
+        }
+    }
+
+    suspend fun addBookToBookshelvesAsync(userId: Int, bookId: Int, bookshelfIds: List<Int>): Result<Unit> {
+        bookRepository.findByIdAsync(bookId)
+            ?: return Result.failure(BookshelfException(ErrorCode.BOOK_NOT_FOUND))
+
+        var anySuccess = false
+        var firstFailure: Throwable? = null
+
+        for (bookshelfId in bookshelfIds) {
+            val result = addBookToBookshelfAsync(userId, bookshelfId, bookId)
+            if (result.isFailure) {
+                val throwable = result.exceptionOrNull()
+                if (firstFailure == null && throwable != null) {
+                    firstFailure = throwable
+                }
+                logger.warn(
+                    "批量添加书籍失败, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId",
+                    throwable
+                )
+            } else {
+                anySuccess = true
+            }
+        }
+
+        return if (anySuccess) {
+            Result.success(Unit)
+        } else {
             firstFailure?.let { Result.failure(it) }
                 ?: Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
         }
@@ -402,6 +649,39 @@ class BookshelfService(
         logger.info("批量从书架移除书籍成功, userId: $userId, bookId: $bookId, bookshelfIds: $bookshelfIds")
         return Result.success(Unit)
     }
+
+    suspend fun batchRemoveBookFromBookshelvesAsync(userId: Int, bookId: Int, bookshelfIds: List<Int>): Result<Unit> {
+        bookRepository.findByIdAsync(bookId)
+            ?: return Result.failure(BookshelfException(ErrorCode.BOOK_NOT_FOUND))
+
+        val defaultBookshelf = bookshelfRepository.getDefaultBookshelfAsync(userId)
+
+        for (bookshelfId in bookshelfIds) {
+            val bookshelf = bookshelfRepository.findByIdAsync(bookshelfId) ?: continue
+
+            if (bookshelf.userId != userId) continue
+
+            if (bookshelf.isSystemDefault) {
+                logger.warn("批量移除时跳过系统书架, userId: $userId, bookshelfId: $bookshelfId, bookId: $bookId")
+                continue
+            }
+
+            bookshelfItemRepository.removeBookAsync(bookshelfId, bookId)
+        }
+
+        if (defaultBookshelf != null) {
+            val remainingBookshelves = bookshelfItemRepository.findUserBookshelvesForBookAsync(userId, bookId)
+            val hasNonSystemBookshelf = remainingBookshelves.any { !it.isSystemDefault }
+
+            if (!hasNonSystemBookshelf) {
+                bookshelfItemRepository.removeBookAsync(defaultBookshelf.id, bookId)
+                logger.info("书籍不在任何非系统书架中,已从全部书架移除, userId: $userId, bookId: $bookId")
+            }
+        }
+
+        logger.info("批量从书架移除书籍成功, userId: $userId, bookId: $bookId, bookshelfIds: $bookshelfIds")
+        return Result.success(Unit)
+    }
     
     /**
      * 获取书籍所在的所有书架
@@ -410,8 +690,16 @@ class BookshelfService(
         return getBookshelfMembershipSummary(userId, bookId).bookshelves
     }
 
+    suspend fun getBookshelvesForBookAsync(userId: Int, bookId: Int): List<Bookshelf> {
+        return getBookshelfMembershipSummaryAsync(userId, bookId).bookshelves
+    }
+
     fun getBookshelfMembershipSummary(userId: Int, bookId: Int): BookshelfMembershipSummary {
         return bookshelfItemRepository.findUserBookshelfMembershipSummary(userId, bookId)
+    }
+
+    suspend fun getBookshelfMembershipSummaryAsync(userId: Int, bookId: Int): BookshelfMembershipSummary {
+        return bookshelfItemRepository.findUserBookshelfMembershipSummaryAsync(userId, bookId)
     }
     
     /**
@@ -419,6 +707,10 @@ class BookshelfService(
      */
     fun isBookInDefaultBookshelf(userId: Int, bookId: Int): Boolean {
         return getBookshelfMembershipSummary(userId, bookId).inDefaultBookshelf
+    }
+
+    suspend fun isBookInDefaultBookshelfAsync(userId: Int, bookId: Int): Boolean {
+        return getBookshelfMembershipSummaryAsync(userId, bookId).inDefaultBookshelf
     }
 }
 

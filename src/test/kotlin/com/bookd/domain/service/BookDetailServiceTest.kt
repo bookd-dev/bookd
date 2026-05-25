@@ -7,7 +7,6 @@ import com.bookd.domain.model.ReadingProgressResponse
 import com.bookd.domain.model.Tag
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
@@ -57,9 +56,9 @@ class BookDetailServiceTest {
         )
 
         coEvery { bookService.getBookById(bookId) } returns book
-        every { tagService.getTagsForBook(bookId) } returns tags
+        coEvery { tagService.getTagsForBookAsync(bookId) } returns tags
         coEvery { readingService.getProgress(userId, bookId) } returns progress
-        every { bookshelfService.getBookshelfMembershipSummary(userId, bookId) } returns membership
+        coEvery { bookshelfService.getBookshelfMembershipSummaryAsync(userId, bookId) } returns membership
 
         val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
 
@@ -70,7 +69,7 @@ class BookDetailServiceTest {
         assertEquals(2, result.bookshelves.size)
         assertTrue(result.inDefaultBookshelf)
         coVerify(exactly = 1) { bookService.getBookById(bookId) }
-        verify(exactly = 1) { bookshelfService.getBookshelfMembershipSummary(userId, bookId) }
+        coVerify(exactly = 1) { bookshelfService.getBookshelfMembershipSummaryAsync(userId, bookId) }
         verify(exactly = 0) { bookshelfService.getBookshelvesForBook(any(), any()) }
         verify(exactly = 0) { bookshelfService.isBookInDefaultBookshelf(any(), any()) }
     }
@@ -83,9 +82,9 @@ class BookDetailServiceTest {
 
         assertNull(result)
         coVerify(exactly = 1) { bookService.getBookById(bookId) }
-        verify(exactly = 0) { tagService.getTagsForBook(any()) }
+        coVerify(exactly = 0) { tagService.getTagsForBookAsync(any()) }
         coVerify(exactly = 0) { readingService.getProgress(any(), any()) }
-        verify(exactly = 0) { bookshelfService.getBookshelfMembershipSummary(any(), any()) }
+        coVerify(exactly = 0) { bookshelfService.getBookshelfMembershipSummaryAsync(any(), any()) }
     }
 
     @Test
@@ -93,9 +92,9 @@ class BookDetailServiceTest {
         val book = createBook(bookId, "Test Book")
 
         coEvery { bookService.getBookById(bookId) } returns book
-        every { tagService.getTagsForBook(bookId) } throws RuntimeException("Tag service error")
+        coEvery { tagService.getTagsForBookAsync(bookId) } throws RuntimeException("Tag service error")
         coEvery { readingService.getProgress(userId, bookId) } throws RuntimeException("Reading service error")
-        every { bookshelfService.getBookshelfMembershipSummary(userId, bookId) } throws RuntimeException("Bookshelf service error")
+        coEvery { bookshelfService.getBookshelfMembershipSummaryAsync(userId, bookId) } throws RuntimeException("Bookshelf service error")
 
         val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
 
@@ -113,9 +112,9 @@ class BookDetailServiceTest {
         val tags = listOf(createTag(1, "Fiction"))
 
         coEvery { bookService.getBookById(bookId) } returns book
-        every { tagService.getTagsForBook(bookId) } returns tags
+        coEvery { tagService.getTagsForBookAsync(bookId) } returns tags
         coEvery { readingService.getProgress(userId, bookId) } returns null
-        every { bookshelfService.getBookshelfMembershipSummary(userId, bookId) } returns BookshelfMembershipSummary(
+        coEvery { bookshelfService.getBookshelfMembershipSummaryAsync(userId, bookId) } returns BookshelfMembershipSummary(
             bookshelves = emptyList(),
             inDefaultBookshelf = false
         )

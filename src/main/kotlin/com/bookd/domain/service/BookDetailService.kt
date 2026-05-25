@@ -29,7 +29,7 @@ class BookDetailService(
         
         // 获取书籍标签
         val tags = try {
-            tagService.getTagsForBook(bookId)
+            tagService.getTagsForBookAsync(bookId)
         } catch (e: Exception) {
             logger.warn("获取书籍标签失败: bookId=$bookId, error=${e.message}")
             emptyList()
@@ -45,7 +45,7 @@ class BookDetailService(
         
         // 获取书籍所在书架和默认书架状态
         val membership = try {
-            bookshelfService.getBookshelfMembershipSummary(userId, bookId)
+            bookshelfService.getBookshelfMembershipSummaryAsync(userId, bookId)
         } catch (e: Exception) {
             logger.warn("获取书籍书架信息失败: bookId=$bookId, userId=$userId, error=${e.message}")
             null

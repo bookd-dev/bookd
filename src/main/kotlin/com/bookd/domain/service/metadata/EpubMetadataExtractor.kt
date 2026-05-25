@@ -3,6 +3,10 @@ package com.bookd.domain.service.metadata
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import java.io.File
+import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
@@ -10,7 +14,11 @@ import javax.xml.parsers.DocumentBuilderFactory
 /**
  * EPUB 元数据提取器
  */
-class EpubMetadataExtractor : MetadataExtractor {
+class EpubMetadataExtractor internal constructor(
+    private val coverStorage: LegacyCoverStorage
+) : MetadataExtractor {
+
+    constructor() : this(LegacyCoverStorage())
     
     private val logger = LoggerFactory.getLogger(EpubMetadataExtractor::class.java)
     
@@ -184,22 +192,14 @@ class EpubMetadataExtractor : MetadataExtractor {
         try {
             val entry = zipFile.getEntry(entryPath) ?: return null
             
-            val coversDir = File("covers")
-            if (!coversDir.exists()) {
-                coversDir.mkdirs()
-            }
-            
             val extension = entryPath.substringAfterLast(".").lowercase()
-            val outputFile = File(coversDir, "book_${bookId}.$extension")
             
-            zipFile.getInputStream(entry).use { input ->
-                outputFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
+            val coverPath = zipFile.getInputStream(entry).use { input ->
+                coverStorage.saveCover(bookId, extension, input)
             }
             
             logger.info("Extracted EPUB cover for book $bookId from $entryPath")
-            return "/covers/book_${bookId}.$extension"
+            return coverPath
         } catch (e: Exception) {
             logger.error("Failed to save cover: ${e.message}")
             return null
@@ -247,5 +247,46 @@ class EpubMetadataExtractor : MetadataExtractor {
         
         logger.debug("Extracted ${tags.size} tags from EPUB: ${tags.joinToString(", ")}")
         return tags.distinct()
+    }
+}
+
+internal class LegacyCoverStorage(
+    private val coversDir: File = File("covers")
+) {
+    fun saveCover(bookId: Int, extension: String, input: InputStream): String {
+        val normalizedExtension = extension.lowercase()
+        Files.createDirectories(coversDir.toPath())
+
+        val targetFile = File(coversDir, "book_${bookId}.$normalizedExtension")
+        val tempFile = File.createTempFile(".book_${bookId}.", ".$normalizedExtension.tmp", coversDir)
+
+        try {
+            tempFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+            publish(tempFile, targetFile)
+        } catch (e: Exception) {
+            tempFile.delete()
+            throw e
+        }
+
+        return "/covers/book_${bookId}.$normalizedExtension"
+    }
+
+    private fun publish(tempFile: File, targetFile: File) {
+        try {
+            Files.move(
+                tempFile.toPath(),
+                targetFile.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(
+                tempFile.toPath(),
+                targetFile.toPath(),
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        }
     }
 }

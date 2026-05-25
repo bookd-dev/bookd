@@ -61,7 +61,7 @@ fun Route.tagRoutes() {
         // Get all tags with statistics
         get {
             val tagService = get<TagService>(TagService::class.java)
-            val tagStats = tagService.getTagStats()
+            val tagStats = tagService.getTagStatsAsync()
             val response = tagStats.map { (tag, count) ->
                 TagWithStats(
                     id = tag.id,
@@ -83,7 +83,7 @@ fun Route.tagRoutes() {
                 return@post
             }
 
-            val tag = tagService.createTag(request.name.trim())
+            val tag = tagService.createTagAsync(request.name.trim())
             call.respondSuccess(HttpStatusCode.Created, tag)
         }
 
@@ -102,9 +102,9 @@ fun Route.tagRoutes() {
                 return@post
             }
 
-            val result = tagService.mergeTags(request.sourceTagIds, request.targetTagName.trim())
+            val result = tagService.mergeTagsAsync(request.sourceTagIds, request.targetTagName.trim())
 
-            val tagStats = tagService.getTagStats()
+            val tagStats = tagService.getTagStatsAsync()
             val targetTagWithStats = tagStats.entries.find { it.key.name == result.name }
 
             if (targetTagWithStats != null) {
@@ -128,7 +128,7 @@ fun Route.tagRoutes() {
             val tagService = get<TagService>(TagService::class.java)
             val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
-            val tags = tagService.getTagsForBook(bookId)
+            val tags = tagService.getTagsForBookAsync(bookId)
             call.respondSuccess(tags)
         }
 
@@ -138,7 +138,7 @@ fun Route.tagRoutes() {
             val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             val request = call.receive<AddTagRequest>()
-            val tag = tagService.addTagToBook(bookId, request.tagName)
+            val tag = tagService.addTagToBookAsync(bookId, request.tagName)
             call.respondSuccess(HttpStatusCode.Created, tag)
         }
 
@@ -148,7 +148,7 @@ fun Route.tagRoutes() {
             val bookId = call.requiredIntParameter("bookId", ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID) ?: return@delete
             val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID) ?: return@delete
 
-            val removed = tagService.removeTagFromBook(bookId, tagId)
+            val removed = tagService.removeTagFromBookAsync(bookId, tagId)
             if (removed) {
                 call.respondNoContent()
             } else {
@@ -161,14 +161,14 @@ fun Route.tagRoutes() {
             val tagService = get<TagService>(TagService::class.java)
             val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
-            val tags = tagService.autoTagBook(bookId)
+            val tags = tagService.autoTagBookAsync(bookId)
             call.respondSuccess(AutoTagBookResponse(tags = tags, count = tags.size))
         }
 
         // Auto-tag all books
         post("/auto-tag/all") {
             val tagService = get<TagService>(TagService::class.java)
-            val result = tagService.autoTagAllBooks()
+            val result = tagService.autoTagAllBooksAsync()
 
             call.respondSuccess(AutoTagResponse(
                 success = true,
@@ -184,7 +184,7 @@ fun Route.tagRoutes() {
             val bookService = get<BookService>(BookService::class.java)
             val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_ID) ?: return@get
 
-            val bookIds = tagService.getBooksByTagId(tagId)
+            val bookIds = tagService.getBooksByTagIdAsync(tagId)
             val books = bookService.getBooksByIds(bookIds)
             call.respondSuccess(books)
         }
@@ -194,7 +194,7 @@ fun Route.tagRoutes() {
             val tagService = get<TagService>(TagService::class.java)
             val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_ID) ?: return@delete
 
-            val deleted = tagService.deleteTag(tagId)
+            val deleted = tagService.deleteTagAsync(tagId)
             if (deleted) {
                 call.respondNoContent()
             } else {

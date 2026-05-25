@@ -1,117 +1,93 @@
 package com.bookd.data.repository
 
-import com.bookd.data.entity.BookshelfItems
 import com.bookd.data.entity.Books
+import com.bookd.data.entity.BookshelfItems
 import com.bookd.data.entity.Bookshelves
 import com.bookd.data.entity.ReadingProgress
 import com.bookd.domain.model.Book
 import com.bookd.domain.model.BookWithProgress
 import com.bookd.domain.model.Bookshelf
-import com.bookd.domain.model.BookshelfMembershipSummary
 import com.bookd.domain.model.BookshelfItem
+import com.bookd.domain.model.BookshelfMembershipSummary
 import com.bookd.domain.model.ReadingProgressResponse
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import com.bookd.infrastructure.time.TimeProvider
 import org.jetbrains.exposed.v1.core.*
-import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 /**
  * 书架项目(书架-书籍关联)数据仓库
- * 
+ *
  * 负责管理书架与书籍的关联关系
  */
 class BookshelfItemRepository {
-    
+
     /**
      * 添加书籍到书架
      * @return 创建的关联项,如果已存在则返回 null
      */
     fun addBook(bookshelfId: Int, bookId: Int): BookshelfItem? = transaction {
-        // 检查是否已存在
-        val existing = BookshelfItems.selectAll()
-            .where { (BookshelfItems.bookshelfId eq bookshelfId) and (BookshelfItems.bookId eq bookId) }
-            .count()
-        
-        if (existing > 0) {
-            // 已存在,返回 null
-            null
-        } else {
-            val now = TimeProvider.now()
-            val id = BookshelfItems.insert {
-                it[BookshelfItems.bookshelfId] = bookshelfId
-                it[BookshelfItems.bookId] = bookId
-                it[BookshelfItems.addedAt] = now
-            }[BookshelfItems.id]
-            
-            BookshelfItem(
-                id = id.value,
-                bookshelfId = bookshelfId,
-                bookId = bookId,
-                addedAt = now
-            )
-        }
+        addBookInCurrentTransaction(bookshelfId, bookId)
     }
-    
+
+    suspend fun addBookAsync(bookshelfId: Int, bookId: Int): BookshelfItem? = dbQuery {
+        addBookInCurrentTransaction(bookshelfId, bookId)
+    }
+
     /**
      * 从书架移除书籍
      * @return 删除的记录数
      */
     fun removeBook(bookshelfId: Int, bookId: Int): Int = transaction {
-        BookshelfItems.deleteWhere { 
-            (BookshelfItems.bookshelfId eq bookshelfId) and (BookshelfItems.bookId eq bookId) 
-        }
+        removeBookInCurrentTransaction(bookshelfId, bookId)
     }
-    
+
+    suspend fun removeBookAsync(bookshelfId: Int, bookId: Int): Int = dbQuery {
+        removeBookInCurrentTransaction(bookshelfId, bookId)
+    }
+
     /**
      * 从用户的所有书架中移除书籍
      * 用于从"全部"书架移除时的级联删除
      * @return 删除的记录数
      */
     fun removeBookFromAllUserBookshelves(userId: Int, bookId: Int): Int = transaction {
-        // 先获取用户的所有书架 ID
-        val userBookshelfIds = Bookshelves.selectAll()
-            .where { Bookshelves.userId eq userId }
-            .map { it[Bookshelves.id].value }
-        
-        if (userBookshelfIds.isEmpty()) {
-            return@transaction 0
-        }
-        
-        // 删除这些书架中该书籍的所有关联
-        BookshelfItems.deleteWhere { 
-            (BookshelfItems.bookshelfId inList userBookshelfIds) and (BookshelfItems.bookId eq bookId) 
-        }
+        removeBookFromAllUserBookshelvesInCurrentTransaction(userId, bookId)
     }
-    
+
+    suspend fun removeBookFromAllUserBookshelvesAsync(userId: Int, bookId: Int): Int = dbQuery {
+        removeBookFromAllUserBookshelvesInCurrentTransaction(userId, bookId)
+    }
+
     /**
      * 查询书架中的所有书籍(分页)
      */
     fun findByBookshelf(bookshelfId: Int, limit: Int = 20, offset: Long = 0): List<Book> = transaction {
-        (BookshelfItems innerJoin Books)
-            .selectAll()
-            .where { BookshelfItems.bookshelfId eq bookshelfId }
-            .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
-            .limit(limit).offset(offset)
-            .map { toBook(it) }
+        findByBookshelfInCurrentTransaction(bookshelfId, limit, offset)
     }
-    
+
+    suspend fun findByBookshelfAsync(bookshelfId: Int, limit: Int = 20, offset: Long = 0): List<Book> = dbQuery {
+        findByBookshelfInCurrentTransaction(bookshelfId, limit, offset)
+    }
+
     /**
      * 获取书架中的书籍ID列表（按添加时间排序）
      * 用于后续按阅读进度排序
-     * 
+     *
      * @param bookshelfId 书架ID
      * @param limit 分页大小，如果需要获取所有ID可设置为 Int.MAX_VALUE
      * @param offset 偏移量
      * @return 书籍ID列表
      */
     fun findBookIdsByBookshelf(bookshelfId: Int, limit: Int = 20, offset: Long = 0): List<Int> = transaction {
-        BookshelfItems.selectAll()
-            .where { BookshelfItems.bookshelfId eq bookshelfId }
-            .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
-            .limit(limit).offset(offset)
-            .map { it[BookshelfItems.bookId].value }
+        findBookIdsByBookshelfInCurrentTransaction(bookshelfId, limit, offset)
+    }
+
+    suspend fun findBookIdsByBookshelfAsync(bookshelfId: Int, limit: Int = 20, offset: Long = 0): List<Int> = dbQuery {
+        findBookIdsByBookshelfInCurrentTransaction(bookshelfId, limit, offset)
     }
 
     fun findBooksWithProgressByBookshelf(
@@ -120,13 +96,163 @@ class BookshelfItemRepository {
         limit: Int = 20,
         offset: Long = 0
     ): BookshelfBooksPage = transaction {
+        findBooksWithProgressByBookshelfInCurrentTransaction(userId, bookshelfId, limit, offset)
+    }
+
+    suspend fun findBooksWithProgressByBookshelfAsync(
+        userId: Int,
+        bookshelfId: Int,
+        limit: Int = 20,
+        offset: Long = 0
+    ): BookshelfBooksPage = dbQuery {
+        findBooksWithProgressByBookshelfInCurrentTransaction(userId, bookshelfId, limit, offset)
+    }
+
+    /**
+     * 查询书籍所在的所有书架
+     */
+    fun findBookshelvesForBook(bookId: Int): List<Bookshelf> = transaction {
+        findBookshelvesForBookInCurrentTransaction(bookId)
+    }
+
+    suspend fun findBookshelvesForBookAsync(bookId: Int): List<Bookshelf> = dbQuery {
+        findBookshelvesForBookInCurrentTransaction(bookId)
+    }
+
+    /**
+     * 查询用户书籍所在的所有书架
+     */
+    fun findUserBookshelvesForBook(userId: Int, bookId: Int): List<Bookshelf> = transaction {
+        findUserBookshelvesForBookInCurrentTransaction(userId, bookId)
+    }
+
+    suspend fun findUserBookshelvesForBookAsync(userId: Int, bookId: Int): List<Bookshelf> = dbQuery {
+        findUserBookshelvesForBookInCurrentTransaction(userId, bookId)
+    }
+
+    fun findUserBookshelfMembershipSummary(userId: Int, bookId: Int): BookshelfMembershipSummary = transaction {
+        findUserBookshelfMembershipSummaryInCurrentTransaction(userId, bookId)
+    }
+
+    suspend fun findUserBookshelfMembershipSummaryAsync(userId: Int, bookId: Int): BookshelfMembershipSummary = dbQuery {
+        findUserBookshelfMembershipSummaryInCurrentTransaction(userId, bookId)
+    }
+
+    /**
+     * 检查书籍是否在书架中
+     */
+    fun isBookInBookshelf(bookshelfId: Int, bookId: Int): Boolean = transaction {
+        isBookInBookshelfInCurrentTransaction(bookshelfId, bookId)
+    }
+
+    suspend fun isBookInBookshelfAsync(bookshelfId: Int, bookId: Int): Boolean = dbQuery {
+        isBookInBookshelfInCurrentTransaction(bookshelfId, bookId)
+    }
+
+    /**
+     * 统计书架中的书籍数量
+     */
+    fun countByBookshelf(bookshelfId: Int): Long = transaction {
+        countByBookshelfInCurrentTransaction(bookshelfId)
+    }
+
+    suspend fun countByBookshelfAsync(bookshelfId: Int): Long = dbQuery {
+        countByBookshelfInCurrentTransaction(bookshelfId)
+    }
+
+    fun countByBookshelfIds(bookshelfIds: List<Int>): Map<Int, Long> = transaction {
+        countByBookshelfIdsInCurrentTransaction(bookshelfIds)
+    }
+
+    suspend fun countByBookshelfIdsAsync(bookshelfIds: List<Int>): Map<Int, Long> = dbQuery {
+        countByBookshelfIdsInCurrentTransaction(bookshelfIds)
+    }
+
+    /**
+     * 获取书架关联项
+     */
+    fun findByBookshelfAndBook(bookshelfId: Int, bookId: Int): BookshelfItem? = transaction {
+        findByBookshelfAndBookInCurrentTransaction(bookshelfId, bookId)
+    }
+
+    suspend fun findByBookshelfAndBookAsync(bookshelfId: Int, bookId: Int): BookshelfItem? = dbQuery {
+        findByBookshelfAndBookInCurrentTransaction(bookshelfId, bookId)
+    }
+
+    private fun addBookInCurrentTransaction(bookshelfId: Int, bookId: Int): BookshelfItem? {
+        val existing = BookshelfItems.selectAll()
+            .where { (BookshelfItems.bookshelfId eq bookshelfId) and (BookshelfItems.bookId eq bookId) }
+            .count()
+
+        if (existing > 0) {
+            return null
+        }
+
+        val now = TimeProvider.now()
+        val id = BookshelfItems.insert {
+            it[BookshelfItems.bookshelfId] = bookshelfId
+            it[BookshelfItems.bookId] = bookId
+            it[BookshelfItems.addedAt] = now
+        }[BookshelfItems.id]
+
+        return BookshelfItem(
+            id = id.value,
+            bookshelfId = bookshelfId,
+            bookId = bookId,
+            addedAt = now
+        )
+    }
+
+    private fun removeBookInCurrentTransaction(bookshelfId: Int, bookId: Int): Int {
+        return BookshelfItems.deleteWhere {
+            (BookshelfItems.bookshelfId eq bookshelfId) and (BookshelfItems.bookId eq bookId)
+        }
+    }
+
+    private fun removeBookFromAllUserBookshelvesInCurrentTransaction(userId: Int, bookId: Int): Int {
+        val userBookshelfIds = Bookshelves.selectAll()
+            .where { Bookshelves.userId eq userId }
+            .map { it[Bookshelves.id].value }
+
+        if (userBookshelfIds.isEmpty()) {
+            return 0
+        }
+
+        return BookshelfItems.deleteWhere {
+            (BookshelfItems.bookshelfId inList userBookshelfIds) and (BookshelfItems.bookId eq bookId)
+        }
+    }
+
+    private fun findByBookshelfInCurrentTransaction(bookshelfId: Int, limit: Int, offset: Long): List<Book> {
+        return (BookshelfItems innerJoin Books)
+            .selectAll()
+            .where { BookshelfItems.bookshelfId eq bookshelfId }
+            .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
+            .limit(limit).offset(offset)
+            .map { toBook(it) }
+    }
+
+    private fun findBookIdsByBookshelfInCurrentTransaction(bookshelfId: Int, limit: Int, offset: Long): List<Int> {
+        return BookshelfItems.selectAll()
+            .where { BookshelfItems.bookshelfId eq bookshelfId }
+            .orderBy(BookshelfItems.addedAt to SortOrder.DESC)
+            .limit(limit).offset(offset)
+            .map { it[BookshelfItems.bookId].value }
+    }
+
+    private fun findBooksWithProgressByBookshelfInCurrentTransaction(
+        userId: Int,
+        bookshelfId: Int,
+        limit: Int,
+        offset: Long
+    ): BookshelfBooksPage {
         val total = BookshelfItems.selectAll()
             .where { BookshelfItems.bookshelfId eq bookshelfId }
             .count()
             .toInt()
 
         if (total == 0) {
-            return@transaction BookshelfBooksPage(emptyList(), total)
+            return BookshelfBooksPage(emptyList(), total)
         }
 
         val joined = (BookshelfItems innerJoin Books).join(
@@ -154,87 +280,65 @@ class BookshelfItemRepository {
                 )
             }
 
-        BookshelfBooksPage(books, total)
+        return BookshelfBooksPage(books, total)
     }
-    
-    /**
-     * 查询书籍所在的所有书架
-     */
-    fun findBookshelvesForBook(bookId: Int): List<Bookshelf> = transaction {
-        (BookshelfItems innerJoin Bookshelves)
+
+    private fun findBookshelvesForBookInCurrentTransaction(bookId: Int): List<Bookshelf> {
+        return (BookshelfItems innerJoin Bookshelves)
             .selectAll()
             .where { BookshelfItems.bookId eq bookId }
             .orderBy(Bookshelves.sortOrder to SortOrder.ASC)
             .map { toBookshelf(it) }
     }
-    
-    /**
-     * 查询用户书籍所在的所有书架
-     */
-    fun findUserBookshelvesForBook(userId: Int, bookId: Int): List<Bookshelf> = transaction {
-        (BookshelfItems innerJoin Bookshelves)
-            .selectAll()
-            .where { 
-                (BookshelfItems.bookId eq bookId) and (Bookshelves.userId eq userId)
-            }
-            .orderBy(Bookshelves.sortOrder to SortOrder.ASC)
-            .map { toBookshelf(it) }
-    }
 
-    fun findUserBookshelfMembershipSummary(userId: Int, bookId: Int): BookshelfMembershipSummary = transaction {
-        val bookshelves = (BookshelfItems innerJoin Bookshelves)
+    private fun findUserBookshelvesForBookInCurrentTransaction(userId: Int, bookId: Int): List<Bookshelf> {
+        return (BookshelfItems innerJoin Bookshelves)
             .selectAll()
             .where {
                 (BookshelfItems.bookId eq bookId) and (Bookshelves.userId eq userId)
             }
             .orderBy(Bookshelves.sortOrder to SortOrder.ASC)
             .map { toBookshelf(it) }
+    }
+
+    private fun findUserBookshelfMembershipSummaryInCurrentTransaction(
+        userId: Int,
+        bookId: Int
+    ): BookshelfMembershipSummary {
+        val bookshelves = findUserBookshelvesForBookInCurrentTransaction(userId, bookId)
 
         if (bookshelves.isEmpty()) {
-            return@transaction BookshelfMembershipSummary(emptyList(), inDefaultBookshelf = false)
+            return BookshelfMembershipSummary(emptyList(), inDefaultBookshelf = false)
         }
 
         val countsByBookshelfId = countByBookshelfIdsInCurrentTransaction(bookshelves.map { it.id })
-        BookshelfMembershipSummary(
+        return BookshelfMembershipSummary(
             bookshelves = bookshelves.map { bookshelf ->
                 bookshelf.copy(bookCount = countsByBookshelfId[bookshelf.id]?.toInt() ?: 0)
             },
             inDefaultBookshelf = bookshelves.any { it.isSystemDefault }
         )
     }
-    
-    /**
-     * 检查书籍是否在书架中
-     */
-    fun isBookInBookshelf(bookshelfId: Int, bookId: Int): Boolean = transaction {
-        BookshelfItems.selectAll()
+
+    private fun isBookInBookshelfInCurrentTransaction(bookshelfId: Int, bookId: Int): Boolean {
+        return BookshelfItems.selectAll()
             .where { (BookshelfItems.bookshelfId eq bookshelfId) and (BookshelfItems.bookId eq bookId) }
             .count() > 0
     }
-    
-    /**
-     * 统计书架中的书籍数量
-     */
-    fun countByBookshelf(bookshelfId: Int): Long = transaction {
-        BookshelfItems.selectAll()
+
+    private fun countByBookshelfInCurrentTransaction(bookshelfId: Int): Long {
+        return BookshelfItems.selectAll()
             .where { BookshelfItems.bookshelfId eq bookshelfId }
             .count()
     }
 
-    fun countByBookshelfIds(bookshelfIds: List<Int>): Map<Int, Long> = transaction {
-        countByBookshelfIdsInCurrentTransaction(bookshelfIds)
-    }
-    
-    /**
-     * 获取书架关联项
-     */
-    fun findByBookshelfAndBook(bookshelfId: Int, bookId: Int): BookshelfItem? = transaction {
-        BookshelfItems.selectAll()
+    private fun findByBookshelfAndBookInCurrentTransaction(bookshelfId: Int, bookId: Int): BookshelfItem? {
+        return BookshelfItems.selectAll()
             .where { (BookshelfItems.bookshelfId eq bookshelfId) and (BookshelfItems.bookId eq bookId) }
             .map { toBookshelfItem(it) }
             .singleOrNull()
     }
-    
+
     private fun toBook(row: ResultRow) = Book(
         id = row[Books.id].value,
         title = row[Books.title],
@@ -261,7 +365,7 @@ class BookshelfItemRepository {
         updatedAt = row[Books.updatedAt],
         statsUpdatedAt = row[Books.statsUpdatedAt]
     )
-    
+
     private fun toBookshelf(row: ResultRow) = Bookshelf(
         id = row[Bookshelves.id].value,
         userId = row[Bookshelves.userId].value,
@@ -273,7 +377,7 @@ class BookshelfItemRepository {
         createdAt = row[Bookshelves.createdAt],
         updatedAt = row[Bookshelves.updatedAt]
     )
-    
+
     private fun toBookshelfItem(row: ResultRow) = BookshelfItem(
         id = row[BookshelfItems.id].value,
         bookshelfId = row[BookshelfItems.bookshelfId].value,
