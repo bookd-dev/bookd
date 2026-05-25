@@ -1,6 +1,7 @@
 package com.bookd.routes
 
 import com.bookd.com.bookd.extension.buildBaseUrl
+import com.bookd.com.bookd.extension.withPublicCoverUrl
 import com.bookd.domain.model.*
 import com.bookd.domain.service.BookshelfException
 import com.bookd.domain.service.BookshelfService
@@ -113,15 +114,7 @@ fun Route.bookshelfRoutes() {
             call.handleResult(result) { response ->
                 // 拼接完整封面 URL
                 val baseUrl = buildBaseUrl()
-                val booksWithFullCoverUrl = response.books.map { bookWithProgress ->
-                    val book = bookWithProgress.book
-                    val fullCoverPath = book.coverPath?.let { path ->
-                        if (path.startsWith("http")) path else "$baseUrl$path"
-                    }
-                    bookWithProgress.copy(
-                        book = book.copy(coverPath = fullCoverPath)
-                    )
-                }
+                val booksWithFullCoverUrl = response.books.map { it.withPublicCoverUrl(baseUrl) }
                 respondSuccess(response.copy(books = booksWithFullCoverUrl))
             }
         }

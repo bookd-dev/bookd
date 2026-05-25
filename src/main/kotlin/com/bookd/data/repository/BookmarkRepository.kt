@@ -3,24 +3,21 @@ package com.bookd.data.repository
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Bookmarks
 import com.bookd.domain.model.BookmarkResponse
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 class BookmarkRepository {
     
-    fun findByUserAndBook(userId: Int, bookId: Int): List<BookmarkResponse> = transaction {
+    suspend fun findByUserAndBook(userId: Int, bookId: Int): List<BookmarkResponse> = dbQuery {
         Bookmarks.selectAll()
             .where { (Bookmarks.userId eq userId) and (Bookmarks.bookId eq bookId) }
             .orderBy(Bookmarks.createdAt, SortOrder.DESC)
             .map { toResponse(it) }
     }
     
-    fun findByUser(userId: Int, limit: Int = 100, offset: Long = 0): List<BookmarkResponse> = transaction {
+    suspend fun findByUser(userId: Int, limit: Int = 100, offset: Long = 0): List<BookmarkResponse> = dbQuery {
         Bookmarks.selectAll()
             .where { Bookmarks.userId eq userId }
             .orderBy(Bookmarks.createdAt, SortOrder.DESC)
@@ -28,21 +25,15 @@ class BookmarkRepository {
             .map { toResponse(it) }
     }
     
-    fun findById(id: Int): BookmarkResponse? = transaction {
-        Bookmarks.selectAll()
-            .where { Bookmarks.id eq id }
-            .map { toResponse(it) }
-            .singleOrNull()
+    suspend fun findById(id: Int): BookmarkResponse? = dbQuery {
+        findByIdInCurrentTransaction(id)
     }
     
-    fun findByIdAndUser(id: Int, userId: Int): BookmarkResponse? = transaction {
-        Bookmarks.selectAll()
-            .where { (Bookmarks.id eq id) and (Bookmarks.userId eq userId) }
-            .map { toResponse(it) }
-            .singleOrNull()
+    suspend fun findByIdAndUser(id: Int, userId: Int): BookmarkResponse? = dbQuery {
+        findByIdAndUserInCurrentTransaction(id, userId)
     }
     
-    fun create(
+    suspend fun create(
         userId: Int,
         bookId: Int,
         positionType: String,
@@ -51,7 +42,7 @@ class BookmarkRepository {
         title: String?,
         note: String?,
         color: String
-    ): BookmarkResponse = transaction {
+    ): BookmarkResponse = dbQuery {
         val now = TimeProvider.now()
         
         val id = Bookmarks.insert {
@@ -66,17 +57,17 @@ class BookmarkRepository {
             it[createdAt] = now
         }[Bookmarks.id]
         
-        findById(id.value)!!
+        findByIdInCurrentTransaction(id.value)!!
     }
     
-    fun update(
+    suspend fun update(
         id: Int,
         userId: Int,
         title: String?,
         note: String?,
         color: String?
-    ): BookmarkResponse? = transaction {
-        val existing = findByIdAndUser(id, userId) ?: return@transaction null
+    ): BookmarkResponse? = dbQuery {
+        val existing = findByIdAndUserInCurrentTransaction(id, userId) ?: return@dbQuery null
         
         Bookmarks.update({ Bookmarks.id eq id }) {
             if (title != null) it[Bookmarks.title] = title
@@ -84,14 +75,28 @@ class BookmarkRepository {
             if (color != null) it[Bookmarks.color] = color
         }
         
-        findById(id)
+        findByIdInCurrentTransaction(id)
     }
     
-    fun delete(id: Int, userId: Int): Boolean = transaction {
+    suspend fun delete(id: Int, userId: Int): Boolean = dbQuery {
         val deleted = Bookmarks.deleteWhere { 
             (Bookmarks.id eq id) and (Bookmarks.userId eq userId) 
         }
         deleted > 0
+    }
+
+    private fun findByIdInCurrentTransaction(id: Int): BookmarkResponse? {
+        return Bookmarks.selectAll()
+            .where { Bookmarks.id eq id }
+            .map { toResponse(it) }
+            .singleOrNull()
+    }
+
+    private fun findByIdAndUserInCurrentTransaction(id: Int, userId: Int): BookmarkResponse? {
+        return Bookmarks.selectAll()
+            .where { (Bookmarks.id eq id) and (Bookmarks.userId eq userId) }
+            .map { toResponse(it) }
+            .singleOrNull()
     }
     
     private fun toResponse(row: ResultRow) = BookmarkResponse(

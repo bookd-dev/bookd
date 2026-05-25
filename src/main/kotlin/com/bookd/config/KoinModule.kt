@@ -87,7 +87,7 @@ val appModule = module {
     
     // Services
     single { UserService(get(), get()) }
-    single { BookService(get(), get(), get()) }
+    single { BookService(get(), get(), get(), get()) }
     single { BookSourceService(get()) }
     single { CoverGeneratorService(get()) }
     single { TxtParseRuleService(get()) }

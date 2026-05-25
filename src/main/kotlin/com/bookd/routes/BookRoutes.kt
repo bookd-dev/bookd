@@ -1,12 +1,13 @@
 package com.bookd.routes
 
 import com.bookd.com.bookd.extension.buildBaseUrl
+import com.bookd.com.bookd.extension.withPublicCoverUrl
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
-import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.domain.service.BookDetailService
 import com.bookd.domain.service.BookContentService
 import com.bookd.domain.service.ChapterListResult
+import com.bookd.domain.service.CoverGenerateResult
 import com.bookd.domain.service.CoverUploadResult
 import com.bookd.extension.*
 import io.ktor.http.*
@@ -97,7 +98,8 @@ fun Route.bookRoutes() {
                 bookService.getTotalCount().toInt()
             }
 
-            call.respondSuccess(BooksResponse(books, total))
+            val baseUrl = call.buildBaseUrl()
+            call.respondSuccess(BooksResponse(books.map { it.withPublicCoverUrl(baseUrl) }, total))
         }
 
         get("/count") {
@@ -127,12 +129,7 @@ fun Route.bookRoutes() {
             } else {
                 // 构建完整的 URL
                 val baseUrl = call.buildBaseUrl()
-                val bookWithFullUrls = book.copy(
-                    coverPath = book.coverPath?.let { path ->
-                        if (path.startsWith("http")) path else "$baseUrl$path"
-                    }
-                )
-                call.respondSuccess(bookWithFullUrls)
+                call.respondSuccess(book.withPublicCoverUrl(baseUrl))
             }
         }
 
@@ -157,11 +154,7 @@ fun Route.bookRoutes() {
             
             // 构建完整的封面 URL
             val baseUrl = call.buildBaseUrl()
-            val bookWithFullUrls = bookDetail.book.copy(
-                coverPath = bookDetail.book.coverPath?.let { path ->
-                    if (path.startsWith("http")) path else "$baseUrl$path"
-                }
-            )
+            val bookWithFullUrls = bookDetail.book.withPublicCoverUrl(baseUrl)
             
             call.respondSuccess(bookDetail.copy(book = bookWithFullUrls))
         }
@@ -291,7 +284,6 @@ fun Route.bookRoutes() {
         }
 
         post("/{id}/generate-cover") {
-            val coverGenerator = get<CoverGeneratorService>(CoverGeneratorService::class.java)
             val bookService = get<BookService>(BookService::class.java)
 
             val id = call.parameters["id"]?.toIntOrNull()
@@ -300,22 +292,12 @@ fun Route.bookRoutes() {
                 return@post
             }
 
-            val book = bookService.getRawBookById(id)
-            if (book == null) {
-                call.respondError(ErrorCode.BOOK_NOT_FOUND)
-                return@post
-            }
-
-            val result = coverGenerator.generateCover(id, book.title, book.author)
-            if (result != null) {
-                val (generatedCoverPath, dimensions) = result
-                val (width, height) = dimensions
-                
-                // Update book with generated cover path and dimensions
-                bookService.updateCoverPath(id, generatedCoverPath, width, height)
-                call.respondSuccess(CoverGenerateResponse(success = true, coverPath = generatedCoverPath))
-            } else {
-                call.respondError(ErrorCode.BOOK_COVER_GENERATION_FAILED)
+            when (val result = bookService.generateCover(id)) {
+                CoverGenerateResult.BookNotFound -> call.respondError(ErrorCode.BOOK_NOT_FOUND)
+                CoverGenerateResult.GenerationFailed -> call.respondError(ErrorCode.BOOK_COVER_GENERATION_FAILED)
+                is CoverGenerateResult.Generated -> {
+                    call.respondSuccess(CoverGenerateResponse(success = true, coverPath = result.coverPath))
+                }
             }
         }
     }

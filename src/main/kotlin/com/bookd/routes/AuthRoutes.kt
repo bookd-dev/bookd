@@ -8,7 +8,6 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.application.*
 import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("AuthRoutes")
@@ -106,14 +105,14 @@ fun Route.userManagementRoutes(userService: UserService) {
     route("/api/users") {
         // Require admin authentication
         get {
-            if (!checkAdmin(call, userService)) return@get
+            call.requireAdminUser(userService) ?: return@get
 
             val users = userService.findAll()
             call.respondSuccess(users.map { UserResponse(it.id, it.username, it.email, it.role) })
         }
 
         delete("/{id}") {
-            if (!checkAdmin(call, userService)) return@delete
+            call.requireAdminUser(userService) ?: return@delete
 
             val userId = call.parameters["id"]?.toIntOrNull()
             if (userId == null) {
@@ -130,15 +129,7 @@ fun Route.userManagementRoutes(userService: UserService) {
         }
 
         post("/invite-tokens") {
-            if (!checkAdmin(call, userService)) return@post
-
-            val token = call.request.header("Authorization")?.removePrefix("Bearer ")
-            val user = token?.let { userService.validateToken(it) }
-
-            if (user == null) {
-                call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
-                return@post
-            }
+            val user = call.requireAdminUser(userService) ?: return@post
 
             val inviteToken = userService.createInviteToken(user.id)
             if (inviteToken != null) {
@@ -149,34 +140,10 @@ fun Route.userManagementRoutes(userService: UserService) {
         }
 
         get("/invite-tokens") {
-            if (!checkAdmin(call, userService)) return@get
-
-            val token = call.request.header("Authorization")?.removePrefix("Bearer ")
-            val user = token?.let { userService.validateToken(it) }
-
-            if (user == null) {
-                call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
-                return@get
-            }
+            val user = call.requireAdminUser(userService) ?: return@get
 
             val tokens = userService.getInviteTokens(user.id)
             call.respondSuccess(tokens)
         }
     }
-}
-
-private suspend fun checkAdmin(call: ApplicationCall, userService: UserService): Boolean {
-    val token = call.request.header("Authorization")?.removePrefix("Bearer ")
-    if (token == null) {
-        call.respondError(ErrorCode.AUTH_NO_TOKEN)
-        return false
-    }
-
-    val user = userService.validateToken(token)
-    if (user == null || user.role != UserRole.ADMIN.value) {
-        call.respondError(ErrorCode.AUTH_ADMIN_REQUIRED)
-        return false
-    }
-
-    return true
 }

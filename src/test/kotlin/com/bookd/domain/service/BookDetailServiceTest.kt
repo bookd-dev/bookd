@@ -58,7 +58,7 @@ class BookDetailServiceTest {
 
         coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
-        every { readingService.getProgress(userId, bookId) } returns progress
+        coEvery { readingService.getProgress(userId, bookId) } returns progress
         every { bookshelfService.getBookshelfMembershipSummary(userId, bookId) } returns membership
 
         val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
@@ -84,7 +84,7 @@ class BookDetailServiceTest {
         assertNull(result)
         coVerify(exactly = 1) { bookService.getBookById(bookId) }
         verify(exactly = 0) { tagService.getTagsForBook(any()) }
-        verify(exactly = 0) { readingService.getProgress(any(), any()) }
+        coVerify(exactly = 0) { readingService.getProgress(any(), any()) }
         verify(exactly = 0) { bookshelfService.getBookshelfMembershipSummary(any(), any()) }
     }
 
@@ -94,7 +94,7 @@ class BookDetailServiceTest {
 
         coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } throws RuntimeException("Tag service error")
-        every { readingService.getProgress(userId, bookId) } throws RuntimeException("Reading service error")
+        coEvery { readingService.getProgress(userId, bookId) } throws RuntimeException("Reading service error")
         every { bookshelfService.getBookshelfMembershipSummary(userId, bookId) } throws RuntimeException("Bookshelf service error")
 
         val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
@@ -114,7 +114,7 @@ class BookDetailServiceTest {
 
         coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
-        every { readingService.getProgress(userId, bookId) } returns null
+        coEvery { readingService.getProgress(userId, bookId) } returns null
         every { bookshelfService.getBookshelfMembershipSummary(userId, bookId) } returns BookshelfMembershipSummary(
             bookshelves = emptyList(),
             inDefaultBookshelf = false

@@ -1,6 +1,7 @@
 package com.bookd.routes
 
 import com.bookd.com.bookd.extension.buildBaseUrl
+import com.bookd.com.bookd.extension.withPublicCoverUrl
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.BookSourceService
@@ -44,14 +45,7 @@ fun Route.appRoutes() {
             
             // 获取分页书籍
             val books = bookService.getBooksBySourceIdPaged(sourceId, limit, offset)
-                .map { book ->
-                    // 拼接完整封面 URL
-                    book.copy(
-                        coverPath = book.coverPath?.let { path ->
-                            if (path.startsWith("http")) path else "$baseUrl$path"
-                        }
-                    )
-                }
+                .map { it.withPublicCoverUrl(baseUrl) }
             
             // 获取总数
             val total = bookService.getCountBySourceId(sourceId).toInt()

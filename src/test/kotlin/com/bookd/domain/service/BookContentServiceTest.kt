@@ -5,14 +5,17 @@ import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.data.repository.AdjacentDocumentIndexes
 import com.bookd.data.repository.ResourceInfo
+import com.bookd.domain.model.Book
 import com.bookd.domain.model.BookDocument
 import com.bookd.domain.model.ChapterContent
 import com.bookd.domain.model.ContentElement
 import com.bookd.domain.model.TextSpan
 import com.bookd.domain.service.parser.TxtParser
+import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
@@ -137,6 +140,42 @@ class BookContentServiceTest {
         assertNull(result)
         verify(exactly = 0) { documentRepository.getDocumentContent(any()) }
         verify(exactly = 0) { documentRepository.findByBookId(1) }
+    }
+
+    @Test
+    fun `given missing file when parsing on demand then parse fails and parsed cache is not written`() {
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val service = BookContentService(
+            bookRepository = bookRepository,
+            documentRepository = documentRepository,
+            readingProgressRepository = readingProgressRepository,
+            txtParser = txtParser,
+            imageStorage = imageStorage,
+            cacheService = cacheService
+        )
+        val missingPath = "/tmp/bookd-missing-file.epub"
+
+        every { cacheService.isBookParsed(11) } returns null
+        every { cacheService.tryAcquireParseLock(11) } returns true
+        every { bookRepository.findById(11) } returns Book(
+            id = 11,
+            title = "Missing",
+            author = null,
+            format = "epub",
+            filePath = missingPath,
+            fileSize = 0L,
+            chaptersParsed = false
+        )
+        every { bookRepository.updateParseStatus(11, "parsing", 0) } returns 1
+        every { bookRepository.updateParseStatus(11, "failed", 0) } returns 1
+
+        val result = runBlocking { service.parseOnDemand(11, missingPath) }
+
+        assertEquals(false, result)
+        verify(exactly = 1) { bookRepository.updateParseStatus(11, "failed", 0) }
+        verify(exactly = 0) { cacheService.setBookParsed(11, true) }
+        verify(exactly = 1) { cacheService.releaseParseLock(11) }
+        service.shutdown()
     }
 
     private fun ChapterContent?.imageAt(position: Int): ContentElement.Image {

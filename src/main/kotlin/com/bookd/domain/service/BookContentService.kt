@@ -38,8 +38,14 @@ class BookContentService(
                 logger.info("Starting content parsing for book ID: $bookId")
                 // 更新状态为正在解析
                 bookRepository.updateParseStatus(bookId, "parsing", 0)
-                parseBookContent(bookId, filePath)
-                logger.info("Completed content parsing for book ID: $bookId")
+                when (val result = parseBookContent(bookId, filePath)) {
+                    is ContentParseResult.Success -> {
+                        logger.info("Completed content parsing for book ID: $bookId, documents: ${result.documentCount}")
+                    }
+                    is ContentParseResult.Failed -> {
+                        logger.warn("Content parsing did not complete for book ID: $bookId: ${result.reason}")
+                    }
+                }
             } catch (e: Exception) {
                 logger.error("Failed to parse book content for ID: $bookId", e)
                 bookRepository.updateParseStatus(bookId, "failed", 0)
@@ -94,14 +100,17 @@ class BookContentService(
             bookRepository.updateParseStatus(bookId, "parsing", 0)
             
             // 5. 同步解析（用户等待）
-            parseBookContent(bookId, filePath)
-            
-            // 6. 更新数据库和缓存（这里可能不需要，因为解析方法内部已经更新了）
-            val documentCount = documentRepository.countByBookId(bookId)
-            cacheService?.setBookParsed(bookId, true)
-            
-            logger.info("Book $bookId parsed successfully, documents: $documentCount")
-            true
+            when (val result = parseBookContent(bookId, filePath)) {
+                is ContentParseResult.Success -> {
+                    cacheService?.setBookParsed(bookId, true)
+                    logger.info("Book $bookId parsed successfully, documents: ${result.documentCount}")
+                    true
+                }
+                is ContentParseResult.Failed -> {
+                    logger.warn("Book $bookId parse failed: ${result.reason}")
+                    false
+                }
+            }
         } catch (e: Exception) {
             logger.error("Failed to parse book on-demand: $bookId", e)
             bookRepository.updateParseStatus(bookId, "failed", 0)
@@ -146,11 +155,12 @@ class BookContentService(
     /**
      * 解析书籍内容（同步）- 使用工厂模式统一处理
      */
-    private suspend fun parseBookContent(bookId: Int, filePath: String) {
+    private suspend fun parseBookContent(bookId: Int, filePath: String): ContentParseResult {
         val file = File(filePath)
         if (!file.exists() || !file.isFile) {
             logger.warn("File does not exist: $filePath")
-            return
+            bookRepository.updateParseStatus(bookId, "failed", 0)
+            return ContentParseResult.Failed("file_missing")
         }
         
         // 使用工厂创建对应格式的解析器
@@ -158,15 +168,16 @@ class BookContentService(
         if (parser == null) {
             logger.warn("Unsupported format: ${file.extension}")
             bookRepository.updateParseStatus(bookId, "failed", 0)
-            return
+            return ContentParseResult.Failed("unsupported_format")
         }
         
-        withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
             try {
                 parseWithParser(bookId, file, parser)
             } catch (e: Exception) {
                 logger.error("Error parsing book content: ${file.name}", e)
                 bookRepository.updateParseStatus(bookId, "failed", 0)
+                ContentParseResult.Failed("unexpected_error")
             }
         }
     }
@@ -174,14 +185,20 @@ class BookContentService(
     /**
      * 使用解析器解析书籍内容（统一流程）
      */
-    private suspend fun parseWithParser(bookId: Int, file: File, parser: BookParser) {
+    private suspend fun parseWithParser(bookId: Int, file: File, parser: BookParser): ContentParseResult {
         logger.info("Parsing ${file.extension.uppercase()} content for book ID: $bookId")
         
         // 1. 解析书籍结构
         val structure = parser.parseStructure(file) ?: run {
             logger.error("Failed to parse book structure")
             bookRepository.updateParseStatus(bookId, "failed", 0)
-            return
+            return ContentParseResult.Failed("structure_parse_failed")
+        }
+
+        if (structure.chapters.isEmpty()) {
+            logger.error("Parsed book structure has no chapters for book ID: $bookId")
+            bookRepository.updateParseStatus(bookId, "failed", 0)
+            return ContentParseResult.Failed("no_chapters")
         }
         
         // 2. 清理旧数据并创建文档
@@ -212,6 +229,12 @@ class BookContentService(
                 parseDocumentContent(file, parser, chapterInfo, document.id)?.let { contentDrafts.add(it) }
             }
 
+            if (contentDrafts.isEmpty()) {
+                logger.error("No chapter content parsed for book ID: $bookId")
+                bookRepository.updateParseStatus(bookId, "failed", 0)
+                return ContentParseResult.Failed("no_chapter_content")
+            }
+
             documentRepository.replaceDocumentContentsAndStats(contentDrafts)
             
             // 4. 保存资源文件（如果有）
@@ -229,9 +252,11 @@ class BookContentService(
             )
             
             logger.info("Parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
+            return ContentParseResult.Success(documentCount = documentsByIndex.size)
         } catch (e: Exception) {
             logger.error("Failed to parse book content for book ID: $bookId", e)
             bookRepository.updateParseStatus(bookId, "failed", 0)
+            return ContentParseResult.Failed("save_failed")
         }
     }
     
@@ -632,4 +657,9 @@ sealed class ChapterListResult {
     data class Success(val documents: List<BookDocument>) : ChapterListResult()
     data object NotFound : ChapterListResult()
     data object ParseFailed : ChapterListResult()
+}
+
+private sealed class ContentParseResult {
+    data class Success(val documentCount: Int) : ContentParseResult()
+    data class Failed(val reason: String) : ContentParseResult()
 }

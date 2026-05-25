@@ -125,6 +125,25 @@ class BookServiceTest {
         coVerify(exactly = 1) { bookRepository.updateCoverPathAsync(9, "/book_images/covers/cover.png", 600, 900) }
     }
 
+    @Test
+    fun `given valid generated cover when generating then book cover is updated`() {
+        val coverGenerator = mockk<CoverGeneratorService>()
+        val service = BookService(bookRepository, documentRepository, coverGeneratorService = coverGenerator)
+
+        coEvery { bookRepository.findByIdAsync(12) } returns createBook(id = 12, title = "Generated")
+        every { coverGenerator.generateCover(12, "Generated", null) } returns ("/book_images/covers/generated.png" to (400 to 600))
+        coEvery { bookRepository.updateCoverPathAsync(12, "/book_images/covers/generated.png", 400, 600) } returns 1
+
+        val result = runBlocking { service.generateCover(12) }
+
+        assertTrue(result is CoverGenerateResult.Generated)
+        result as CoverGenerateResult.Generated
+        assertEquals("/book_images/covers/generated.png", result.coverPath)
+        assertEquals(400, result.width)
+        assertEquals(600, result.height)
+        coVerify(exactly = 1) { bookRepository.updateCoverPathAsync(12, "/book_images/covers/generated.png", 400, 600) }
+    }
+
     private fun createBook(
         id: Int,
         title: String,

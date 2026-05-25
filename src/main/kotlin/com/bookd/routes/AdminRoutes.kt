@@ -1,6 +1,7 @@
 package com.bookd.routes
 
 import com.bookd.domain.service.ImageDimensionMigrationService
+import com.bookd.extension.requireAdminUser
 import com.bookd.extension.respondSuccess
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
@@ -10,6 +11,7 @@ fun Route.adminRoutes() {
     route("/api/admin") {
         // 初次迁移：为所有缺失宽高的图片添加尺寸信息
         post("/migrate-image-dimensions") {
+            call.requireAdminUser() ?: return@post
             val migrationService = get<ImageDimensionMigrationService>(ImageDimensionMigrationService::class.java)
             
             // Migrate document resources
@@ -32,6 +34,7 @@ fun Route.adminRoutes() {
         
         // 重试失败的迁移：重新尝试提取之前失败的图片尺寸
         post("/retry-failed-image-dimensions") {
+            call.requireAdminUser() ?: return@post
             val migrationService = get<ImageDimensionMigrationService>(ImageDimensionMigrationService::class.java)
             
             val response = migrationService.retryFailedMigrations()

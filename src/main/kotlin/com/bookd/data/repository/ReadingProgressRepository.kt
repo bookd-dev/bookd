@@ -4,25 +4,19 @@ import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.data.entity.ReadingProgress
 import com.bookd.domain.model.ReadingProgressResponse
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.math.BigDecimal
 
 class ReadingProgressRepository {
     
-    fun findByUserAndBook(userId: Int, bookId: Int): ReadingProgressResponse? = transaction {
-        ReadingProgress.selectAll()
-            .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) }
-            .map { toResponse(it) }
-            .singleOrNull()
+    suspend fun findByUserAndBook(userId: Int, bookId: Int): ReadingProgressResponse? = dbQuery {
+        findByUserAndBookInCurrentTransaction(userId, bookId)
     }
     
-    fun findByUser(userId: Int, limit: Int = 50, offset: Long = 0): List<ReadingProgressResponse> = transaction {
+    suspend fun findByUser(userId: Int, limit: Int = 50, offset: Long = 0): List<ReadingProgressResponse> = dbQuery {
         ReadingProgress.selectAll()
             .where { ReadingProgress.userId eq userId }
             .orderBy(ReadingProgress.lastReadAt, SortOrder.DESC)
@@ -38,8 +32,8 @@ class ReadingProgressRepository {
      * @param bookIds 书籍ID列表
      * @return Map<bookId, ReadingProgressResponse>
      */
-    fun findByUserAndBooks(userId: Int, bookIds: List<Int>): Map<Int, ReadingProgressResponse> = transaction {
-        if (bookIds.isEmpty()) return@transaction emptyMap()
+    suspend fun findByUserAndBooks(userId: Int, bookIds: List<Int>): Map<Int, ReadingProgressResponse> = dbQuery {
+        if (bookIds.isEmpty()) return@dbQuery emptyMap()
         
         ReadingProgress.selectAll()
             .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId inList bookIds) }
@@ -48,7 +42,7 @@ class ReadingProgressRepository {
             }
     }
     
-    fun upsert(
+    suspend fun upsert(
         userId: Int,
         bookId: Int,
         progress: Double,
@@ -60,7 +54,7 @@ class ReadingProgressRepository {
         chapterPageIndex: Int? = null,
         chapterTotalPages: Int? = null,
         chapterScrollPercent: Double? = null
-    ): ReadingProgressResponse = transaction {
+    ): ReadingProgressResponse = dbQuery {
         val now = TimeProvider.now()
         
         val existing = ReadingProgress.selectAll()
@@ -97,10 +91,10 @@ class ReadingProgressRepository {
             }
         }
         
-        findByUserAndBook(userId, bookId)!!
+        findByUserAndBookInCurrentTransaction(userId, bookId)!!
     }
     
-    fun deleteByUserAndBook(userId: Int, bookId: Int): Int = transaction {
+    suspend fun deleteByUserAndBook(userId: Int, bookId: Int): Int = dbQuery {
         ReadingProgress.deleteWhere { 
             (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) 
         }
@@ -114,7 +108,7 @@ class ReadingProgressRepository {
         val bookFormat: String
     )
     
-    fun getReadingHistory(userId: Int, limit: Int = 20): List<ReadingHistoryItem> = transaction {
+    suspend fun getReadingHistory(userId: Int, limit: Int = 20): List<ReadingHistoryItem> = dbQuery {
         (ReadingProgress innerJoin Books)
             .selectAll()
             .where { ReadingProgress.userId eq userId }
@@ -129,6 +123,13 @@ class ReadingProgressRepository {
                     bookFormat = row[Books.format]
                 )
             }
+    }
+
+    private fun findByUserAndBookInCurrentTransaction(userId: Int, bookId: Int): ReadingProgressResponse? {
+        return ReadingProgress.selectAll()
+            .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) }
+            .map { toResponse(it) }
+            .singleOrNull()
     }
     
     private fun toResponse(row: ResultRow) = ReadingProgressResponse(

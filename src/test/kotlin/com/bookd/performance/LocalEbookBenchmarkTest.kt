@@ -345,7 +345,7 @@ class LocalEbookBenchmarkTest {
         readingProgressRepository: ReadingProgressRepository
     ) {
         val allBookIds = bookshelfItemRepository.findBookIdsByBookshelf(bookshelfId, Int.MAX_VALUE, 0)
-        val progressMap = readingProgressRepository.findByUserAndBooks(userId, allBookIds)
+        val progressMap = runBlocking { readingProgressRepository.findByUserAndBooks(userId, allBookIds) }
         val (readBooks, unreadBooks) = allBookIds.partition { progressMap.containsKey(it) }
         val sortedBookIds = readBooks.sortedByDescending { progressMap[it]?.lastReadAt } + unreadBooks
         val pagedBookIds = sortedBookIds.drop(offset.toInt()).take(limit)

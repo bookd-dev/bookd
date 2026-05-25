@@ -3,25 +3,19 @@ package com.bookd.data.repository
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.ReaderSettings
 import com.bookd.domain.model.ReaderSettingsResponse
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.math.BigDecimal
 
 class ReaderSettingsRepository {
     
-    fun findByUser(userId: Int): ReaderSettingsResponse? = transaction {
-        ReaderSettings.selectAll()
-            .where { ReaderSettings.userId eq userId }
-            .map { toResponse(it, userId) }
-            .singleOrNull()
+    suspend fun findByUser(userId: Int): ReaderSettingsResponse? = dbQuery {
+        findByUserInCurrentTransaction(userId)
     }
     
-    fun upsert(
+    suspend fun upsert(
         userId: Int,
         fontFamily: String?,
         fontSize: Int?,
@@ -36,7 +30,7 @@ class ReaderSettingsRepository {
         marginVertical: Int?,
         firstLineIndent: Boolean?,
         pageAnimationType: String?
-    ): ReaderSettingsResponse = transaction {
+    ): ReaderSettingsResponse = dbQuery {
         val now = TimeProvider.now()
         
         val existing = ReaderSettings.selectAll()
@@ -80,7 +74,14 @@ class ReaderSettingsRepository {
             }
         }
         
-        findByUser(userId)!!
+        findByUserInCurrentTransaction(userId)!!
+    }
+
+    private fun findByUserInCurrentTransaction(userId: Int): ReaderSettingsResponse? {
+        return ReaderSettings.selectAll()
+            .where { ReaderSettings.userId eq userId }
+            .map { toResponse(it, userId) }
+            .singleOrNull()
     }
     
     private fun toResponse(row: ResultRow, userId: Int) = ReaderSettingsResponse(

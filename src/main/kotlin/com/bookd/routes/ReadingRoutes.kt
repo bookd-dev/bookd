@@ -2,11 +2,9 @@ package com.bookd.routes
 
 import com.bookd.domain.model.*
 import com.bookd.domain.service.ReadingService
-import com.bookd.domain.service.UserService
 import com.bookd.extension.*
 import com.bookd.infrastructure.i18n.MessageBundle
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
@@ -42,12 +40,11 @@ data class ReaderSettingsPatchRequest(
 
 fun Route.readingRoutes() {
     val readingService = get<ReadingService>(ReadingService::class.java)
-    val userService = get<UserService>(UserService::class.java)
 
     // ============ 阅读进度 API ============
     route("/api/books/{bookId}/progress") {
         get {
-            val user = getCurrentUser(call, userService) ?: return@get
+            val user = call.getAuthenticatedUser() ?: return@get
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
                 call.respondError(ErrorCode.BOOK_INVALID_ID)
@@ -63,7 +60,7 @@ fun Route.readingRoutes() {
         }
 
         put {
-            val user = getCurrentUser(call, userService) ?: return@put
+            val user = call.getAuthenticatedUser() ?: return@put
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
                 call.respondError(ErrorCode.BOOK_INVALID_ID)
@@ -78,7 +75,7 @@ fun Route.readingRoutes() {
 
     // ============ 阅读历史 API ============
     get("/api/user/reading-history") {
-        val user = getCurrentUser(call, userService) ?: return@get
+        val user = call.getAuthenticatedUser() ?: return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
 
         val history = readingService.getReadingHistory(user.id, limit)
@@ -88,7 +85,7 @@ fun Route.readingRoutes() {
     // ============ 书签 API ============
     route("/api/books/{bookId}/bookmarks") {
         get {
-            val user = getCurrentUser(call, userService) ?: return@get
+            val user = call.getAuthenticatedUser() ?: return@get
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
                 call.respondError(ErrorCode.BOOK_INVALID_ID)
@@ -100,7 +97,7 @@ fun Route.readingRoutes() {
         }
 
         post {
-            val user = getCurrentUser(call, userService) ?: return@post
+            val user = call.getAuthenticatedUser() ?: return@post
             val bookId = call.parameters["bookId"]?.toIntOrNull()
             if (bookId == null) {
                 call.respondError(ErrorCode.BOOK_INVALID_ID)
@@ -115,7 +112,7 @@ fun Route.readingRoutes() {
 
     route("/api/bookmarks/{id}") {
         put {
-            val user = getCurrentUser(call, userService) ?: return@put
+            val user = call.getAuthenticatedUser() ?: return@put
             val bookmarkId = call.parameters["id"]?.toIntOrNull()
             if (bookmarkId == null) {
                 call.respondError(ErrorCode.READ_INVALID_BOOKMARK_ID)
@@ -132,7 +129,7 @@ fun Route.readingRoutes() {
         }
 
         delete {
-            val user = getCurrentUser(call, userService) ?: return@delete
+            val user = call.getAuthenticatedUser() ?: return@delete
             val bookmarkId = call.parameters["id"]?.toIntOrNull()
             if (bookmarkId == null) {
                 call.respondError(ErrorCode.READ_INVALID_BOOKMARK_ID)
@@ -149,7 +146,7 @@ fun Route.readingRoutes() {
     }
 
     get("/api/user/bookmarks") {
-        val user = getCurrentUser(call, userService) ?: return@get
+        val user = call.getAuthenticatedUser() ?: return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
         val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
 
@@ -160,7 +157,7 @@ fun Route.readingRoutes() {
     // ============ 阅读器设置 API ============
     route("/api/user/reader-settings") {
         get {
-            val user = getCurrentUser(call, userService) ?: return@get
+            val user = call.getAuthenticatedUser() ?: return@get
 
             val settings = readingService.getReaderSettings(user.id)
             if (settings != null) {
@@ -172,7 +169,7 @@ fun Route.readingRoutes() {
         }
 
         put {
-            val user = getCurrentUser(call, userService) ?: return@put
+            val user = call.getAuthenticatedUser() ?: return@put
 
             val dto = call.receive<ReaderSettingsDTO>()
             val settings = readingService.updateReaderSettings(user.id, dto)
@@ -180,7 +177,7 @@ fun Route.readingRoutes() {
         }
 
         patch {
-            val user = getCurrentUser(call, userService) ?: return@patch
+            val user = call.getAuthenticatedUser() ?: return@patch
 
             val request = call.receive<ReaderSettingsPatchRequest>()
             val settings = readingService.patchReaderSettings(
@@ -202,20 +199,4 @@ fun Route.readingRoutes() {
             call.respondSuccess(settings)
         }
     }
-}
-
-private suspend fun getCurrentUser(call: ApplicationCall, userService: UserService): com.bookd.domain.model.User? {
-    val token = call.request.header("Authorization")?.removePrefix("Bearer ")
-    if (token == null) {
-        call.respondError(ErrorCode.AUTH_NO_TOKEN)
-        return null
-    }
-
-    val user = userService.validateToken(token)
-    if (user == null) {
-        call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
-        return null
-    }
-
-    return user
 }

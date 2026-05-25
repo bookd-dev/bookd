@@ -12,11 +12,11 @@ class ReadingService(
 ) {
     // ============ 阅读进度 ============
     
-    fun getProgress(userId: Int, bookId: Int): ReadingProgressResponse? {
+    suspend fun getProgress(userId: Int, bookId: Int): ReadingProgressResponse? {
         return readingProgressRepository.findByUserAndBook(userId, bookId)
     }
     
-    fun updateProgress(userId: Int, bookId: Int, dto: ReadingProgressDTO): ReadingProgressResponse {
+    suspend fun updateProgress(userId: Int, bookId: Int, dto: ReadingProgressDTO): ReadingProgressResponse {
         return readingProgressRepository.upsert(
             userId = userId,
             bookId = bookId,
@@ -32,7 +32,7 @@ class ReadingService(
         )
     }
     
-    fun getReadingHistory(userId: Int, limit: Int = 20): List<ReadingHistoryItemDTO> {
+    suspend fun getReadingHistory(userId: Int, limit: Int = 20): List<ReadingHistoryItemDTO> {
         return readingProgressRepository.getReadingHistory(userId, limit).map { item ->
             ReadingHistoryItemDTO(
                 bookId = item.progress.bookId,
@@ -50,15 +50,15 @@ class ReadingService(
     
     // ============ 书签 ============
     
-    fun getBookmarks(userId: Int, bookId: Int): List<BookmarkResponse> {
+    suspend fun getBookmarks(userId: Int, bookId: Int): List<BookmarkResponse> {
         return bookmarkRepository.findByUserAndBook(userId, bookId)
     }
     
-    fun getAllUserBookmarks(userId: Int, limit: Int = 100, offset: Long = 0): List<BookmarkResponse> {
+    suspend fun getAllUserBookmarks(userId: Int, limit: Int = 100, offset: Long = 0): List<BookmarkResponse> {
         return bookmarkRepository.findByUser(userId, limit, offset)
     }
     
-    fun addBookmark(userId: Int, bookId: Int, dto: BookmarkDTO): BookmarkResponse {
+    suspend fun addBookmark(userId: Int, bookId: Int, dto: BookmarkDTO): BookmarkResponse {
         return bookmarkRepository.create(
             userId = userId,
             bookId = bookId,
@@ -71,7 +71,7 @@ class ReadingService(
         )
     }
     
-    fun updateBookmark(userId: Int, bookmarkId: Int, dto: BookmarkDTO): BookmarkResponse? {
+    suspend fun updateBookmark(userId: Int, bookmarkId: Int, dto: BookmarkDTO): BookmarkResponse? {
         return bookmarkRepository.update(
             id = bookmarkId,
             userId = userId,
@@ -81,17 +81,17 @@ class ReadingService(
         )
     }
     
-    fun deleteBookmark(userId: Int, bookmarkId: Int): Boolean {
+    suspend fun deleteBookmark(userId: Int, bookmarkId: Int): Boolean {
         return bookmarkRepository.delete(bookmarkId, userId)
     }
     
     // ============ 阅读器设置 ============
     
-    fun getReaderSettings(userId: Int): ReaderSettingsResponse? {
+    suspend fun getReaderSettings(userId: Int): ReaderSettingsResponse? {
         return readerSettingsRepository.findByUser(userId)
     }
     
-    fun updateReaderSettings(userId: Int, dto: ReaderSettingsDTO): ReaderSettingsResponse {
+    suspend fun updateReaderSettings(userId: Int, dto: ReaderSettingsDTO): ReaderSettingsResponse {
         return readerSettingsRepository.upsert(
             userId = userId,
             fontFamily = dto.fontFamily,
@@ -110,7 +110,7 @@ class ReadingService(
         )
     }
     
-    fun patchReaderSettings(
+    suspend fun patchReaderSettings(
         userId: Int,
         fontFamily: String? = null,
         fontSize: Int? = null,

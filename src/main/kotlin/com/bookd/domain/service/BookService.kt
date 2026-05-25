@@ -5,11 +5,14 @@ import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookDocumentStats
 import com.bookd.domain.model.Book
 import com.bookd.infrastructure.storage.BookImageStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class BookService(
     private val bookRepository: BookRepository,
     private val documentRepository: BookDocumentRepository,
-    private val imageStorage: BookImageStorage? = null
+    private val imageStorage: BookImageStorage? = null,
+    private val coverGeneratorService: CoverGeneratorService? = null
 ) {
     suspend fun getAllBooks(limit: Int = 100, offset: Long = 0): List<Book> {
         return enrichBooksWithStats(bookRepository.findAllAsync(limit, offset))
@@ -72,6 +75,20 @@ class BookService(
 
     suspend fun updateCoverPath(bookId: Int, coverPath: String?, width: Int? = null, height: Int? = null): Boolean {
         return bookRepository.updateCoverPathAsync(bookId, coverPath, width, height) > 0
+    }
+
+    suspend fun generateCover(bookId: Int): CoverGenerateResult {
+        val book = getRawBookById(bookId) ?: return CoverGenerateResult.BookNotFound
+        val generator = coverGeneratorService ?: return CoverGenerateResult.GenerationFailed
+
+        val result = withContext(Dispatchers.IO) {
+            generator.generateCover(bookId, book.title, book.author)
+        } ?: return CoverGenerateResult.GenerationFailed
+
+        val (generatedCoverPath, dimensions) = result
+        val (width, height) = dimensions
+        updateCoverPath(bookId, generatedCoverPath, width, height)
+        return CoverGenerateResult.Generated(generatedCoverPath, width, height)
     }
 
     suspend fun uploadCover(bookId: Int, originalFileName: String?, fileBytes: ByteArray): CoverUploadResult {
@@ -162,4 +179,15 @@ sealed class CoverUploadResult {
 
     data object BookNotFound : CoverUploadResult()
     data class SaveFailed(val details: String?) : CoverUploadResult()
+}
+
+sealed class CoverGenerateResult {
+    data class Generated(
+        val coverPath: String,
+        val width: Int?,
+        val height: Int?
+    ) : CoverGenerateResult()
+
+    data object BookNotFound : CoverGenerateResult()
+    data object GenerationFailed : CoverGenerateResult()
 }

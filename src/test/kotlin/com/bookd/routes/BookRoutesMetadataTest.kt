@@ -2,8 +2,10 @@ package com.bookd.routes
 
 import com.bookd.domain.model.Book
 import com.bookd.domain.service.BookService
+import com.bookd.domain.service.CoverGenerateResult
 import com.bookd.plugins.configureSerialization
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
@@ -103,5 +105,73 @@ class BookRoutesMetadataTest {
                 description = any()
             )
         }
+    }
+
+    @Test
+    fun `given books with local and absolute covers when listing then local cover is public url`() = testApplication {
+        val bookService = mockk<BookService>()
+        startKoin {
+            modules(module { single { bookService } })
+        }
+
+        coEvery { bookService.getAllBooks(limit = 100, offset = 0) } returns listOf(
+            Book(
+                id = 1,
+                title = "Local Cover",
+                author = null,
+                format = "epub",
+                filePath = "/books/local.epub",
+                fileSize = 1024,
+                coverPath = "/covers/local.png"
+            ),
+            Book(
+                id = 2,
+                title = "Remote Cover",
+                author = null,
+                format = "epub",
+                filePath = "/books/remote.epub",
+                fileSize = 1024,
+                coverPath = "https://cdn.example/remote.png"
+            )
+        )
+        coEvery { bookService.getTotalCount() } returns 2
+
+        application {
+            configureSerialization()
+            routing { bookRoutes() }
+        }
+
+        val response = client.get("/api/books")
+        val body = response.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        kotlin.test.assertTrue(body.contains("http://localhost/covers/local.png"))
+        kotlin.test.assertTrue(body.contains("https://cdn.example/remote.png"))
+    }
+
+    @Test
+    fun `given generated cover request when service succeeds then route returns cover path`() = testApplication {
+        val bookService = mockk<BookService>()
+        startKoin {
+            modules(module { single { bookService } })
+        }
+
+        coEvery { bookService.generateCover(7) } returns CoverGenerateResult.Generated(
+            coverPath = "/book_images/covers/generated.png",
+            width = 400,
+            height = 600
+        )
+
+        application {
+            configureSerialization()
+            routing { bookRoutes() }
+        }
+
+        val response = client.post("/api/books/7/generate-cover")
+        val body = response.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        kotlin.test.assertTrue(body.contains("/book_images/covers/generated.png"))
+        coVerify(exactly = 1) { bookService.generateCover(7) }
     }
 }
