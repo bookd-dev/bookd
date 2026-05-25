@@ -14,6 +14,7 @@ fun Route.backgroundParseRoutes() {
 
         // 获取后台解析服务状态
         get("/status") {
+            call.requireAdminUser() ?: return@get
             val service = get<BackgroundParseService>(BackgroundParseService::class.java)
             val status = service.getStatus()
             call.respondSuccess(status)
@@ -21,6 +22,7 @@ fun Route.backgroundParseRoutes() {
 
         // 启动后台解析服务
         post("/start") {
+            call.requireAdminUser() ?: return@post
             val service = get<BackgroundParseService>(BackgroundParseService::class.java)
             service.start()
             call.respondSuccessMessage(MessageBundle.Success.PARSE_SERVICE_STARTED)
@@ -28,6 +30,7 @@ fun Route.backgroundParseRoutes() {
 
         // 停止后台解析服务
         post("/stop") {
+            call.requireAdminUser() ?: return@post
             val service = get<BackgroundParseService>(BackgroundParseService::class.java)
             service.stop()
             call.respondSuccessMessage(MessageBundle.Success.PARSE_SERVICE_STOPPED)

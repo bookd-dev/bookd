@@ -41,6 +41,7 @@ fun Route.bookContentRoutes() {
 
         // 重新解析书籍内容
         post("/reparse") {
+            call.requireAdminUser() ?: return@post
             val contentService = get<BookContentService>(BookContentService::class.java)
             val bookId = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
 

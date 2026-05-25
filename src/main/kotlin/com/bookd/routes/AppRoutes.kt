@@ -29,6 +29,7 @@ fun Route.appRoutes() {
     route("/api/app") {
         // 获取书籍列表（支持分页）
         get("/books") {
+            call.getAuthenticatedUser() ?: return@get
             val bookService = get<BookService>(BookService::class.java)
             val limit = call.intQueryParameter("limit", 20)
             val offset = call.longQueryParameter("offset", 0)
@@ -60,6 +61,7 @@ fun Route.appRoutes() {
         
         // 获取所有书源
         get("/sources") {
+            call.getAuthenticatedUser() ?: return@get
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val sources = bookSourceService.getAllSources()
             call.respondSuccess(sources)

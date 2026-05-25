@@ -173,6 +173,7 @@ fun Route.bookRoutes() {
         }
 
         put("/{id}/metadata") {
+            call.requireAdminUser() ?: return@put
             val bookService = get<BookService>(BookService::class.java)
 
             val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@put
@@ -201,6 +202,7 @@ fun Route.bookRoutes() {
         }
 
         post("/{id}/cover") {
+            call.requireAdminUser() ?: return@post
             val bookService = get<BookService>(BookService::class.java)
 
             val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
@@ -255,6 +257,7 @@ fun Route.bookRoutes() {
         }
 
         post("/{id}/generate-cover") {
+            call.requireAdminUser() ?: return@post
             val bookService = get<BookService>(BookService::class.java)
 
             val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post

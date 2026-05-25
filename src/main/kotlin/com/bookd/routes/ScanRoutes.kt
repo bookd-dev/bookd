@@ -36,6 +36,7 @@ fun Route.scanRoutes() {
     route("/api/scan") {
         // Get current scan status
         get("/status") {
+            call.requireAdminUser() ?: return@get
             val scanService = get<BookScanService>(BookScanService::class.java)
             val scanning = scanService.isScanningInProgress()
             val statuses = scanService.getAllScanStatuses()
@@ -47,6 +48,7 @@ fun Route.scanRoutes() {
 
         // 扫描所有启用的书籍源
         post("/all") {
+            call.requireAdminUser() ?: return@post
             val scanService = get<BookScanService>(BookScanService::class.java)
             val fullScan = call.booleanQueryParameter("fullScan", false)
             val result = withContext(Dispatchers.IO) {
@@ -57,6 +59,7 @@ fun Route.scanRoutes() {
 
         // 扫描指定书籍源
         post("/source/{id}") {
+            call.requireAdminUser() ?: return@post
             val scanService = get<BookScanService>(BookScanService::class.java)
             val id = call.requiredIntParameter("id", ErrorCode.SOURCE_INVALID_ID) ?: return@post
 

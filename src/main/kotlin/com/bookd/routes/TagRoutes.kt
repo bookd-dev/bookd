@@ -75,6 +75,7 @@ fun Route.tagRoutes() {
 
         // Create a new tag manually
         post {
+            call.requireAdminUser() ?: return@post
             val tagService = get<TagService>(TagService::class.java)
             val request = call.receive<CreateTagRequest>()
 
@@ -89,6 +90,7 @@ fun Route.tagRoutes() {
 
         // Merge multiple tags into one
         post("/merge") {
+            call.requireAdminUser() ?: return@post
             val tagService = get<TagService>(TagService::class.java)
             val request = call.receive<MergeTagsRequest>()
 
@@ -134,6 +136,7 @@ fun Route.tagRoutes() {
 
         // Add tag to book
         post("/book/{bookId}") {
+            call.requireAdminUser() ?: return@post
             val tagService = get<TagService>(TagService::class.java)
             val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
@@ -144,6 +147,7 @@ fun Route.tagRoutes() {
 
         // Remove tag from book
         delete("/book/{bookId}/{tagId}") {
+            call.requireAdminUser() ?: return@delete
             val tagService = get<TagService>(TagService::class.java)
             val bookId = call.requiredIntParameter("bookId", ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID) ?: return@delete
             val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID) ?: return@delete
@@ -158,6 +162,7 @@ fun Route.tagRoutes() {
 
         // Auto-tag a specific book
         post("/auto-tag/book/{bookId}") {
+            call.requireAdminUser() ?: return@post
             val tagService = get<TagService>(TagService::class.java)
             val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
@@ -167,6 +172,7 @@ fun Route.tagRoutes() {
 
         // Auto-tag all books
         post("/auto-tag/all") {
+            call.requireAdminUser() ?: return@post
             val tagService = get<TagService>(TagService::class.java)
             val result = tagService.autoTagAllBooksAsync()
 
@@ -191,6 +197,7 @@ fun Route.tagRoutes() {
 
         // Delete a tag
         delete("/{tagId}") {
+            call.requireAdminUser() ?: return@delete
             val tagService = get<TagService>(TagService::class.java)
             val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_ID) ?: return@delete
 

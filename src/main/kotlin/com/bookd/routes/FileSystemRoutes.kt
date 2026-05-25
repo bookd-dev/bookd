@@ -12,6 +12,7 @@ fun Route.fileSystemRoutes() {
     route("/api/filesystem") {
         // 列出目录内容
         get("/list") {
+            call.requireAdminUser() ?: return@get
             val fileSystemService = get<FileSystemService>(FileSystemService::class.java)
             val path = call.request.queryParameters["path"] ?: "/"
 
@@ -23,6 +24,7 @@ fun Route.fileSystemRoutes() {
 
         // 验证路径是否存在
         get("/validate") {
+            call.requireAdminUser() ?: return@get
             val fileSystemService = get<FileSystemService>(FileSystemService::class.java)
             val path = call.request.queryParameters["path"]
 
@@ -36,6 +38,7 @@ fun Route.fileSystemRoutes() {
 
         // 获取根目录列表（用于初始化）
         get("/roots") {
+            call.requireAdminUser() ?: return@get
             val fileSystemService = get<FileSystemService>(FileSystemService::class.java)
             call.respondSuccess(fileSystemService.rootsAsync())
         }

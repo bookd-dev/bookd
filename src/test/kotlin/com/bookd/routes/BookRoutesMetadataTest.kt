@@ -1,8 +1,10 @@
 package com.bookd.routes
 
 import com.bookd.domain.model.Book
+import com.bookd.domain.model.User
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.CoverGenerateResult
+import com.bookd.domain.service.UserService
 import com.bookd.plugins.configureSerialization
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -29,8 +31,12 @@ class BookRoutesMetadataTest {
     @Test
     fun `given metadata request with title when updating book then title is persisted`() = testApplication {
         val bookService = mockk<BookService>()
+        val userService = mockAdminUserService()
         startKoin {
-            modules(module { single { bookService } })
+            modules(module {
+                single { bookService }
+                single { userService }
+            })
         }
 
         coEvery {
@@ -58,6 +64,7 @@ class BookRoutesMetadataTest {
         }
 
         val response = client.put("/api/books/7/metadata") {
+            header(HttpHeaders.Authorization, "Bearer admin-token")
             contentType(ContentType.Application.Json)
             setBody("""{"title":" New Title "}""")
         }
@@ -79,8 +86,48 @@ class BookRoutesMetadataTest {
     @Test
     fun `given blank title when updating metadata then request is rejected`() = testApplication {
         val bookService = mockk<BookService>(relaxed = true)
+        val userService = mockAdminUserService()
         startKoin {
-            modules(module { single { bookService } })
+            modules(module {
+                single { bookService }
+                single { userService }
+            })
+        }
+
+        application {
+            configureSerialization()
+            routing { bookRoutes() }
+        }
+
+        val response = client.put("/api/books/7/metadata") {
+            header(HttpHeaders.Authorization, "Bearer admin-token")
+            contentType(ContentType.Application.Json)
+            setBody("""{"title":"   "}""")
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        coVerify(exactly = 0) {
+            bookService.updateMetadata(
+                id = any(),
+                title = any(),
+                author = any(),
+                coverPath = any(),
+                isbn = any(),
+                publisher = any(),
+                description = any()
+            )
+        }
+    }
+
+    @Test
+    fun `given no token when updating metadata then book service is not called`() = testApplication {
+        val bookService = mockk<BookService>(relaxed = true)
+        val userService = mockk<UserService>(relaxed = true)
+        startKoin {
+            modules(module {
+                single { bookService }
+                single { userService }
+            })
         }
 
         application {
@@ -90,10 +137,10 @@ class BookRoutesMetadataTest {
 
         val response = client.put("/api/books/7/metadata") {
             contentType(ContentType.Application.Json)
-            setBody("""{"title":"   "}""")
+            setBody("""{"title":"New Title"}""")
         }
 
-        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
         coVerify(exactly = 0) {
             bookService.updateMetadata(
                 id = any(),
@@ -152,8 +199,12 @@ class BookRoutesMetadataTest {
     @Test
     fun `given generated cover request when service succeeds then route returns cover path`() = testApplication {
         val bookService = mockk<BookService>()
+        val userService = mockAdminUserService()
         startKoin {
-            modules(module { single { bookService } })
+            modules(module {
+                single { bookService }
+                single { userService }
+            })
         }
 
         coEvery { bookService.generateCover(7) } returns CoverGenerateResult.Generated(
@@ -167,11 +218,25 @@ class BookRoutesMetadataTest {
             routing { bookRoutes() }
         }
 
-        val response = client.post("/api/books/7/generate-cover")
+        val response = client.post("/api/books/7/generate-cover") {
+            header(HttpHeaders.Authorization, "Bearer admin-token")
+        }
         val body = response.bodyAsText()
 
         assertEquals(HttpStatusCode.OK, response.status)
         kotlin.test.assertTrue(body.contains("/book_images/covers/generated.png"))
         coVerify(exactly = 1) { bookService.generateCover(7) }
+    }
+
+    private fun mockAdminUserService(): UserService {
+        val userService = mockk<UserService>()
+        coEvery { userService.validateTokenAsync("admin-token") } returns User(
+            id = 1,
+            username = "admin",
+            password = "hash",
+            email = null,
+            role = "admin"
+        )
+        return userService
     }
 }

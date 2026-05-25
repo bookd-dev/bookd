@@ -28,6 +28,7 @@ fun Route.txtParseRuleRoutes() {
     route("/api/txt-parse-rules") {
         // 获取所有规则
         get {
+            call.requireAdminUser() ?: return@get
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val rules = txtParseRuleService.getAllRules()
             call.respondSuccess(rules)
@@ -35,6 +36,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 获取启用的规则
         get("/enabled") {
+            call.requireAdminUser() ?: return@get
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val rules = txtParseRuleService.getEnabledRules()
             call.respondSuccess(rules)
@@ -42,6 +44,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 获取单个规则
         get("/{id}") {
+            call.requireAdminUser() ?: return@get
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -60,6 +63,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 创建规则
         post {
+            call.requireAdminUser() ?: return@post
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             try {
                 val request = call.receive<TxtParseRuleService.CreateTxtParseRuleRequest>()
@@ -72,6 +76,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 更新规则
         put("/{id}") {
+            call.requireAdminUser() ?: return@put
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -95,6 +100,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 删除规则
         delete("/{id}") {
+            call.requireAdminUser() ?: return@delete
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -113,6 +119,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 切换规则启用状态
         post("/{id}/toggle") {
+            call.requireAdminUser() ?: return@post
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -131,6 +138,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 批量更新优先级
         post("/priorities") {
+            call.requireAdminUser() ?: return@post
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val priorities = call.receive<Map<String, Int>>()
             val intPriorities = priorities.mapKeys { it.key.toInt() }
@@ -145,6 +153,7 @@ fun Route.txtParseRuleRoutes() {
 
         // 从 JSON 文件导入规则
         post("/import") {
+            call.requireAdminUser() ?: return@post
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val language = call.getLanguage()
 

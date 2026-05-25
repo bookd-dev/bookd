@@ -85,18 +85,8 @@ fun Route.authRoutes(userService: UserService) {
         }
 
         get("/me") {
-            val token = call.request.header("Authorization")?.removePrefix("Bearer ")
-            if (token == null) {
-                call.respondError(ErrorCode.AUTH_NO_TOKEN)
-                return@get
-            }
-
-            val user = userService.validateTokenAsync(token)
-            if (user != null) {
-                call.respondSuccess(UserResponse(user.id, user.username, user.email, user.role))
-            } else {
-                call.respondError(ErrorCode.AUTH_INVALID_TOKEN)
-            }
+            val user = call.getAuthenticatedUser(userService) ?: return@get
+            call.respondSuccess(UserResponse(user.id, user.username, user.email, user.role))
         }
     }
 }
