@@ -126,11 +126,7 @@ fun Route.tagRoutes() {
         // Get tags for a specific book
         get("/book/{bookId}") {
             val tagService = get<TagService>(TagService::class.java)
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
             val tags = tagService.getTagsForBook(bookId)
             call.respondSuccess(tags)
@@ -139,11 +135,7 @@ fun Route.tagRoutes() {
         // Add tag to book
         post("/book/{bookId}") {
             val tagService = get<TagService>(TagService::class.java)
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             val request = call.receive<AddTagRequest>()
             val tag = tagService.addTagToBook(bookId, request.tagName)
@@ -153,13 +145,8 @@ fun Route.tagRoutes() {
         // Remove tag from book
         delete("/book/{bookId}/{tagId}") {
             val tagService = get<TagService>(TagService::class.java)
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            val tagId = call.parameters["tagId"]?.toIntOrNull()
-
-            if (bookId == null || tagId == null) {
-                call.respondError(ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID)
-                return@delete
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID) ?: return@delete
+            val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_BOOK_OR_TAG_ID) ?: return@delete
 
             val removed = tagService.removeTagFromBook(bookId, tagId)
             if (removed) {
@@ -172,11 +159,7 @@ fun Route.tagRoutes() {
         // Auto-tag a specific book
         post("/auto-tag/book/{bookId}") {
             val tagService = get<TagService>(TagService::class.java)
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             val tags = tagService.autoTagBook(bookId)
             call.respondSuccess(AutoTagBookResponse(tags = tags, count = tags.size))
@@ -199,12 +182,7 @@ fun Route.tagRoutes() {
         get("/{tagId}/books") {
             val tagService = get<TagService>(TagService::class.java)
             val bookService = get<BookService>(BookService::class.java)
-            val tagId = call.parameters["tagId"]?.toIntOrNull()
-
-            if (tagId == null) {
-                call.respondError(ErrorCode.TAG_INVALID_ID)
-                return@get
-            }
+            val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_ID) ?: return@get
 
             val bookIds = tagService.getBooksByTagId(tagId)
             val books = bookService.getBooksByIds(bookIds)
@@ -214,12 +192,7 @@ fun Route.tagRoutes() {
         // Delete a tag
         delete("/{tagId}") {
             val tagService = get<TagService>(TagService::class.java)
-            val tagId = call.parameters["tagId"]?.toIntOrNull()
-
-            if (tagId == null) {
-                call.respondError(ErrorCode.TAG_INVALID_ID)
-                return@delete
-            }
+            val tagId = call.requiredIntParameter("tagId", ErrorCode.TAG_INVALID_ID) ?: return@delete
 
             val deleted = tagService.deleteTag(tagId)
             if (deleted) {

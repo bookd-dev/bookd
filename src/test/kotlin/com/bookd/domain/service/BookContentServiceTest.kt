@@ -143,6 +143,37 @@ class BookContentServiceTest {
     }
 
     @Test
+    fun `given image resource without base url when loading content then local image path and nullable aspect ratio are preserved`() {
+        val document = createDocument(id = 21, index = 2, title = "Chapter Three")
+        coEvery { documentRepository.findByBookIdAndIndexAsync(bookId = 1, index = 2) } returns document
+        coEvery { documentRepository.getDocumentContentAsync(21) } returns listOf(
+            ContentElement.Image(src = "images/zero-height.png", alt = null)
+        )
+        coEvery {
+            documentRepository.findResourcesByBookIdAndPaths(1, setOf("images/zero-height.png"))
+        } returns mapOf(
+            "images/zero-height.png" to ResourceInfo(
+                storedPath = "1/zero-height.png",
+                mediaType = "image/png",
+                width = 100,
+                height = 0
+            )
+        )
+        coEvery { documentRepository.findAdjacentIndexes(bookId = 1, index = 2) } returns AdjacentDocumentIndexes(
+            prevIndex = null,
+            nextIndex = null
+        )
+
+        val result = runBlocking { bookContentService.getChapterContent(bookId = 1, index = 2) }
+
+        val image = result.imageAt(0)
+        assertEquals("/book_images/1/zero-height.png", image.src)
+        assertEquals(100, image.width)
+        assertEquals(0, image.height)
+        assertNull(image.aspectRatio)
+    }
+
+    @Test
     fun `given missing file when parsing on demand then parse fails and parsed cache is not written`() {
         val cacheService = mockk<BookCacheService>(relaxed = true)
         val service = BookContentService(

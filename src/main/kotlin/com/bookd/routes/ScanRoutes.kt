@@ -48,7 +48,7 @@ fun Route.scanRoutes() {
         // 扫描所有启用的书籍源
         post("/all") {
             val scanService = get<BookScanService>(BookScanService::class.java)
-            val fullScan = call.request.queryParameters["fullScan"]?.toBoolean() ?: false
+            val fullScan = call.booleanQueryParameter("fullScan", false)
             val result = withContext(Dispatchers.IO) {
                 scanService.scanAllSources(fullScan)
             }
@@ -58,14 +58,9 @@ fun Route.scanRoutes() {
         // 扫描指定书籍源
         post("/source/{id}") {
             val scanService = get<BookScanService>(BookScanService::class.java)
-            val id = call.parameters["id"]?.toIntOrNull()
+            val id = call.requiredIntParameter("id", ErrorCode.SOURCE_INVALID_ID) ?: return@post
 
-            if (id == null) {
-                call.respondError(ErrorCode.SOURCE_INVALID_ID)
-                return@post
-            }
-
-            val fullScan = call.request.queryParameters["fullScan"]?.toBoolean() ?: false
+            val fullScan = call.booleanQueryParameter("fullScan", false)
             val result = withContext(Dispatchers.IO) {
                 scanService.scanBookSource(id, fullScan)
             }

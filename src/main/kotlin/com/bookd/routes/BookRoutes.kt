@@ -1,7 +1,6 @@
 package com.bookd.routes
 
-import com.bookd.com.bookd.extension.buildBaseUrl
-import com.bookd.com.bookd.extension.withPublicCoverUrl
+import com.bookd.domain.model.BookDocument
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.BookDetailService
@@ -82,9 +81,9 @@ fun Route.bookRoutes() {
     route("/api/books") {
         get {
             val bookService = get<BookService>(BookService::class.java)
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
-            val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
-            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
+            val limit = call.intQueryParameter("limit", 100)
+            val offset = call.longQueryParameter("offset", 0)
+            val sourceId = call.optionalIntQueryParameter("sourceId")
 
             val books = if (sourceId != null) {
                 bookService.getBooksBySourceId(sourceId)
@@ -104,7 +103,7 @@ fun Route.bookRoutes() {
 
         get("/count") {
             val bookService = get<BookService>(BookService::class.java)
-            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
+            val sourceId = call.optionalIntQueryParameter("sourceId")
 
             val count = if (sourceId != null) {
                 bookService.getCountBySourceId(sourceId)
@@ -117,11 +116,7 @@ fun Route.bookRoutes() {
 
         get("/{id}") {
             val bookService = get<BookService>(BookService::class.java)
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
             val book = bookService.getBookById(id)
             if (book == null) {
@@ -137,11 +132,7 @@ fun Route.bookRoutes() {
         get("/{id}/detail") {
             val bookDetailService = get<BookDetailService>(BookDetailService::class.java)
             
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
             
             // 获取当前用户
             val userId = call.getAuthenticatedUserId() ?: return@get
@@ -163,11 +154,7 @@ fun Route.bookRoutes() {
         get("/{id}/chapters") {
             val contentService = get<BookContentService>(BookContentService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
             when (val result = contentService.getChapterList(id)) {
                 ChapterListResult.NotFound -> call.respondError(ErrorCode.BOOK_NOT_FOUND)
@@ -178,15 +165,7 @@ fun Route.bookRoutes() {
                         ChaptersResponse(
                             bookId = id,
                             total = tocDocuments.size,
-                            chapters = tocDocuments.map { doc ->
-                                ChapterInfo(
-                                    index = doc.index,
-                                    title = doc.title ?: "第${doc.index + 1}章",
-                                    wordCount = doc.wordCount,
-                                    imageCount = doc.imageCount,
-                                    level = doc.level
-                                )
-                            }
+                            chapters = tocDocuments.map { it.toChapterInfo() }
                         )
                     )
                 }
@@ -196,11 +175,7 @@ fun Route.bookRoutes() {
         put("/{id}/metadata") {
             val bookService = get<BookService>(BookService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@put
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@put
 
             val request = call.receive<UpdateMetadataRequest>()
             if (request.title != null && request.title.isBlank()) {
@@ -228,11 +203,7 @@ fun Route.bookRoutes() {
         post("/{id}/cover") {
             val bookService = get<BookService>(BookService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             var coverPath: String? = null
             var uploadError: String? = null
@@ -286,11 +257,7 @@ fun Route.bookRoutes() {
         post("/{id}/generate-cover") {
             val bookService = get<BookService>(BookService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             when (val result = bookService.generateCover(id)) {
                 CoverGenerateResult.BookNotFound -> call.respondError(ErrorCode.BOOK_NOT_FOUND)
@@ -302,3 +269,11 @@ fun Route.bookRoutes() {
         }
     }
 }
+
+private fun BookDocument.toChapterInfo(): ChapterInfo = ChapterInfo(
+    index = index,
+    title = title ?: "第${index + 1}章",
+    wordCount = wordCount,
+    imageCount = imageCount,
+    level = level
+)

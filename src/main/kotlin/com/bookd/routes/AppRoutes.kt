@@ -1,7 +1,5 @@
 package com.bookd.routes
 
-import com.bookd.com.bookd.extension.buildBaseUrl
-import com.bookd.com.bookd.extension.withPublicCoverUrl
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
 import com.bookd.domain.service.BookSourceService
@@ -32,9 +30,9 @@ fun Route.appRoutes() {
         // 获取书籍列表（支持分页）
         get("/books") {
             val bookService = get<BookService>(BookService::class.java)
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
-            val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
-            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
+            val limit = call.intQueryParameter("limit", 20)
+            val offset = call.longQueryParameter("offset", 0)
+            val sourceId = call.optionalIntQueryParameter("sourceId")
             
             if (sourceId == null) {
                 call.respondError(ErrorCode.SOURCE_INVALID_ID)

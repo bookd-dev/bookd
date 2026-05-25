@@ -1,18 +1,13 @@
 package com.bookd.domain.service
 
-import com.bookd.data.entity.DocumentResources
-import com.bookd.data.entity.Books
+import com.bookd.data.repository.CoverDimensionUpdate
+import com.bookd.data.repository.ImageDimensionMigrationRepository
+import com.bookd.data.repository.ResourceDimensionUpdate
 import com.bookd.infrastructure.storage.BookImageStorage
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.or
-import org.jetbrains.exposed.v1.core.isNotNull
-import org.jetbrains.exposed.v1.core.isNull
-import org.slf4j.LoggerFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.io.File
 import javax.imageio.ImageIO
 
@@ -21,36 +16,26 @@ import javax.imageio.ImageIO
  * 用于补全旧数据的宽高信息
  */
 class ImageDimensionMigrationService(
-    private val bookImageStorage: BookImageStorage
+    private val bookImageStorage: BookImageStorage,
+    private val migrationRepository: ImageDimensionMigrationRepository
 ) {
     private val logger = LoggerFactory.getLogger(ImageDimensionMigrationService::class.java)
     
     /**
      * 迁移 document_resources 表中的图片尺寸
      */
-    fun migrateResourceDimensions(): MigrationResult {
+    suspend fun migrateResourceDimensions(): MigrationResult {
         var success = 0
         var failed = 0
 
-        val resources = transaction {
-            DocumentResources.selectAll()
-                .where { 
-                    (DocumentResources.width.isNull()) or (DocumentResources.height.isNull()) 
-                }
-                .map { row ->
-                    ResourceDimensionCandidate(
-                        id = row[DocumentResources.id].value,
-                        storedPath = row[DocumentResources.storedPath]
-                    )
-                }
-        }
+        val resources = migrationRepository.findResourcesMissingDimensions()
 
         logger.info("Found ${resources.size} resources without dimensions")
 
         val updates = mutableListOf<ResourceDimensionUpdate>()
         resources.forEach { resource ->
             try {
-                val dimensions = bookImageStorage.extractImageDimensionsFromFile(resource.storedPath)
+                val dimensions = extractStoredImageDimensions(resource.storedPath)
 
                 if (dimensions != null) {
                     val (width, height) = dimensions
@@ -67,14 +52,7 @@ class ImageDimensionMigrationService(
             }
         }
 
-        transaction {
-            updates.forEach { update ->
-                DocumentResources.update({ DocumentResources.id eq update.id }) {
-                    it[DocumentResources.width] = update.width
-                    it[DocumentResources.height] = update.height
-                }
-            }
-        }
+        migrationRepository.updateResourceDimensions(updates)
         
         logger.info("Resource migration completed: $success succeeded, $failed failed, ${resources.size} total")
         return MigrationResult(resources.size, success, failed)
@@ -83,24 +61,11 @@ class ImageDimensionMigrationService(
     /**
      * 迁移 books 表中的封面尺寸
      */
-    fun migrateCoverDimensions(): MigrationResult {
+    suspend fun migrateCoverDimensions(): MigrationResult {
         var success = 0
         var failed = 0
 
-        val books = transaction {
-            Books.selectAll()
-                .where { 
-                    Books.coverPath.isNotNull() and 
-                    ((Books.coverWidth.isNull()) or (Books.coverHeight.isNull()))
-                }
-                .mapNotNull { row ->
-                    val coverPath = row[Books.coverPath] ?: return@mapNotNull null
-                    CoverDimensionCandidate(
-                        bookId = row[Books.id].value,
-                        coverPath = coverPath
-                    )
-                }
-        }
+        val books = migrationRepository.findCoversMissingDimensions()
 
         logger.info("Found ${books.size} books without cover dimensions")
 
@@ -124,21 +89,18 @@ class ImageDimensionMigrationService(
             }
         }
 
-        transaction {
-            updates.forEach { update ->
-                Books.update({ Books.id eq update.bookId }) {
-                    it[coverWidth] = update.width
-                    it[coverHeight] = update.height
-                }
-            }
-        }
+        migrationRepository.updateCoverDimensions(updates)
         
         logger.info("Cover migration completed: $success succeeded, $failed failed, ${books.size} total")
         return MigrationResult(books.size, success, failed)
     }
 
-    private fun extractCoverDimensions(coverPath: String): Pair<Int, Int>? {
-        return when {
+    private suspend fun extractStoredImageDimensions(storedPath: String): Pair<Int, Int>? = withContext(Dispatchers.IO) {
+        bookImageStorage.extractImageDimensionsFromFile(storedPath)
+    }
+
+    private suspend fun extractCoverDimensions(coverPath: String): Pair<Int, Int>? = withContext(Dispatchers.IO) {
+        when {
             coverPath.startsWith("/book_images/") -> {
                 val relativePath = coverPath.removePrefix("/book_images/")
                 bookImageStorage.extractImageDimensionsFromFile(relativePath)
@@ -170,7 +132,7 @@ class ImageDimensionMigrationService(
      * 重试失败的图片尺寸提取（仅处理之前失败的记录）
      * 与初次迁移相同，但这是一个明确的"重试"操作
      */
-    fun retryFailedMigrations(): MigrationResponse {
+    suspend fun retryFailedMigrations(): MigrationResponse {
         logger.info("Starting retry of failed image dimension migrations")
         
         // 重试资源图片
@@ -192,28 +154,6 @@ class ImageDimensionMigrationService(
         return response
     }
 }
-
-private data class ResourceDimensionCandidate(
-    val id: Int,
-    val storedPath: String
-)
-
-private data class ResourceDimensionUpdate(
-    val id: Int,
-    val width: Int,
-    val height: Int
-)
-
-private data class CoverDimensionCandidate(
-    val bookId: Int,
-    val coverPath: String
-)
-
-private data class CoverDimensionUpdate(
-    val bookId: Int,
-    val width: Int,
-    val height: Int
-)
 
 @Serializable
 data class MigrationResult(

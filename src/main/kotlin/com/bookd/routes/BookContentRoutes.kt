@@ -1,6 +1,5 @@
 package com.bookd.routes
 
-import com.bookd.com.bookd.extension.buildBaseUrl
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookContentService
 import com.bookd.extension.*
@@ -16,12 +15,7 @@ fun Route.bookContentRoutes() {
         // 获取书籍清单（目录结构）
         get("/manifest") {
             val contentService = get<BookContentService>(BookContentService::class.java)
-            val bookId = call.parameters["id"]?.toIntOrNull()
-
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val bookId = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
             val manifest = contentService.getBookManifest(bookId)
             if (manifest == null) {
@@ -34,13 +28,8 @@ fun Route.bookContentRoutes() {
         // 获取带阅读进度的书籍清单（需要认证）
         get("/manifest-with-progress") {
             val contentService = get<BookContentService>(BookContentService::class.java)
-            val bookId = call.parameters["id"]?.toIntOrNull()
             val userId = call.getAuthenticatedUserId() ?: return@get
-            
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val bookId = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
             
             val manifest = contentService.getBookManifestWithProgress(bookId, userId)
             if (manifest == null) {
@@ -53,12 +42,7 @@ fun Route.bookContentRoutes() {
         // 重新解析书籍内容
         post("/reparse") {
             val contentService = get<BookContentService>(BookContentService::class.java)
-            val bookId = call.parameters["id"]?.toIntOrNull()
-
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val bookId = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             val queued = contentService.queueForReparse(bookId)
             if (queued) {
@@ -71,13 +55,8 @@ fun Route.bookContentRoutes() {
         // 获取章节内容
         get("/chapters/{index}") {
             val contentService = get<BookContentService>(BookContentService::class.java)
-            val bookId = call.parameters["id"]?.toIntOrNull()
-            val chapterIndex = call.parameters["index"]?.toIntOrNull()
-
-            if (bookId == null || chapterIndex == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_PARAMS)
-                return@get
-            }
+            val bookId = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_PARAMS) ?: return@get
+            val chapterIndex = call.requiredIntParameter("index", ErrorCode.BOOK_INVALID_PARAMS) ?: return@get
 
             // 构建完整的 URL
             val baseUrl = call.buildBaseUrl()

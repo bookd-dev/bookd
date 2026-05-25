@@ -11,6 +11,7 @@ import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.TxtParseRuleRepository
 import com.bookd.data.repository.BookshelfRepository
 import com.bookd.data.repository.BookshelfItemRepository
+import com.bookd.data.repository.ImageDimensionMigrationRepository
 import com.bookd.domain.service.BookMetadataService
 import com.bookd.domain.service.BookScanService
 import com.bookd.domain.service.BookService
@@ -50,6 +51,7 @@ val appModule = module {
     single { TxtParseRuleRepository() }
     single { BookshelfRepository() }
     single { BookshelfItemRepository() }
+    single { ImageDimensionMigrationRepository() }
     single { BookTaskCoordinator() }
     
     // Storage
@@ -101,7 +103,7 @@ val appModule = module {
     single { BackgroundParseService(get(), get()) }
     single { BookshelfService(get(), get(), get(), get()) }
     single { BookDetailService(get(), get(), get(), get()) }
-    single { ImageDimensionMigrationService(get()) }
+    single { ImageDimensionMigrationService(get(), get()) }
     single { FileSystemService() }
     single { BackendLifecycleService(get(), get(), getOrNull()) }
 }

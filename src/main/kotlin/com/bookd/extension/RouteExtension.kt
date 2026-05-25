@@ -1,4 +1,4 @@
-package com.bookd.com.bookd.extension
+package com.bookd.extension
 
 import com.bookd.domain.model.Book
 import com.bookd.domain.model.BookWithProgress

@@ -10,6 +10,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -47,8 +48,8 @@ class AdminRoutesAuthTest {
         val response = client.post("/api/admin/migrate-image-dimensions")
 
         assertEquals(HttpStatusCode.Unauthorized, response.status)
-        verify(exactly = 0) { migrationService.migrateResourceDimensions() }
-        verify(exactly = 0) { migrationService.migrateCoverDimensions() }
+        coVerify(exactly = 0) { migrationService.migrateResourceDimensions() }
+        coVerify(exactly = 0) { migrationService.migrateCoverDimensions() }
     }
 
     @Test
@@ -80,8 +81,8 @@ class AdminRoutesAuthTest {
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
         verify(exactly = 1) { userService.validateToken("user-token") }
-        verify(exactly = 0) { migrationService.migrateResourceDimensions() }
-        verify(exactly = 0) { migrationService.migrateCoverDimensions() }
+        coVerify(exactly = 0) { migrationService.migrateResourceDimensions() }
+        coVerify(exactly = 0) { migrationService.migrateCoverDimensions() }
     }
 
     @Test
@@ -95,8 +96,8 @@ class AdminRoutesAuthTest {
             email = null,
             role = "admin"
         )
-        every { migrationService.migrateResourceDimensions() } returns MigrationResult(total = 2, successCount = 1, failedCount = 1)
-        every { migrationService.migrateCoverDimensions() } returns MigrationResult(total = 3, successCount = 2, failedCount = 1)
+        coEvery { migrationService.migrateResourceDimensions() } returns MigrationResult(total = 2, successCount = 1, failedCount = 1)
+        coEvery { migrationService.migrateCoverDimensions() } returns MigrationResult(total = 3, successCount = 2, failedCount = 1)
         startKoin {
             modules(module {
                 single { userService }
@@ -114,8 +115,8 @@ class AdminRoutesAuthTest {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        verify(exactly = 1) { migrationService.migrateResourceDimensions() }
-        verify(exactly = 1) { migrationService.migrateCoverDimensions() }
+        coVerify(exactly = 1) { migrationService.migrateResourceDimensions() }
+        coVerify(exactly = 1) { migrationService.migrateCoverDimensions() }
     }
 
     @Test

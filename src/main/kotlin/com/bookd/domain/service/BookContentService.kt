@@ -512,23 +512,13 @@ class BookContentService(
     ): ContentElement {
         return when (element) {
             is ContentElement.Image -> {
-                val resource = resourcesByPath[element.src]
-                if (resource != null) {
-                    val imagePath = "/book_images/${resource.storedPath}"
-                    val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-                    
-                    // 计算宽高比
-                    val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
-                        resource.width.toDouble() / resource.height
-                    } else {
-                        null
-                    }
-                    
+                val transformedImage = transformImageReference(element.src, resourcesByPath, baseUrl)
+                if (transformedImage != null) {
                     element.copy(
-                        src = fullPath,
-                        width = resource.width,
-                        height = resource.height,
-                        aspectRatio = aspectRatio
+                        src = transformedImage.src,
+                        width = transformedImage.width,
+                        height = transformedImage.height,
+                        aspectRatio = transformedImage.aspectRatio
                     )
                 } else {
                     element
@@ -550,35 +540,43 @@ class BookContentService(
                 val transformedContentSpans = element.contentSpans.map { transformSpan(it) }
                 
                 // 转换脚注图片路径和尺寸
-                if (element.footnoteImage != null) {
-                    val resource = resourcesByPath[element.footnoteImage]
-                    if (resource != null) {
-                        val imagePath = "/book_images/${resource.storedPath}"
-                        val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-                        
-                        // 计算宽高比
-                        val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
-                            resource.width.toDouble() / resource.height
-                        } else {
-                            null
-                        }
-                        
-                        element.copy(
-                            footnoteImage = fullPath,
-                            width = resource.width,
-                            height = resource.height,
-                            aspectRatio = aspectRatio,
-                            contentSpans = transformedContentSpans
-                        )
-                    } else {
-                        element.copy(contentSpans = transformedContentSpans)
-                    }
+                val transformedImage = transformImageReference(element.footnoteImage, resourcesByPath, baseUrl)
+                if (transformedImage != null) {
+                    element.copy(
+                        footnoteImage = transformedImage.src,
+                        width = transformedImage.width,
+                        height = transformedImage.height,
+                        aspectRatio = transformedImage.aspectRatio,
+                        contentSpans = transformedContentSpans
+                    )
                 } else {
                     element.copy(contentSpans = transformedContentSpans)
                 }
             }
             else -> element
         }
+    }
+
+    private fun transformImageReference(
+        imagePath: String?,
+        resourcesByPath: Map<String, ResourceInfo>,
+        baseUrl: String?
+    ): TransformedImageReference? {
+        val resource = imagePath?.let { resourcesByPath[it] } ?: return null
+        val publicPath = "/book_images/${resource.storedPath}"
+        val fullPath = if (baseUrl != null) "$baseUrl$publicPath" else publicPath
+        val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
+            resource.width.toDouble() / resource.height
+        } else {
+            null
+        }
+
+        return TransformedImageReference(
+            src = fullPath,
+            width = resource.width,
+            height = resource.height,
+            aspectRatio = aspectRatio
+        )
     }
     
     /**
@@ -600,6 +598,13 @@ class BookContentService(
         }
         return paths
     }
+
+    private data class TransformedImageReference(
+        val src: String,
+        val width: Int?,
+        val height: Int?,
+        val aspectRatio: Double?
+    )
     
     /**
      * 构建目录树
