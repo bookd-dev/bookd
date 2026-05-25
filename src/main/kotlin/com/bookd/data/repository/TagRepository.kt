@@ -38,6 +38,39 @@ class TagRepository {
                 }
             }
     }
+
+    fun findOrCreateTags(tagNames: Collection<String>): Map<String, Tag> = transaction {
+        val distinctNames = tagNames.map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+        if (distinctNames.isEmpty()) return@transaction emptyMap()
+
+        val tagsByName = Tags.selectAll()
+            .where { Tags.name inList distinctNames }
+            .map { rowToTag(it) }
+            .associateBy { it.name }
+            .toMutableMap()
+
+        distinctNames.filterNot { it in tagsByName }.forEach { tagName ->
+            val tag = try {
+                val now = TimeProvider.now()
+                val id = Tags.insertAndGetId {
+                    it[name] = tagName
+                    it[createdAt] = now
+                }
+                Tag(id.value, tagName, now)
+            } catch (e: Exception) {
+                Tags.selectAll().where { Tags.name eq tagName }
+                    .map { rowToTag(it) }
+                    .firstOrNull()
+                    ?: throw e
+            }
+            tagsByName[tag.name] = tag
+        }
+
+        tagsByName
+    }
     
     fun getAllTags(): List<Tag> = transaction {
         Tags.selectAll()
@@ -72,6 +105,60 @@ class TagRepository {
             // Tag already exists for this book
             false
         }
+    }
+
+    fun addTagsToBook(bookId: Int, tagIds: Collection<Int>): Set<Int> = transaction {
+        val distinctTagIds = tagIds.distinct()
+        if (distinctTagIds.isEmpty()) return@transaction emptySet()
+
+        val existingTagIds = BookTags.select(BookTags.tagId)
+            .where { (BookTags.bookId eq bookId) and (BookTags.tagId inList distinctTagIds) }
+            .map { it[BookTags.tagId].value }
+            .toSet()
+
+        val addedTagIds = mutableSetOf<Int>()
+        val now = TimeProvider.now()
+        distinctTagIds.filterNot { it in existingTagIds }.forEach { tagId ->
+            try {
+                BookTags.insert {
+                    it[BookTags.bookId] = bookId
+                    it[BookTags.tagId] = tagId
+                    it[createdAt] = now
+                }
+                addedTagIds.add(tagId)
+            } catch (e: Exception) {
+                // Existing association created concurrently; preserve idempotent behavior.
+            }
+        }
+
+        addedTagIds
+    }
+
+    fun addTagToBooks(bookIds: Collection<Int>, tagId: Int): Int = transaction {
+        val distinctBookIds = bookIds.distinct()
+        if (distinctBookIds.isEmpty()) return@transaction 0
+
+        val existingBookIds = BookTags.select(BookTags.bookId)
+            .where { (BookTags.bookId inList distinctBookIds) and (BookTags.tagId eq tagId) }
+            .map { it[BookTags.bookId].value }
+            .toSet()
+
+        var added = 0
+        val now = TimeProvider.now()
+        distinctBookIds.filterNot { it in existingBookIds }.forEach { bookId ->
+            try {
+                BookTags.insert {
+                    it[BookTags.bookId] = bookId
+                    it[BookTags.tagId] = tagId
+                    it[createdAt] = now
+                }
+                added++
+            } catch (e: Exception) {
+                // Existing association created concurrently; preserve idempotent behavior.
+            }
+        }
+
+        added
     }
     
     fun removeTagFromBook(bookId: Int, tagId: Int): Boolean = transaction {

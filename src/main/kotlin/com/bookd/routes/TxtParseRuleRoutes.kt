@@ -2,13 +2,13 @@ package com.bookd.routes
 
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.TxtParseRuleService
+import com.bookd.domain.service.ImportRulesResult
 import com.bookd.extension.*
 import com.bookd.infrastructure.i18n.MessageBundle
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json.Default.decodeFromString
 import org.koin.java.KoinJavaComponent.get
 
 @Serializable
@@ -148,63 +148,20 @@ fun Route.txtParseRuleRoutes() {
             val txtParseRuleService = get<TxtParseRuleService>(TxtParseRuleService::class.java)
             val language = call.getLanguage()
 
-            @Serializable
-            data class JsonRule(
-                val name: String,
-                val rule: String,
-                val example: String
-            )
-
             val request = call.receive<ImportRequest>()
 
-            val jsonContent = if (request.useFile || request.jsonContent.isNullOrBlank()) {
-                // 从文件读取
-                val jsonFile = java.io.File("static/txt_toc_rules.json")
-                if (!jsonFile.exists()) {
-                    call.respondError(ErrorCode.RULE_JSON_FILE_NOT_FOUND, jsonFile.absolutePath)
-                    return@post
+            when (val result = txtParseRuleService.importRules(request.jsonContent, request.useFile)) {
+                is ImportRulesResult.FileNotFound -> {
+                    call.respondError(ErrorCode.RULE_JSON_FILE_NOT_FOUND, result.path)
                 }
-                jsonFile.readText()
-            } else {
-                // 使用用户提供的 JSON 内容
-                request.jsonContent
-            }
-
-            // 解析并导入
-            val jsonRules = decodeFromString<List<JsonRule>>(jsonContent)
-            val existingRules = txtParseRuleService.getAllRules()
-
-            var imported = 0
-            var skipped = 0
-
-            jsonRules.forEachIndexed { index, jsonRule ->
-                try {
-                    // 检查是否已存在同名规则
-                    val existing = existingRules.find { it.name == jsonRule.name }
-                    if (existing != null) {
-                        skipped++
-                        return@forEachIndexed
-                    }
-
-                    val createRequest = TxtParseRuleService.CreateTxtParseRuleRequest(
-                        name = jsonRule.name,
-                        rule = jsonRule.rule,
-                        example = jsonRule.example,
-                        enabled = true,
-                        priority = index
-                    )
-                    txtParseRuleService.createRule(createRequest)
-                    imported++
-                } catch (e: Exception) {
-                    // 忽略单个规则的错误，继续导入其他规则
+                is ImportRulesResult.Imported -> {
+                    call.respondSuccess(ImportResponse(
+                        message = MessageBundle.Success.RULES_IMPORTED.get(language),
+                        imported = result.imported,
+                        skipped = result.skipped
+                    ))
                 }
             }
-
-            call.respondSuccess(ImportResponse(
-                message = MessageBundle.Success.RULES_IMPORTED.get(language),
-                imported = imported,
-                skipped = skipped
-            ))
         }
     }
 }

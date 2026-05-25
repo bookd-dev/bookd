@@ -4,13 +4,16 @@ import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookDocumentStats
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.Book
+import com.bookd.infrastructure.storage.BookImageStorage
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDateTime
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -99,6 +102,27 @@ class BookServiceTest {
         assertEquals(6, result[0].totalImageCount)
         assertEquals(2.0, result[0].coverAspectRatio)
         coVerify(exactly = 0) { documentRepository.findStatsByBookIds(any()) }
+    }
+
+    @Test
+    fun `given valid cover upload when saving then storage dimensions and book cover are updated`() {
+        val imageStorage = mockk<BookImageStorage>()
+        val service = BookService(bookRepository, documentRepository, imageStorage)
+        val bytes = byteArrayOf(1, 2, 3)
+
+        coEvery { bookRepository.findByIdAsync(9) } returns createBook(id = 9, title = "Cover Book")
+        every { imageStorage.extractImageDimensions(bytes) } returns (600 to 900)
+        every { imageStorage.saveCover(9, "cover.png", bytes, isGenerated = false) } returns "/book_images/covers/cover.png"
+        coEvery { bookRepository.updateCoverPathAsync(9, "/book_images/covers/cover.png", 600, 900) } returns 1
+
+        val result = runBlocking { service.uploadCover(9, "cover.png", bytes) }
+
+        assertTrue(result is CoverUploadResult.Saved)
+        result as CoverUploadResult.Saved
+        assertEquals("/book_images/covers/cover.png", result.coverPath)
+        assertEquals(600, result.width)
+        assertEquals(900, result.height)
+        coVerify(exactly = 1) { bookRepository.updateCoverPathAsync(9, "/book_images/covers/cover.png", 600, 900) }
     }
 
     private fun createBook(

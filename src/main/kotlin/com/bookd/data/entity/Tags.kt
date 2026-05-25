@@ -16,5 +16,6 @@ object BookTags : IntIdTable("book_tags") {
     
     init {
         uniqueIndex(bookId, tagId)
+        index(false, tagId)
     }
 }

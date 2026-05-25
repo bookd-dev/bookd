@@ -7,26 +7,21 @@ import com.bookd.domain.service.metadata.MetadataExtractorFactory
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.Executors
 
 class BookMetadataService(
     private val bookRepository: BookRepository,
     private val coverGeneratorService: CoverGeneratorService,
-    private val tagRepository: TagRepository
+    private val tagRepository: TagRepository,
+    private val taskCoordinator: BookTaskCoordinator = BookTaskCoordinator()
 ) {
     private val logger = LoggerFactory.getLogger(BookMetadataService::class.java)
     private val extractorFactory = MetadataExtractorFactory()
-    
-    // Create a dedicated dispatcher for metadata extraction with a thread pool
-    private val metadataDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
-    private val scope = CoroutineScope(metadataDispatcher + SupervisorJob())
     
     /**
      * Asynchronously extract metadata from book file
      */
     fun extractMetadataAsync(bookId: Int, filePath: String) {
-        scope.launch {
-            delay(500) // Small delay to avoid interfering with scan response
+        taskCoordinator.launchMetadataExtraction {
             try {
                 logger.info("Starting metadata extraction for book ID: $bookId, file: $filePath")
                 extractAndUpdateMetadata(bookId, filePath)
@@ -113,22 +108,8 @@ class BookMetadataService(
     private fun processMetadataTags(bookId: Int, tags: List<String>) {
         try {
             logger.info("Processing ${tags.size} tags for book ID: $bookId - ${tags.joinToString(", ")}")
-            
-            var addedCount = 0
-            for (tagName in tags) {
-                try {
-                    // 查找或创建标签
-                    val tag = tagRepository.findOrCreateTag(tagName)
-                    
-                    // 添加标签到书籍 (如果已存在会被忽略)
-                    val added = tagRepository.addTagToBook(bookId, tag.id)
-                    if (added) {
-                        addedCount++
-                    }
-                } catch (e: Exception) {
-                    logger.warn("Failed to add tag '$tagName' to book $bookId: ${e.message}")
-                }
-            }
+            val tagsByName = tagRepository.findOrCreateTags(tags)
+            val addedCount = tagRepository.addTagsToBook(bookId, tagsByName.values.map { it.id }).size
             
             if (addedCount > 0) {
                 logger.info("Successfully added $addedCount tags to book ID: $bookId")
@@ -142,7 +123,6 @@ class BookMetadataService(
      * Shutdown the service gracefully
      */
     fun shutdown() {
-        scope.cancel()
-        metadataDispatcher.close()
+        taskCoordinator.close()
     }
 }

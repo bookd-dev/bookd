@@ -116,12 +116,13 @@ class LocalEbookBenchmarkTest {
         val readingService = ReadingService(readingProgressRepository, bookmarkRepository, readerSettingsRepository)
         val bookshelfService = BookshelfService(bookshelfRepository, bookshelfItemRepository, bookRepository, readingProgressRepository)
         val userService = UserService(userRepository)
+        val imageStorage = BookImageStorage(imageDir.absolutePath)
         val contentService = BookContentService(
             bookRepository = bookRepository,
             documentRepository = documentRepository,
             readingProgressRepository = readingProgressRepository,
             txtParser = TxtParser(TxtParseRuleService(txtParseRuleRepository)),
-            imageStorage = BookImageStorage(imageDir.absolutePath),
+            imageStorage = imageStorage,
             cacheService = null
         )
 
@@ -197,6 +198,12 @@ class LocalEbookBenchmarkTest {
 
             val bookDetailService = BookDetailService(bookService, tagService, readingService, bookshelfService)
             val detailBookId = allBooks.first().id
+            val benchmarkTagNames = (1..40).map { "benchmark-v3-tag-$it" }
+            val benchmarkResourcePaths = transaction {
+                DocumentResources.selectAll()
+                    .limit(100)
+                    .map { it[DocumentResources.storedPath] }
+            }
 
             val scenarios = listOf(
                 benchmarkScenario("Book list limit=100 current") {
@@ -246,6 +253,28 @@ class LocalEbookBenchmarkTest {
                 },
                 benchmarkScenario("Token validation legacy repository x1000") {
                     repeat(1000) { userRepository.findUserByToken(token) }
+                },
+                benchmarkScenario("Tag link current batched x40") {
+                    val tagsByName = tagRepository.findOrCreateTags(benchmarkTagNames)
+                    tagRepository.addTagsToBook(detailBookId, tagsByName.values.map { it.id })
+                },
+                benchmarkScenario("Tag link legacy per-tag x40") {
+                    benchmarkTagNames.forEach { tagName ->
+                        val tag = tagRepository.findOrCreateTag(tagName)
+                        tagRepository.addTagToBook(detailBookId, tag.id)
+                    }
+                },
+                benchmarkScenario("Resource dimension IO current outside transaction") {
+                    benchmarkResourcePaths.forEach { storedPath ->
+                        imageStorage.extractImageDimensionsFromFile(storedPath)
+                    }
+                },
+                benchmarkScenario("Resource dimension IO legacy transaction wrapped") {
+                    transaction {
+                        benchmarkResourcePaths.forEach { storedPath ->
+                            imageStorage.extractImageDimensionsFromFile(storedPath)
+                        }
+                    }
                 }
             )
 
@@ -259,6 +288,7 @@ class LocalEbookBenchmarkTest {
                 |parsed=$parsedCount
                 |documents=$totalDocuments
                 |documentContents=$totalDocumentContents
+                |resourceDimensionSamples=${benchmarkResourcePaths.size}
                 |backfilled=$backfilled
                 |import_ms=${importTime.inWholeMilliseconds}
                 |parse_ms=${parseTime.inWholeMilliseconds}

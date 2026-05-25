@@ -25,6 +25,8 @@ import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.BookshelfService
 import com.bookd.domain.service.BookDetailService
 import com.bookd.domain.service.ImageDimensionMigrationService
+import com.bookd.domain.service.BookTaskCoordinator
+import com.bookd.domain.service.FileSystemService
 import com.bookd.domain.service.parser.TxtParser
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
@@ -47,6 +49,7 @@ val appModule = module {
     single { TxtParseRuleRepository() }
     single { BookshelfRepository() }
     single { BookshelfItemRepository() }
+    single { BookTaskCoordinator() }
     
     // Storage
     single { BookImageStorage() }
@@ -83,14 +86,14 @@ val appModule = module {
     single<BookCacheService> { BookCacheService(getOrNull()) }
     
     // Services
-    single { UserService(get()) }
-    single { BookService(get(), get()) }
+    single { UserService(get(), get()) }
+    single { BookService(get(), get(), get()) }
     single { BookSourceService(get()) }
     single { CoverGeneratorService(get()) }
     single { TxtParseRuleService(get()) }
     single { TxtParser(get()) }
-    single { BookContentService(get(), get(), get(), get(), get(), getOrNull<BookCacheService>()) }
-    single { BookMetadataService(get(), get(), get()) }
+    single { BookContentService(get(), get(), get(), get(), get(), getOrNull<BookCacheService>(), get()) }
+    single { BookMetadataService(get(), get(), get(), get()) }
     single { BookScanService(get(), get(), get(), get()) }
     single { TagService(get(), get()) }
     single { ReadingService(get(), get(), get()) }
@@ -98,4 +101,5 @@ val appModule = module {
     single { BookshelfService(get(), get(), get(), get()) }
     single { BookDetailService(get(), get(), get(), get()) }
     single { ImageDimensionMigrationService(get()) }
+    single { FileSystemService() }
 }

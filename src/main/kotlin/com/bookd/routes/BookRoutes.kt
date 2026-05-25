@@ -7,6 +7,7 @@ import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.domain.service.BookDetailService
 import com.bookd.domain.service.BookContentService
 import com.bookd.domain.service.ChapterListResult
+import com.bookd.domain.service.CoverUploadResult
 import com.bookd.extension.*
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -233,9 +234,6 @@ fun Route.bookRoutes() {
 
         post("/{id}/cover") {
             val bookService = get<BookService>(BookService::class.java)
-            val imageStorage = get<com.bookd.infrastructure.storage.BookImageStorage>(
-                com.bookd.infrastructure.storage.BookImageStorage::class.java
-            )
 
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -243,16 +241,8 @@ fun Route.bookRoutes() {
                 return@post
             }
 
-            val book = bookService.getRawBookById(id)
-            if (book == null) {
-                call.respondError(ErrorCode.BOOK_NOT_FOUND)
-                return@post
-            }
-
             var coverPath: String? = null
             var uploadError: String? = null
-            var coverWidth: Int? = null
-            var coverHeight: Int? = null
 
             try {
                 val multipart = call.receiveMultipart()
@@ -260,24 +250,20 @@ fun Route.bookRoutes() {
                     when (part) {
                         is PartData.FileItem -> {
                             if (part.name == "cover") {
-                                try {
-                                    val fileBytes = part.provider().toInputStream().readBytes()
-                                    val ext = part.originalFileName?.substringAfterLast('.') ?: "jpg"
-
-                                    // 提取封面尺寸
-                                    val dimensions = imageStorage.extractImageDimensions(fileBytes)
-                                    if (dimensions != null) {
-                                        coverWidth = dimensions.first
-                                        coverHeight = dimensions.second
+                                val fileBytes = part.provider().toInputStream().readBytes()
+                                when (val result = bookService.uploadCover(id, part.originalFileName, fileBytes)) {
+                                    CoverUploadResult.BookNotFound -> {
+                                        uploadError = ErrorCode.BOOK_NOT_FOUND.code
                                     }
-
-                                    // 使用 BookImageStorage 保存封面
-                                    coverPath = imageStorage.saveCover(id, "cover.$ext", fileBytes, isGenerated = false)
-
-                                    logger.info("Uploaded cover for book $id: $coverPath (${coverWidth}x${coverHeight})")
-                                } catch (e: Exception) {
-                                    uploadError = e.message
-                                    logger.error("Error saving cover for book $id", e)
+                                    is CoverUploadResult.SaveFailed -> {
+                                        uploadError = result.details
+                                    }
+                                    is CoverUploadResult.Saved -> {
+                                        coverPath = result.coverPath
+                                        logger.info(
+                                            "Uploaded cover for book $id: ${result.coverPath} (${result.width}x${result.height})"
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -292,10 +278,11 @@ fun Route.bookRoutes() {
 
             val finalCoverPath = coverPath
             if (finalCoverPath != null) {
-                bookService.updateCoverPath(id, finalCoverPath, coverWidth, coverHeight)
                 call.respondSuccess(CoverUploadResponse(success = true, coverPath = finalCoverPath))
             } else {
-                if (uploadError != null) {
+                if (uploadError == ErrorCode.BOOK_NOT_FOUND.code) {
+                    call.respondError(ErrorCode.BOOK_NOT_FOUND)
+                } else if (uploadError != null) {
                     call.respondError(ErrorCode.BOOK_FILE_SAVE_FAILED, uploadError)
                 } else {
                     call.respondError(ErrorCode.BOOK_NO_COVER_FILE)

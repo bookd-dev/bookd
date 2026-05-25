@@ -14,7 +14,6 @@ import com.bookd.infrastructure.storage.BookImageStorage
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.Executors
 
 class BookContentService(
     private val bookRepository: BookRepository,
@@ -22,34 +21,19 @@ class BookContentService(
     private val readingProgressRepository: ReadingProgressRepository,
     private val txtParser: TxtParser,
     private val imageStorage: BookImageStorage,
-    private val cacheService: BookCacheService?
+    private val cacheService: BookCacheService?,
+    private val taskCoordinator: BookTaskCoordinator = BookTaskCoordinator()
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
     // 解析器工厂
     private val parserFactory = ParserFactory(txtParser)
     
-    // 专用的内容解析线程池
-    private val contentDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
-    private val scope = CoroutineScope(contentDispatcher + SupervisorJob())
-    
-    // 跟踪正在解析的书籍，避免重复解析
-    private val parsingBooks = mutableSetOf<Int>()
-    
     /**
      * 异步解析书籍内容
      */
     fun parseBookContentAsync(bookId: Int, filePath: String) {
-        synchronized(parsingBooks) {
-            if (parsingBooks.contains(bookId)) {
-                logger.warn("Book ID $bookId is already being parsed, skipping")
-                return
-            }
-            parsingBooks.add(bookId)
-        }
-        
-        scope.launch {
-            delay(1000) // 延迟以避免影响扫描流程
+        val launched = taskCoordinator.launchContentParse(bookId) {
             try {
                 logger.info("Starting content parsing for book ID: $bookId")
                 // 更新状态为正在解析
@@ -59,11 +43,11 @@ class BookContentService(
             } catch (e: Exception) {
                 logger.error("Failed to parse book content for ID: $bookId", e)
                 bookRepository.updateParseStatus(bookId, "failed", 0)
-            } finally {
-                synchronized(parsingBooks) {
-                    parsingBooks.remove(bookId)
-                }
             }
+        }
+
+        if (!launched) {
+            logger.warn("Book ID $bookId is already being parsed or coordinator is closed, skipping")
         }
     }
     
@@ -140,11 +124,9 @@ class BookContentService(
         }
         
         // 检查是否正在解析
-        synchronized(parsingBooks) {
-            if (parsingBooks.contains(bookId)) {
-                logger.info("Book $bookId is already being parsed")
-                return false
-            }
+        if (taskCoordinator.isContentParseInProgress(bookId)) {
+            logger.info("Book $bookId is already being parsed")
+            return false
         }
         
         // 清除所有相关缓存
@@ -642,8 +624,7 @@ class BookContentService(
      * 关闭服务
      */
     fun shutdown() {
-        scope.cancel()
-        contentDispatcher.close()
+        taskCoordinator.close()
     }
 }
 

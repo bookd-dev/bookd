@@ -7,7 +7,8 @@ import org.mindrot.jbcrypt.BCrypt
 import java.util.concurrent.ConcurrentHashMap
 
 class UserService(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val bookshelfService: BookshelfService? = null
 ) {
     private data class CachedUser(
         val user: User,
@@ -64,7 +65,9 @@ class UserService(
     
     fun registerGuest(username: String, password: String, email: String?): User {
         val hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt())
-        return userRepository.create(username, hashedPassword, email, UserRole.GUEST.value)
+        val user = userRepository.create(username, hashedPassword, email, UserRole.GUEST.value)
+        initializeUserBookshelves(user.id, failOnError = false)
+        return user
     }
     
     fun registerUser(username: String, password: String, email: String?, inviteToken: String): User? {
@@ -74,6 +77,7 @@ class UserService(
         val user = userRepository.create(username, hashedPassword, email, UserRole.USER.value)
         
         userRepository.markInviteTokenUsed(inviteToken, user.id)
+        initializeUserBookshelves(user.id, failOnError = false)
         
         return user
     }
@@ -106,6 +110,19 @@ class UserService(
         }
         
         val hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt())
-        return userRepository.create(username, hashedPassword, email, UserRole.ADMIN.value)
+        val admin = userRepository.create(username, hashedPassword, email, UserRole.ADMIN.value)
+        initializeUserBookshelves(admin.id, failOnError = true)
+        return admin
+    }
+
+    private fun initializeUserBookshelves(userId: Int, failOnError: Boolean) {
+        val service = bookshelfService ?: return
+        try {
+            service.initializeUserBookshelves(userId)
+        } catch (e: Exception) {
+            if (failOnError) {
+                throw e
+            }
+        }
     }
 }

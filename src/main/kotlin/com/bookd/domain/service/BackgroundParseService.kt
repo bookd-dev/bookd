@@ -19,8 +19,8 @@ class BackgroundParseService(
     private val logger = LoggerFactory.getLogger(BackgroundParseService::class.java)
     
     private val isRunning = AtomicBoolean(false)
-    private val parseDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    private val scope = CoroutineScope(parseDispatcher + SupervisorJob())
+    private var parseDispatcher: ExecutorCoroutineDispatcher? = null
+    private var scope: CoroutineScope? = null
     
     private var scheduledTimer: java.util.Timer? = null
     
@@ -43,6 +43,7 @@ class BackgroundParseService(
             return
         }
         
+        ensureScope()
         isRunning.set(true)
         logger.info("Starting background parse service (interval: ${intervalSeconds}s, batch: $batchSize)")
         
@@ -74,7 +75,10 @@ class BackgroundParseService(
         scheduledTimer = null
         
         // 取消所有正在进行的任务
-        scope.cancel()
+        scope?.cancel()
+        scope = null
+        parseDispatcher?.close()
+        parseDispatcher = null
         
         logger.info("Background parse service stopped")
     }
@@ -83,7 +87,8 @@ class BackgroundParseService(
      * 处理未解析的书籍
      */
     private fun processUnparsedBooks() {
-        scope.launch {
+        val currentScope = scope ?: ensureScope()
+        currentScope.launch {
             try {
                 // 从数据库获取未解析的书籍
                 val unparsedBooks = bookRepository.findUnparsedBooks(batchSize)
@@ -117,6 +122,17 @@ class BackgroundParseService(
                 logger.error("Error in background parse task", e)
             }
         }
+    }
+
+    private fun ensureScope(): CoroutineScope {
+        val existing = scope
+        if (existing != null && existing.isActive) {
+            return existing
+        }
+
+        val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        parseDispatcher = dispatcher
+        return CoroutineScope(dispatcher + SupervisorJob()).also { scope = it }
     }
     
     /**

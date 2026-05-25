@@ -1,35 +1,4 @@
-# backend-hotpath-performance Specification
-
-## Purpose
-Define backend hot-path performance requirements for book statistics, bookshelf aggregation, parsing persistence, scan duplicate detection, and token validation.
-
-## Requirements
-### Requirement: Book statistics are maintained internally
-The backend SHALL avoid recomputing book list and detail statistics on every read when internal precomputed statistics are available.
-
-#### Scenario: Book list or detail is returned
-- **WHEN** a book response includes chapter count, total word count, total image count, or cover aspect ratio
-- **THEN** the service SHALL populate those existing response fields from maintained internal book statistics when available.
-- **AND** it SHALL fall back to document aggregation for rows that have not been backfilled.
-
-#### Scenario: Book content parsing completes
-- **WHEN** parsing creates or updates book documents
-- **THEN** the backend SHALL update internal book statistic fields consistently with the saved document statistics.
-
-### Requirement: Bookshelf aggregation avoids per-shelf and full-shelf repeated work
-The backend SHALL batch bookshelf counts and push bookshelf book paging into repository queries while preserving existing ordering and response semantics.
-
-#### Scenario: User bookshelves are listed
-- **WHEN** a user requests their bookshelves
-- **THEN** book counts SHALL be loaded in one batch query for the returned shelves.
-
-#### Scenario: Books in a bookshelf are listed
-- **WHEN** a user requests paged books in a bookshelf
-- **THEN** sorting by latest reading time and unread fallback ordering SHALL be performed without loading all book IDs into service memory.
-
-#### Scenario: Book detail includes bookshelf state
-- **WHEN** book detail is returned for a user
-- **THEN** bookshelf membership and default-shelf membership SHALL be loaded without separate per-shelf count queries.
+## MODIFIED Requirements
 
 ### Requirement: Parse, scan, and auth hot paths reduce repeated work
 The backend SHALL batch or cache repeated internal operations that do not change API behavior.

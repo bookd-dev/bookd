@@ -4,10 +4,12 @@ import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookDocumentStats
 import com.bookd.domain.model.Book
+import com.bookd.infrastructure.storage.BookImageStorage
 
 class BookService(
     private val bookRepository: BookRepository,
-    private val documentRepository: BookDocumentRepository
+    private val documentRepository: BookDocumentRepository,
+    private val imageStorage: BookImageStorage? = null
 ) {
     suspend fun getAllBooks(limit: Int = 100, offset: Long = 0): List<Book> {
         return enrichBooksWithStats(bookRepository.findAllAsync(limit, offset))
@@ -71,6 +73,25 @@ class BookService(
     suspend fun updateCoverPath(bookId: Int, coverPath: String?, width: Int? = null, height: Int? = null): Boolean {
         return bookRepository.updateCoverPathAsync(bookId, coverPath, width, height) > 0
     }
+
+    suspend fun uploadCover(bookId: Int, originalFileName: String?, fileBytes: ByteArray): CoverUploadResult {
+        if (bookRepository.findByIdAsync(bookId) == null) {
+            return CoverUploadResult.BookNotFound
+        }
+
+        val storage = imageStorage ?: return CoverUploadResult.SaveFailed("Image storage is not configured")
+
+        return try {
+            val ext = originalFileName?.substringAfterLast('.') ?: "jpg"
+            val dimensions = storage.extractImageDimensions(fileBytes)
+            val (width, height) = dimensions ?: (null to null)
+            val coverPath = storage.saveCover(bookId, "cover.$ext", fileBytes, isGenerated = false)
+            bookRepository.updateCoverPathAsync(bookId, coverPath, width, height)
+            CoverUploadResult.Saved(coverPath, width, height)
+        } catch (e: Exception) {
+            CoverUploadResult.SaveFailed(e.message)
+        }
+    }
     
     fun scanAndImportBook(filePath: String): Book? {
         // Check if book already exists
@@ -130,4 +151,15 @@ class BookService(
         )
         return enrichBookWithStats(book, stats)
     }
+}
+
+sealed class CoverUploadResult {
+    data class Saved(
+        val coverPath: String,
+        val width: Int?,
+        val height: Int?
+    ) : CoverUploadResult()
+
+    data object BookNotFound : CoverUploadResult()
+    data class SaveFailed(val details: String?) : CoverUploadResult()
 }
