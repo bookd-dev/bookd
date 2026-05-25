@@ -3,6 +3,7 @@ package com.bookd.data.repository
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.domain.model.Book
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -15,8 +16,16 @@ class BookRepository {
     fun count(): Long = transaction {
         Books.selectAll().count()
     }
+
+    suspend fun countAsync(): Long = dbQuery {
+        Books.selectAll().count()
+    }
     
     fun countBySourceId(sourceId: Int): Long = transaction {
+        Books.selectAll().where { Books.sourceId eq sourceId }.count()
+    }
+
+    suspend fun countBySourceIdAsync(sourceId: Int): Long = dbQuery {
         Books.selectAll().where { Books.sourceId eq sourceId }.count()
     }
     
@@ -26,8 +35,21 @@ class BookRepository {
             .limit(limit).offset(offset)
             .map { toBook(it) }
     }
+
+    suspend fun findAllAsync(limit: Int = 100, offset: Long = 0): List<Book> = dbQuery {
+        Books.selectAll()
+            .orderBy(Books.title to SortOrder.ASC)
+            .limit(limit).offset(offset)
+            .map { toBook(it) }
+    }
     
     fun findById(id: Int): Book? = transaction {
+        Books.selectAll().where { Books.id eq id }
+            .map { toBook(it) }
+            .singleOrNull()
+    }
+
+    suspend fun findByIdAsync(id: Int): Book? = dbQuery {
         Books.selectAll().where { Books.id eq id }
             .map { toBook(it) }
             .singleOrNull()
@@ -44,6 +66,16 @@ class BookRepository {
             .where { Books.id inList ids }
             .map { toBook(it) }
     }
+
+    suspend fun findAllByIdAsync(ids: List<Int>): List<Book> = dbQuery {
+        if (ids.isEmpty()) {
+            emptyList()
+        } else {
+            Books.selectAll()
+                .where { Books.id inList ids }
+                .map { toBook(it) }
+        }
+    }
     
     fun findByFilePath(filePath: String): Book? = transaction {
         Books.selectAll().where { Books.filePath eq filePath }
@@ -57,11 +89,26 @@ class BookRepository {
             .orderBy(Books.title to SortOrder.ASC)
             .map { toBook(it) }
     }
+
+    suspend fun findBySourceIdAsync(sourceId: Int): List<Book> = dbQuery {
+        Books.selectAll()
+            .where { Books.sourceId eq sourceId }
+            .orderBy(Books.title to SortOrder.ASC)
+            .map { toBook(it) }
+    }
     
     /**
      * 根据书源 ID 分页获取书籍列表（APP 端专用）
      */
     fun findBySourceIdPaged(sourceId: Int, limit: Int, offset: Long): List<Book> = transaction {
+        Books.selectAll()
+            .where { Books.sourceId eq sourceId }
+            .orderBy(Books.title to SortOrder.ASC)
+            .limit(limit).offset(offset)
+            .map { toBook(it) }
+    }
+
+    suspend fun findBySourceIdPagedAsync(sourceId: Int, limit: Int, offset: Long): List<Book> = dbQuery {
         Books.selectAll()
             .where { Books.sourceId eq sourceId }
             .orderBy(Books.title to SortOrder.ASC)
@@ -159,11 +206,42 @@ class BookRepository {
             it[updatedAt] = now
         }
     }
+
+    suspend fun updateMetadataAsync(
+        id: Int,
+        title: String? = null,
+        author: String? = null,
+        coverPath: String? = null,
+        isbn: String? = null,
+        publisher: String? = null,
+        description: String? = null
+    ): Int = dbQuery {
+        val now = TimeProvider.now()
+        Books.update({ Books.id eq id }) {
+            if (title != null) it[Books.title] = title
+            if (author != null) it[Books.author] = author
+            if (coverPath != null) it[Books.coverPath] = coverPath
+            if (isbn != null) it[Books.isbn] = isbn
+            if (publisher != null) it[Books.publisher] = publisher
+            if (description != null) it[Books.description] = description
+            it[updatedAt] = now
+        }
+    }
     
     /**
      * 更新书籍封面路径和尺寸
      */
     fun updateCoverPath(bookId: Int, coverPath: String?, width: Int? = null, height: Int? = null): Int = transaction {
+        val now = TimeProvider.now()
+        Books.update({ Books.id eq bookId }) {
+            it[Books.coverPath] = coverPath
+            it[coverWidth] = width
+            it[coverHeight] = height
+            it[updatedAt] = now
+        }
+    }
+
+    suspend fun updateCoverPathAsync(bookId: Int, coverPath: String?, width: Int? = null, height: Int? = null): Int = dbQuery {
         val now = TimeProvider.now()
         Books.update({ Books.id eq bookId }) {
             it[Books.coverPath] = coverPath

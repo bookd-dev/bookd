@@ -22,5 +22,7 @@ object BookshelfItems : IntIdTable("bookshelf_items") {
     init {
         // 确保同一本书在同一个书架中只能出现一次
         uniqueIndex(bookshelfId, bookId)
+        index(false, bookshelfId, addedAt)
+        index(false, bookId)
     }
 }

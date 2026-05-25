@@ -3,6 +3,7 @@ package com.bookd.domain.service
 import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.ReadingProgressRepository
+import com.bookd.data.repository.ResourceInfo
 import com.bookd.domain.model.*
 import com.bookd.domain.service.parser.*
 import com.bookd.infrastructure.cache.BookCacheService
@@ -323,9 +324,9 @@ class BookContentService(
     /**
      * 获取书籍清单
      */
-    fun getBookManifest(bookId: Int): BookManifest? {
-        val book = bookRepository.findById(bookId) ?: return null
-        val allDocuments = documentRepository.findByBookId(bookId)
+    suspend fun getBookManifest(bookId: Int): BookManifest? {
+        val book = bookRepository.findByIdAsync(bookId) ?: return null
+        val allDocuments = documentRepository.findByBookIdAsync(bookId)
         
         if (allDocuments.isEmpty()) {
             logger.warn("No documents found for book ID: $bookId")
@@ -364,7 +365,7 @@ class BookContentService(
      * @param userId 用户ID
      * @return 带阅读进度的 BookManifest，如果书籍不存在则返回 null
      */
-    fun getBookManifestWithProgress(bookId: Int, userId: Int): BookManifest? {
+    suspend fun getBookManifestWithProgress(bookId: Int, userId: Int): BookManifest? {
         val manifest = getBookManifest(bookId) ?: return null
         val progress = readingProgressRepository.findByUserAndBook(userId, bookId)
         
@@ -457,37 +458,53 @@ class BookContentService(
      * 获取文档内容
      * @param baseUrl 可选的基础 URL，用于构建完整的图片 URL
      */
-    fun getChapterContent(bookId: Int, index: Int, baseUrl: String? = null): ChapterContent? {
-        val document = documentRepository.findByBookIdAndIndex(bookId, index) ?: return null
-        val elements = documentRepository.getDocumentContent(document.id) ?: emptyList()
+    suspend fun getChapterContent(bookId: Int, index: Int, baseUrl: String? = null): ChapterContent? {
+        val document = documentRepository.findByBookIdAndIndexAsync(bookId, index) ?: return null
+        val elements = documentRepository.getDocumentContentAsync(document.id) ?: emptyList()
+        val resourcesByPath = documentRepository.findResourcesByBookIdAndPaths(bookId, collectImagePaths(elements))
         
         // 转换图片路径为可访问的URL
         val transformedElements = elements.map { element ->
-            transformElement(element, bookId, baseUrl)
+            transformElement(element, resourcesByPath, baseUrl)
         }
         
-        // 使用所有文档（spine）计算前后导航
-        val allDocuments = documentRepository.findByBookId(bookId)
-        val currentIdx = allDocuments.indexOfFirst { it.index == index }
-        val prevIndex = if (currentIdx > 0) allDocuments[currentIdx - 1].index else null
-        val nextIndex = if (currentIdx < allDocuments.size - 1) allDocuments[currentIdx + 1].index else null
+        val adjacentIndexes = documentRepository.findAdjacentIndexes(bookId, index)
         
         return ChapterContent(
             index = index,
             title = document.title,
             elements = transformedElements,
-            prevIndex = prevIndex,
-            nextIndex = nextIndex
+            prevIndex = adjacentIndexes.prevIndex,
+            nextIndex = adjacentIndexes.nextIndex
         )
+    }
+
+    suspend fun getChapterList(bookId: Int): ChapterListResult {
+        val book = bookRepository.findByIdAsync(bookId) ?: return ChapterListResult.NotFound
+        if (!book.chaptersParsed) {
+            val parsed = try {
+                parseOnDemand(bookId, book.filePath)
+            } catch (e: Exception) {
+                logger.error("Failed to parse chapters for book ID: $bookId", e)
+                false
+            }
+            if (!parsed) return ChapterListResult.ParseFailed
+        }
+
+        return ChapterListResult.Success(documentRepository.findTocByBookIdAsync(bookId))
     }
     
     /**
      * 转换 ContentElement 中的图片路径
      */
-    private fun transformElement(element: ContentElement, bookId: Int, baseUrl: String?): ContentElement {
+    private fun transformElement(
+        element: ContentElement,
+        resourcesByPath: Map<String, ResourceInfo>,
+        baseUrl: String?
+    ): ContentElement {
         return when (element) {
             is ContentElement.Image -> {
-                val resource = documentRepository.findResource(bookId, element.src)
+                val resource = resourcesByPath[element.src]
                 if (resource != null) {
                     val imagePath = "/book_images/${resource.storedPath}"
                     val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
@@ -510,23 +527,23 @@ class BookContentService(
                 }
             }
             is ContentElement.Paragraph -> {
-                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+                element.copy(spans = element.spans.map { transformSpan(it) })
             }
             is ContentElement.Quote -> {
-                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+                element.copy(spans = element.spans.map { transformSpan(it) })
             }
             is ContentElement.ListBlock -> {
                 element.copy(items = element.items.map { item ->
-                    ListItem(item.spans.map { transformSpan(it, bookId, baseUrl) })
+                    ListItem(item.spans.map { transformSpan(it) })
                 })
             }
             is ContentElement.Footnote -> {
                 // 转换脚注内容文本
-                val transformedContentSpans = element.contentSpans.map { transformSpan(it, bookId, baseUrl) }
+                val transformedContentSpans = element.contentSpans.map { transformSpan(it) }
                 
                 // 转换脚注图片路径和尺寸
                 if (element.footnoteImage != null) {
-                    val resource = documentRepository.findResource(bookId, element.footnoteImage)
+                    val resource = resourcesByPath[element.footnoteImage]
                     if (resource != null) {
                         val imagePath = "/book_images/${resource.storedPath}"
                         val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
@@ -559,9 +576,21 @@ class BookContentService(
     /**
      * 转换 TextSpan（目前只是占位符，未来可能需要转换其他属性）
      */
-    private fun transformSpan(span: TextSpan, bookId: Int, baseUrl: String?): TextSpan {
+    private fun transformSpan(span: TextSpan): TextSpan {
         // TextSpan 不再包含 footnoteImage，直接返回
         return span
+    }
+
+    private fun collectImagePaths(elements: List<ContentElement>): Set<String> {
+        val paths = linkedSetOf<String>()
+        elements.forEach { element ->
+            when (element) {
+                is ContentElement.Image -> paths.add(element.src)
+                is ContentElement.Footnote -> element.footnoteImage?.let { paths.add(it) }
+                else -> Unit
+            }
+        }
+        return paths
     }
     
     /**
@@ -614,4 +643,10 @@ class BookContentService(
         scope.cancel()
         contentDispatcher.close()
     }
+}
+
+sealed class ChapterListResult {
+    data class Success(val documents: List<BookDocument>) : ChapterListResult()
+    data object NotFound : ChapterListResult()
+    data object ParseFailed : ChapterListResult()
 }

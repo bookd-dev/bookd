@@ -1,15 +1,15 @@
 package com.bookd.routes
 
-import com.bookd.data.repository.BookRepository
 import com.bookd.domain.model.Book
+import com.bookd.domain.service.BookService
 import com.bookd.plugins.configureSerialization
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.routing.*
 import io.ktor.server.testing.*
-import io.mockk.every
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
-import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -26,13 +26,13 @@ class BookRoutesMetadataTest {
 
     @Test
     fun `given metadata request with title when updating book then title is persisted`() = testApplication {
-        val repository = mockk<BookRepository>()
+        val bookService = mockk<BookService>()
         startKoin {
-            modules(module { single { repository } })
+            modules(module { single { bookService } })
         }
 
-        every {
-            repository.updateMetadata(
+        coEvery {
+            bookService.updateMetadata(
                 id = 7,
                 title = "New Title",
                 author = null,
@@ -41,8 +41,7 @@ class BookRoutesMetadataTest {
                 publisher = null,
                 description = null
             )
-        } returns 1
-        every { repository.findById(7) } returns Book(
+        } returns Book(
             id = 7,
             title = "New Title",
             author = null,
@@ -62,8 +61,8 @@ class BookRoutesMetadataTest {
         }
 
         assertEquals(HttpStatusCode.OK, response.status)
-        verify(exactly = 1) {
-            repository.updateMetadata(
+        coVerify(exactly = 1) {
+            bookService.updateMetadata(
                 id = 7,
                 title = "New Title",
                 author = null,
@@ -77,9 +76,9 @@ class BookRoutesMetadataTest {
 
     @Test
     fun `given blank title when updating metadata then request is rejected`() = testApplication {
-        val repository = mockk<BookRepository>(relaxed = true)
+        val bookService = mockk<BookService>(relaxed = true)
         startKoin {
-            modules(module { single { repository } })
+            modules(module { single { bookService } })
         }
 
         application {
@@ -93,8 +92,8 @@ class BookRoutesMetadataTest {
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
-        verify(exactly = 0) {
-            repository.updateMetadata(
+        coVerify(exactly = 0) {
+            bookService.updateMetadata(
                 id = any(),
                 title = any(),
                 author = any(),

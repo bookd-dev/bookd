@@ -4,9 +4,12 @@ import com.bookd.domain.model.Book
 import com.bookd.domain.model.Bookshelf
 import com.bookd.domain.model.ReadingProgressResponse
 import com.bookd.domain.model.Tag
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDateTime
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -62,14 +65,14 @@ class BookDetailServiceTest {
             createBookshelf(2, "Favorites")
         )
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
         every { readingService.getProgress(userId, bookId) } returns progress
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns bookshelves
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns true
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then
         assertNotNull(result)
@@ -83,7 +86,7 @@ class BookDetailServiceTest {
         assertTrue(result.inDefaultBookshelf)
         
         // 验证所有服务都被调用
-        verify(exactly = 1) { bookService.getBookById(bookId) }
+        coVerify(exactly = 1) { bookService.getBookById(bookId) }
         verify(exactly = 1) { tagService.getTagsForBook(bookId) }
         verify(exactly = 1) { readingService.getProgress(userId, bookId) }
         verify(exactly = 1) { bookshelfService.getBookshelvesForBook(userId, bookId) }
@@ -93,16 +96,16 @@ class BookDetailServiceTest {
     @Test
     fun `should return null when book does not exist`() {
         // Given: 书籍不存在
-        every { bookService.getBookById(bookId) } returns null
+        coEvery { bookService.getBookById(bookId) } returns null
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then
         assertNull(result)
         
         // 验证只调用了 bookService，其他服务不应被调用
-        verify(exactly = 1) { bookService.getBookById(bookId) }
+        coVerify(exactly = 1) { bookService.getBookById(bookId) }
         verify(exactly = 0) { tagService.getTagsForBook(any()) }
         verify(exactly = 0) { readingService.getProgress(any(), any()) }
         verify(exactly = 0) { bookshelfService.getBookshelvesForBook(any(), any()) }
@@ -115,14 +118,14 @@ class BookDetailServiceTest {
         val book = createBook(bookId, "Test Book")
         val progress = createProgress(bookId)
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } throws RuntimeException("Tag service error")
         every { readingService.getProgress(userId, bookId) } returns progress
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns emptyList()
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns false
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then: 应该返回结果，但标签为空列表
         assertNotNull(result)
@@ -138,14 +141,14 @@ class BookDetailServiceTest {
         val book = createBook(bookId, "Test Book")
         val tags = listOf(createTag(1, "Fiction"))
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
         every { readingService.getProgress(userId, bookId) } throws RuntimeException("Reading service error")
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns emptyList()
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns false
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then: 应该返回结果，但阅读进度为 null
         assertNotNull(result)
@@ -162,14 +165,14 @@ class BookDetailServiceTest {
         val tags = listOf(createTag(1, "Fiction"))
         val progress = createProgress(bookId)
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
         every { readingService.getProgress(userId, bookId) } returns progress
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } throws RuntimeException("Bookshelf service error")
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns true
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then: 应该返回结果，但书架列表为空
         assertNotNull(result)
@@ -186,14 +189,14 @@ class BookDetailServiceTest {
         val book = createBook(bookId, "Test Book")
         val bookshelves = listOf(createBookshelf(1, "Reading"))
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns emptyList()
         every { readingService.getProgress(userId, bookId) } returns null
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns bookshelves
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } throws RuntimeException("Default bookshelf check error")
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then: 应该返回结果，默认书架状态为 false
         assertNotNull(result)
@@ -207,14 +210,14 @@ class BookDetailServiceTest {
         // Given: 多个服务同时失败
         val book = createBook(bookId, "Test Book")
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } throws RuntimeException("Tag service error")
         every { readingService.getProgress(userId, bookId) } throws RuntimeException("Reading service error")
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } throws RuntimeException("Bookshelf service error")
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } throws RuntimeException("Default bookshelf error")
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then: 应该返回基本的书籍信息，所有可选数据为空/false
         assertNotNull(result)
@@ -231,14 +234,14 @@ class BookDetailServiceTest {
         val book = createBook(bookId, "Test Book")
         val tags = listOf(createTag(1, "Fiction"))
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
         every { readingService.getProgress(userId, bookId) } returns null  // 没有阅读进度
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns emptyList()
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns false
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then
         assertNotNull(result)
@@ -255,14 +258,14 @@ class BookDetailServiceTest {
         val book = createBook(bookId, "Test Book")
         val progress = createProgress(bookId)
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns emptyList()  // 没有标签
         every { readingService.getProgress(userId, bookId) } returns progress
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns emptyList()
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns false
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then
         assertNotNull(result)
@@ -278,14 +281,14 @@ class BookDetailServiceTest {
         val tags = listOf(createTag(1, "Fiction"))
         val progress = createProgress(bookId)
         
-        every { bookService.getBookById(bookId) } returns book
+        coEvery { bookService.getBookById(bookId) } returns book
         every { tagService.getTagsForBook(bookId) } returns tags
         every { readingService.getProgress(userId, bookId) } returns progress
         every { bookshelfService.getBookshelvesForBook(userId, bookId) } returns emptyList()  // 没有书架
         every { bookshelfService.isBookInDefaultBookshelf(userId, bookId) } returns false
         
         // When
-        val result = bookDetailService.getBookDetail(bookId, userId)
+        val result = runBlocking { bookDetailService.getBookDetail(bookId, userId) }
         
         // Then
         assertNotNull(result)

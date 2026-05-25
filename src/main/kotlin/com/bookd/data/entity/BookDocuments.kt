@@ -23,5 +23,6 @@ object BookDocuments : IntIdTable("book_documents") {
     
     init {
         uniqueIndex(bookId, index)
+        index(false, bookId, inToc, index)
     }
 }

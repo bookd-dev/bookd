@@ -17,5 +17,7 @@ object Bookmarks : IntIdTable("bookmarks") {
     
     init {
         uniqueIndex(userId, bookId, positionValue)
+        index(false, userId, bookId, createdAt)
+        index(false, userId, createdAt)
     }
 }

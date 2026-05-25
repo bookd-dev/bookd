@@ -207,7 +207,7 @@ fun Route.tagRoutes() {
             }
 
             val bookIds = tagService.getBooksByTagId(tagId)
-            val books = bookIds.mapNotNull { bookService.getBookById(it) }
+            val books = bookService.getBooksByIds(bookIds)
             call.respondSuccess(books)
         }
 

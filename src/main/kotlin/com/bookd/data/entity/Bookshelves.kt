@@ -23,5 +23,7 @@ object Bookshelves : IntIdTable("bookshelves") {
     init {
         // 确保同一用户的书架名称唯一
         uniqueIndex(userId, name)
+        index(false, userId, sortOrder)
+        index(false, userId, isSystemDefault)
     }
 }

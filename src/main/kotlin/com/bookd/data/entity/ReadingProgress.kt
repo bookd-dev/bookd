@@ -22,5 +22,6 @@ object ReadingProgress : IntIdTable("reading_progress") {
     
     init {
         uniqueIndex(userId, bookId)
+        index(false, userId, lastReadAt)
     }
 }

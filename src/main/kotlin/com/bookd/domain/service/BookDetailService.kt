@@ -23,7 +23,7 @@ class BookDetailService(
      * @param userId 用户ID（用于获取阅读进度和书架信息）
      * @return 书籍详情，如果书籍不存在则返回 null
      */
-    fun getBookDetail(bookId: Int, userId: Int): BookDetailResponse? {
+    suspend fun getBookDetail(bookId: Int, userId: Int): BookDetailResponse? {
         // 获取书籍基本信息
         val book = bookService.getBookById(bookId) ?: return null
         

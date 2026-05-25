@@ -6,6 +6,7 @@ import com.bookd.data.entity.DocumentContents
 import com.bookd.data.entity.DocumentResources
 import com.bookd.domain.model.BookDocument
 import com.bookd.domain.model.ContentElement
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.*
@@ -70,11 +71,47 @@ class BookDocumentRepository {
             .orderBy(BookDocuments.index to SortOrder.ASC)
             .map { toBookDocument(it) }
     }
+
+    suspend fun findByBookIdAsync(bookId: Int): List<BookDocument> = dbQuery {
+        BookDocuments.selectAll()
+            .where { BookDocuments.bookId eq bookId }
+            .orderBy(BookDocuments.index to SortOrder.ASC)
+            .map { toBookDocument(it) }
+    }
+
+    suspend fun findStatsByBookIds(bookIds: List<Int>): Map<Int, BookDocumentStats> = dbQuery {
+        if (bookIds.isEmpty()) {
+            emptyMap()
+        } else {
+            BookDocuments.select(
+                BookDocuments.bookId,
+                BookDocuments.inToc,
+                BookDocuments.wordCount,
+                BookDocuments.imageCount
+            )
+                .where { BookDocuments.bookId inList bookIds }
+                .groupBy { it[BookDocuments.bookId].value }
+                .mapValues { (_, rows) ->
+                    BookDocumentStats(
+                        chapterCount = rows.count { it[BookDocuments.inToc] },
+                        totalWordCount = rows.sumOf { it[BookDocuments.wordCount] },
+                        totalImageCount = rows.sumOf { it[BookDocuments.imageCount] }
+                    )
+                }
+        }
+    }
     
     /**
      * 获取书籍的目录项（仅 inToc=true）
      */
     fun findTocByBookId(bookId: Int): List<BookDocument> = transaction {
+        BookDocuments.selectAll()
+            .where { (BookDocuments.bookId eq bookId) and (BookDocuments.inToc eq true) }
+            .orderBy(BookDocuments.index to SortOrder.ASC)
+            .map { toBookDocument(it) }
+    }
+
+    suspend fun findTocByBookIdAsync(bookId: Int): List<BookDocument> = dbQuery {
         BookDocuments.selectAll()
             .where { (BookDocuments.bookId eq bookId) and (BookDocuments.inToc eq true) }
             .orderBy(BookDocuments.index to SortOrder.ASC)
@@ -86,6 +123,25 @@ class BookDocumentRepository {
             .where { (BookDocuments.bookId eq bookId) and (BookDocuments.index eq index) }
             .map { toBookDocument(it) }
             .singleOrNull()
+    }
+
+    suspend fun findByBookIdAndIndexAsync(bookId: Int, index: Int): BookDocument? = dbQuery {
+        BookDocuments.selectAll()
+            .where { (BookDocuments.bookId eq bookId) and (BookDocuments.index eq index) }
+            .map { toBookDocument(it) }
+            .singleOrNull()
+    }
+
+    suspend fun findAdjacentIndexes(bookId: Int, index: Int): AdjacentDocumentIndexes = dbQuery {
+        val indexes = BookDocuments.select(BookDocuments.index)
+            .where { BookDocuments.bookId eq bookId }
+            .orderBy(BookDocuments.index to SortOrder.ASC)
+            .map { it[BookDocuments.index] }
+        val currentPosition = indexes.indexOf(index)
+        AdjacentDocumentIndexes(
+            prevIndex = if (currentPosition > 0) indexes[currentPosition - 1] else null,
+            nextIndex = if (currentPosition >= 0 && currentPosition < indexes.size - 1) indexes[currentPosition + 1] else null
+        )
     }
     
     fun countByBookId(bookId: Int): Int = transaction {
@@ -175,6 +231,13 @@ class BookDocumentRepository {
             .map { json.decodeFromString<List<ContentElement>>(it[DocumentContents.content]) }
             .singleOrNull()
     }
+
+    suspend fun getDocumentContentAsync(documentId: Int): List<ContentElement>? = dbQuery {
+        DocumentContents.selectAll()
+            .where { DocumentContents.documentId eq documentId }
+            .map { json.decodeFromString<List<ContentElement>>(it[DocumentContents.content]) }
+            .singleOrNull()
+    }
     
     // === Resource Operations ===
     
@@ -218,6 +281,23 @@ class BookDocumentRepository {
             }
             .singleOrNull()
     }
+
+    suspend fun findResourcesByBookIdAndPaths(bookId: Int, paths: Set<String>): Map<String, ResourceInfo> = dbQuery {
+        if (paths.isEmpty()) {
+            emptyMap()
+        } else {
+            DocumentResources.selectAll()
+                .where { (DocumentResources.bookId eq bookId) and (DocumentResources.path inList paths.toList()) }
+                .associate {
+                    it[DocumentResources.path] to ResourceInfo(
+                        storedPath = it[DocumentResources.storedPath],
+                        mediaType = it[DocumentResources.mediaType],
+                        width = it[DocumentResources.width],
+                        height = it[DocumentResources.height]
+                    )
+                }
+        }
+    }
     
     fun deleteResourcesByBookId(bookId: Int): Int = transaction {
         DocumentResources.deleteWhere { DocumentResources.bookId eq bookId }
@@ -246,4 +326,15 @@ data class ResourceInfo(
     val mediaType: String,
     val width: Int?,
     val height: Int?
+)
+
+data class BookDocumentStats(
+    val chapterCount: Int,
+    val totalWordCount: Int,
+    val totalImageCount: Int
+)
+
+data class AdjacentDocumentIndexes(
+    val prevIndex: Int?,
+    val nextIndex: Int?
 )

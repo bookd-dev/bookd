@@ -28,4 +28,8 @@ object Books : IntIdTable("books") {
     
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
+
+    init {
+        index(false, sourceId, title)
+    }
 }
