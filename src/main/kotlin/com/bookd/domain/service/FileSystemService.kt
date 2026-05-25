@@ -1,10 +1,16 @@
 package com.bookd.domain.service
 
 import com.bookd.domain.model.ErrorCode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.io.File
 
 class FileSystemService {
+    suspend fun listDirectoryAsync(path: String): DirectoryListResult = withContext(Dispatchers.IO) {
+        listDirectory(path)
+    }
+
     fun listDirectory(path: String): DirectoryListResult {
         val dir = File(path)
 
@@ -46,6 +52,10 @@ class FileSystemService {
         }
     }
 
+    suspend fun validatePathAsync(path: String): ValidationResponse = withContext(Dispatchers.IO) {
+        validatePath(path)
+    }
+
     fun validatePath(path: String): ValidationResponse {
         val dir = File(path)
         return ValidationResponse(
@@ -55,6 +65,10 @@ class FileSystemService {
             canRead = dir.canRead(),
             isValid = (dir.exists() && dir.isDirectory && dir.canRead())
         )
+    }
+
+    suspend fun rootsAsync(): RootsResponse = withContext(Dispatchers.IO) {
+        roots()
     }
 
     fun roots(): RootsResponse {

@@ -1,8 +1,10 @@
 package com.bookd.domain.service
 
 import com.bookd.data.repository.BookRepository
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -15,14 +17,16 @@ class BackgroundParseServiceTest {
         val service = BackgroundParseService(bookRepository, contentService)
 
         every { bookRepository.findUnparsedBooks(any()) } returns emptyList()
+        coEvery { bookRepository.findUnparsedBooksAsync(any()) } returns emptyList()
 
         service.start()
         service.stop()
         service.start()
 
         try {
-            assertTrue(service.getStatus().running)
+            assertTrue(runBlocking { service.getStatus().running })
         } finally {
+            service.stop()
             service.stop()
         }
     }

@@ -275,8 +275,40 @@ class BookRepository {
         totalWordCount: Int? = null,
         totalImageCount: Int? = null
     ): Int = transaction {
+        updateChaptersParsedInCurrentTransaction(
+            id = id,
+            chaptersCount = chaptersCount,
+            tocChapterCount = tocChapterCount,
+            totalWordCount = totalWordCount,
+            totalImageCount = totalImageCount
+        )
+    }
+
+    suspend fun updateChaptersParsedAsync(
+        id: Int,
+        chaptersCount: Int,
+        tocChapterCount: Int? = null,
+        totalWordCount: Int? = null,
+        totalImageCount: Int? = null
+    ): Int = dbQuery {
+        updateChaptersParsedInCurrentTransaction(
+            id = id,
+            chaptersCount = chaptersCount,
+            tocChapterCount = tocChapterCount,
+            totalWordCount = totalWordCount,
+            totalImageCount = totalImageCount
+        )
+    }
+
+    private fun updateChaptersParsedInCurrentTransaction(
+        id: Int,
+        chaptersCount: Int,
+        tocChapterCount: Int? = null,
+        totalWordCount: Int? = null,
+        totalImageCount: Int? = null
+    ): Int {
         val now = TimeProvider.now()
-        Books.update({ Books.id eq id }) {
+        return Books.update({ Books.id eq id }) {
             it[chaptersParsed] = true
             it[Books.chaptersCount] = chaptersCount
             if (tocChapterCount != null) it[Books.tocChapterCount] = tocChapterCount
@@ -354,6 +386,14 @@ class BookRepository {
      * 获取未解析章节的书籍
      */
     fun findUnparsedBooks(limit: Int = 10): List<Book> = transaction {
+        findUnparsedBooksInCurrentTransaction(limit)
+    }
+
+    suspend fun findUnparsedBooksAsync(limit: Int = 10): List<Book> = dbQuery {
+        findUnparsedBooksInCurrentTransaction(limit)
+    }
+
+    private fun findUnparsedBooksInCurrentTransaction(limit: Int): List<Book> =
         Books.selectAll()
             .where { 
                 (Books.chaptersParsed eq false) and 
@@ -361,14 +401,21 @@ class BookRepository {
             }
             .limit(limit)
             .map { toBook(it) }
-    }
     
     /**
      * 更新书籍解析状态
      */
     fun updateParseStatus(id: Int, status: String, progress: Int = 0): Int = transaction {
+        updateParseStatusInCurrentTransaction(id, status, progress)
+    }
+
+    suspend fun updateParseStatusAsync(id: Int, status: String, progress: Int = 0): Int = dbQuery {
+        updateParseStatusInCurrentTransaction(id, status, progress)
+    }
+
+    private fun updateParseStatusInCurrentTransaction(id: Int, status: String, progress: Int = 0): Int {
         val now = TimeProvider.now()
-        Books.update({ Books.id eq id }) {
+        return Books.update({ Books.id eq id }) {
             it[parseStatus] = status
             it[parseProgress] = progress
             it[updatedAt] = now
@@ -379,10 +426,22 @@ class BookRepository {
      * 重置章节解析状态（用于重新解析）
      */
     fun resetChaptersParsed(id: Int): Int = transaction {
+        resetChaptersParsedInCurrentTransaction(id)
+    }
+
+    suspend fun resetChaptersParsedAsync(id: Int): Int = dbQuery {
+        resetChaptersParsedInCurrentTransaction(id)
+    }
+
+    private fun resetChaptersParsedInCurrentTransaction(id: Int): Int {
         val now = TimeProvider.now()
-        Books.update({ Books.id eq id }) {
+        return Books.update({ Books.id eq id }) {
             it[chaptersParsed] = false
             it[chaptersCount] = 0
+            it[tocChapterCount] = null
+            it[totalWordCount] = null
+            it[totalImageCount] = null
+            it[statsUpdatedAt] = null
             it[lastParsedAt] = null
             it[parseStatus] = "pending"
             it[parseProgress] = 0

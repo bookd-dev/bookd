@@ -157,7 +157,7 @@ class BookContentServiceTest {
 
         every { cacheService.isBookParsed(11) } returns null
         every { cacheService.tryAcquireParseLock(11) } returns true
-        every { bookRepository.findById(11) } returns Book(
+        coEvery { bookRepository.findByIdAsync(11) } returns Book(
             id = 11,
             title = "Missing",
             author = null,
@@ -166,16 +166,50 @@ class BookContentServiceTest {
             fileSize = 0L,
             chaptersParsed = false
         )
-        every { bookRepository.updateParseStatus(11, "parsing", 0) } returns 1
-        every { bookRepository.updateParseStatus(11, "failed", 0) } returns 1
+        coEvery { bookRepository.updateParseStatusAsync(11, "parsing", 0) } returns 1
+        coEvery { bookRepository.updateParseStatusAsync(11, "failed", 0) } returns 1
 
         val result = runBlocking { service.parseOnDemand(11, missingPath) }
 
         assertEquals(false, result)
-        verify(exactly = 1) { bookRepository.updateParseStatus(11, "failed", 0) }
+        coVerify(exactly = 1) { bookRepository.updateParseStatusAsync(11, "failed", 0) }
         verify(exactly = 0) { cacheService.setBookParsed(11, true) }
         verify(exactly = 1) { cacheService.releaseParseLock(11) }
         service.shutdown()
+    }
+
+    @Test
+    fun `given reparse is queued when book exists then parsed state is reset before launching parse`() {
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val taskCoordinator = mockk<BookTaskCoordinator>()
+        val service = BookContentService(
+            bookRepository = bookRepository,
+            documentRepository = documentRepository,
+            readingProgressRepository = readingProgressRepository,
+            txtParser = txtParser,
+            imageStorage = imageStorage,
+            cacheService = cacheService,
+            taskCoordinator = taskCoordinator
+        )
+        coEvery { bookRepository.findByIdAsync(11) } returns Book(
+            id = 11,
+            title = "Parsed",
+            author = null,
+            format = "epub",
+            filePath = "/books/parsed.epub",
+            fileSize = 1024L,
+            chaptersParsed = true
+        )
+        every { taskCoordinator.isContentParseInProgress(11) } returns false
+        coEvery { bookRepository.resetChaptersParsedAsync(11) } returns 1
+        every { taskCoordinator.launchContentParse(eq(11), any()) } returns true
+
+        val result = runBlocking { service.queueForReparse(11) }
+
+        assertEquals(true, result)
+        verify(exactly = 1) { cacheService.clearBookCache(11) }
+        coVerify(exactly = 1) { bookRepository.resetChaptersParsedAsync(11) }
+        verify(exactly = 1) { taskCoordinator.launchContentParse(eq(11), any()) }
     }
 
     private fun ChapterContent?.imageAt(position: Int): ContentElement.Image {

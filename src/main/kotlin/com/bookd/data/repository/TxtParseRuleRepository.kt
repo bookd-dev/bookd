@@ -3,10 +3,11 @@ package com.bookd.data.repository
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.TxtParseRules
 import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
-import kotlinx.datetime.*
+import kotlinx.datetime.toInstant
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
+import kotlin.time.Instant
 
 class TxtParseRuleRepository {
     

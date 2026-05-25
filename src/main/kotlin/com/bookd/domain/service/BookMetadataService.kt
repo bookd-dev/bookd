@@ -74,7 +74,7 @@ class BookMetadataService(
                     }
                 }
                 
-                logger.info("Extracted metadata for ${file.name} - author: ${metadata?.author}, title: ${metadata?.title}, publisher: ${metadata?.publisher}, coverPath: $coverPath")
+                logger.info("Extracted metadata for ${file.name} - author: ${metadata.author}, title: ${metadata.title}, publisher: ${metadata.publisher}, coverPath: $coverPath")
 
                 val updated = bookRepository.updateMetadata(
                     id = bookId,

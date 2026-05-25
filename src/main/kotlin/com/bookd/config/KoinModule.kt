@@ -30,6 +30,7 @@ import com.bookd.domain.service.FileSystemService
 import com.bookd.domain.service.parser.TxtParser
 import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
+import com.bookd.infrastructure.lifecycle.BackendLifecycleService
 import com.bookd.infrastructure.storage.BookImageStorage
 import org.koin.dsl.module
 import org.slf4j.LoggerFactory
@@ -102,4 +103,5 @@ val appModule = module {
     single { BookDetailService(get(), get(), get(), get()) }
     single { ImageDimensionMigrationService(get()) }
     single { FileSystemService() }
+    single { BackendLifecycleService(get(), get(), getOrNull()) }
 }

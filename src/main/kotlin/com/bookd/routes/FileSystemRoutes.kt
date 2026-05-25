@@ -15,7 +15,7 @@ fun Route.fileSystemRoutes() {
             val fileSystemService = get<FileSystemService>(FileSystemService::class.java)
             val path = call.request.queryParameters["path"] ?: "/"
 
-            when (val result = fileSystemService.listDirectory(path)) {
+            when (val result = fileSystemService.listDirectoryAsync(path)) {
                 is DirectoryListResult.Success -> call.respondSuccess(result.response)
                 is DirectoryListResult.Failure -> call.respondError(result.errorCode, result.details)
             }
@@ -31,13 +31,13 @@ fun Route.fileSystemRoutes() {
                 return@get
             }
 
-            call.respondSuccess(fileSystemService.validatePath(path))
+            call.respondSuccess(fileSystemService.validatePathAsync(path))
         }
 
         // 获取根目录列表（用于初始化）
         get("/roots") {
             val fileSystemService = get<FileSystemService>(FileSystemService::class.java)
-            call.respondSuccess(fileSystemService.roots())
+            call.respondSuccess(fileSystemService.rootsAsync())
         }
     }
 }

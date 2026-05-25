@@ -37,7 +37,7 @@ class BookContentService(
             try {
                 logger.info("Starting content parsing for book ID: $bookId")
                 // 更新状态为正在解析
-                bookRepository.updateParseStatus(bookId, "parsing", 0)
+                bookRepository.updateParseStatusAsync(bookId, "parsing", 0)
                 when (val result = parseBookContent(bookId, filePath)) {
                     is ContentParseResult.Success -> {
                         logger.info("Completed content parsing for book ID: $bookId, documents: ${result.documentCount}")
@@ -48,7 +48,7 @@ class BookContentService(
                 }
             } catch (e: Exception) {
                 logger.error("Failed to parse book content for ID: $bookId", e)
-                bookRepository.updateParseStatus(bookId, "failed", 0)
+                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             }
         }
 
@@ -70,7 +70,7 @@ class BookContentService(
         }
         
         // 2. 检查数据库状态
-        val book = bookRepository.findById(bookId)
+        val book = bookRepository.findByIdAsync(bookId)
         if (book == null) {
             logger.warn("Book not found: $bookId")
             return false
@@ -89,7 +89,7 @@ class BookContentService(
             logger.info("Book $bookId is being parsed by another process, waiting...")
             // 等待一段时间后重新检查
             delay(2000)
-            val recheckBook = bookRepository.findById(bookId)
+            val recheckBook = bookRepository.findByIdAsync(bookId)
             return recheckBook?.chaptersParsed ?: false
         }
         
@@ -97,7 +97,7 @@ class BookContentService(
             logger.info("Parsing book on-demand: $bookId")
             
             // 4. 更新状态为正在解析
-            bookRepository.updateParseStatus(bookId, "parsing", 0)
+            bookRepository.updateParseStatusAsync(bookId, "parsing", 0)
             
             // 5. 同步解析（用户等待）
             when (val result = parseBookContent(bookId, filePath)) {
@@ -113,7 +113,7 @@ class BookContentService(
             }
         } catch (e: Exception) {
             logger.error("Failed to parse book on-demand: $bookId", e)
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             false
         } finally {
             // 7. 释放锁
@@ -125,8 +125,8 @@ class BookContentService(
      * 强制重新解析：清除缓存和现有数据，重新解析书籍内容
      * 用于用户手动触发重新解析
      */
-    fun queueForReparse(bookId: Int): Boolean {
-        val book = bookRepository.findById(bookId)
+    suspend fun queueForReparse(bookId: Int): Boolean {
+        val book = bookRepository.findByIdAsync(bookId)
         if (book == null) {
             logger.warn("Book not found for reparse: $bookId")
             return false
@@ -142,8 +142,7 @@ class BookContentService(
         cacheService?.clearBookCache(bookId)
         
         // 重置解析状态
-        bookRepository.updateParseStatus(bookId, "pending", 0)
-        bookRepository.updateChaptersParsed(bookId, 0)
+        bookRepository.resetChaptersParsedAsync(bookId)
         
         // 异步开始解析
         parseBookContentAsync(bookId, book.filePath)
@@ -159,7 +158,7 @@ class BookContentService(
         val file = File(filePath)
         if (!file.exists() || !file.isFile) {
             logger.warn("File does not exist: $filePath")
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             return ContentParseResult.Failed("file_missing")
         }
         
@@ -167,7 +166,7 @@ class BookContentService(
         val parser = parserFactory.createParser(file)
         if (parser == null) {
             logger.warn("Unsupported format: ${file.extension}")
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             return ContentParseResult.Failed("unsupported_format")
         }
         
@@ -176,7 +175,7 @@ class BookContentService(
                 parseWithParser(bookId, file, parser)
             } catch (e: Exception) {
                 logger.error("Error parsing book content: ${file.name}", e)
-                bookRepository.updateParseStatus(bookId, "failed", 0)
+                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
                 ContentParseResult.Failed("unexpected_error")
             }
         }
@@ -191,13 +190,13 @@ class BookContentService(
         // 1. 解析书籍结构
         val structure = parser.parseStructure(file) ?: run {
             logger.error("Failed to parse book structure")
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             return ContentParseResult.Failed("structure_parse_failed")
         }
 
         if (structure.chapters.isEmpty()) {
             logger.error("Parsed book structure has no chapters for book ID: $bookId")
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             return ContentParseResult.Failed("no_chapters")
         }
         
@@ -231,7 +230,7 @@ class BookContentService(
 
             if (contentDrafts.isEmpty()) {
                 logger.error("No chapter content parsed for book ID: $bookId")
-                bookRepository.updateParseStatus(bookId, "failed", 0)
+                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
                 return ContentParseResult.Failed("no_chapter_content")
             }
 
@@ -243,7 +242,7 @@ class BookContentService(
             }
             
             // 5. 更新书籍解析状态
-            bookRepository.updateChaptersParsed(
+            bookRepository.updateChaptersParsedAsync(
                 id = bookId,
                 chaptersCount = structure.chapters.size,
                 tocChapterCount = structure.chapters.count { it.inToc },
@@ -255,7 +254,7 @@ class BookContentService(
             return ContentParseResult.Success(documentCount = documentsByIndex.size)
         } catch (e: Exception) {
             logger.error("Failed to parse book content for book ID: $bookId", e)
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             return ContentParseResult.Failed("save_failed")
         }
     }

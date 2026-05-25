@@ -262,7 +262,7 @@ fun Route.bookRoutes() {
                         }
                         else -> {}
                     }
-                    part.dispose()
+                    part.release()
                 }
             } catch (e: Exception) {
                 uploadError = e.message

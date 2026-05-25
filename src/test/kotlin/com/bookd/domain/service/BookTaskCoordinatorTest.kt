@@ -33,4 +33,15 @@ class BookTaskCoordinatorTest {
             coordinator.close()
         }
     }
+
+    @Test
+    fun `given coordinator is closed when launching tasks then new work is rejected`() {
+        val coordinator = BookTaskCoordinator(contentDelayMillis = 0, metadataDelayMillis = 0)
+
+        coordinator.close()
+        coordinator.close()
+
+        assertFalse(coordinator.launchContentParse(9) { })
+        assertFalse(coordinator.launchMetadataExtraction { })
+    }
 }

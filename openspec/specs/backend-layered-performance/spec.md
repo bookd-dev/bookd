@@ -31,6 +31,11 @@ Repository operations using Exposed/JDBC SHALL run behind a consistent database 
 - **WHEN** a service coordinates multiple repository reads for one API response
 - **THEN** the service SHALL avoid holding a long transaction across file parsing, network cache access, or other blocking non-database work.
 
+#### Scenario: Touched request work performs blocking operational access
+- **WHEN** a route-touched service operation lists directories, validates filesystem paths, reads filesystem roots, scans book sources, or computes background status using blocking database work
+- **THEN** the operation SHALL run behind a coroutine IO or database execution boundary.
+- **AND** route responses SHALL preserve the same success and error semantics.
+
 #### Scenario: Image dimensions are migrated
 - **WHEN** image dimension migration reads image files from storage
 - **THEN** file IO SHALL happen outside long database transactions.
@@ -47,6 +52,11 @@ Backend asynchronous parsing and metadata tasks SHALL use a coordinated lifecycl
 #### Scenario: Background parse service is restarted
 - **WHEN** the background parse service is stopped and then started again
 - **THEN** future scheduled parsing attempts SHALL still be able to launch.
+
+#### Scenario: Backend application stops
+- **WHEN** the Ktor application stops
+- **THEN** background parsing, shared book task coordination, and optional Redis resources SHALL be closed or stopped without leaking long-lived executors or connections.
+- **AND** cleanup SHALL be safe to invoke more than once.
 
 ### Requirement: Hot-path queries are aggregated or batched
 Backend services SHALL avoid repeated per-item database lookups on high-frequency API paths when equivalent batched or aggregate queries can preserve behavior.
@@ -118,4 +128,8 @@ Backend refactor tasks SHALL add or update tests for each modified business path
 
 #### Scenario: Task coordination changes
 - **WHEN** parsing or metadata background task coordination changes
-- **THEN** tests SHALL verify duplicate suppression, completion cleanup, and restart behavior where applicable.
+- **THEN** tests SHALL verify duplicate suppression, completion cleanup, closed-state behavior, and restart behavior where applicable.
+
+#### Scenario: Blocking boundary changes
+- **WHEN** a filesystem or background status operation is moved to an IO-safe boundary
+- **THEN** tests SHALL verify representative success and failure responses remain compatible.

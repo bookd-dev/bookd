@@ -64,6 +64,7 @@ fun Application.module() {
     
     // Configure plugins
     configureDependencyInjection()
+    configureLifecycleCleanup()
     configureSerialization()
     configureMonitoring()
     configureStatusPages()

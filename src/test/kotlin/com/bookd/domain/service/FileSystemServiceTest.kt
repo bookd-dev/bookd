@@ -1,6 +1,7 @@
 package com.bookd.domain.service
 
 import com.bookd.domain.model.ErrorCode
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -27,6 +28,18 @@ class FileSystemServiceTest {
         result as DirectoryListResult.Success
         assertEquals("a-dir", result.response.directories.single().name)
         assertEquals("z-file.txt", result.response.files.single().name)
+    }
+
+    @Test
+    fun `given async directory list when directory exists then response matches blocking path`() = runBlocking {
+        val service = FileSystemService()
+        tempDir.resolve("async.txt").createFile().writeText("content")
+
+        val result = service.listDirectoryAsync(tempDir.toString())
+
+        assertTrue(result is DirectoryListResult.Success)
+        result as DirectoryListResult.Success
+        assertEquals("async.txt", result.response.files.single().name)
     }
 
     @Test

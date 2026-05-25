@@ -64,21 +64,26 @@ class BackgroundParseService(
      * 停止后台解析服务
      */
     fun stop() {
-        if (!isRunning.get()) {
-            logger.warn("Background parse service is not running")
+        val hadResources = scheduledTimer != null || scope != null || parseDispatcher != null
+        val wasRunning = isRunning.getAndSet(false)
+        if (!wasRunning && !hadResources) {
+            logger.debug("Background parse service is already stopped")
             return
         }
-        
+
         logger.info("Stopping background parse service...")
-        isRunning.set(false)
-        scheduledTimer?.cancel()
+        val timer = scheduledTimer
         scheduledTimer = null
-        
-        // 取消所有正在进行的任务
-        scope?.cancel()
+
+        val currentScope = scope
         scope = null
-        parseDispatcher?.close()
+
+        val dispatcher = parseDispatcher
         parseDispatcher = null
+
+        timer?.cancel()
+        currentScope?.cancel()
+        dispatcher?.close()
         
         logger.info("Background parse service stopped")
     }
@@ -138,9 +143,9 @@ class BackgroundParseService(
     /**
      * 获取服务状态
      */
-    fun getStatus(): BackgroundParseStatus {
+    suspend fun getStatus(): BackgroundParseStatus {
         val unparsedCount = try {
-            bookRepository.findUnparsedBooks(1000).size
+            bookRepository.findUnparsedBooksAsync(1000).size
         } catch (e: Exception) {
             -1
         }
