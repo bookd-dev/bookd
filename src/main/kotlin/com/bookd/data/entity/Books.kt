@@ -25,11 +25,19 @@ object Books : IntIdTable("books") {
     val lastParsedAt = datetime("last_parsed_at").nullable()
     val parseStatus = varchar("parse_status", 20).nullable() // pending, parsing, completed, failed
     val parseProgress = integer("parse_progress").default(0) // 0-100
+
+    // 内部统计字段：用于避免列表/详情接口每次聚合 book_documents
+    val tocChapterCount = integer("toc_chapter_count").nullable()
+    val totalWordCount = integer("total_word_count").nullable()
+    val totalImageCount = integer("total_image_count").nullable()
+    val statsUpdatedAt = datetime("stats_updated_at").nullable()
     
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
 
     init {
         index(false, sourceId, title)
+        index(false, parseStatus, chaptersParsed)
+        index(false, statsUpdatedAt)
     }
 }

@@ -2,6 +2,7 @@ package com.bookd.domain.model
 
 import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 @Serializable
 data class Book(
@@ -31,5 +32,8 @@ data class Book(
     val parseProgress: Int = 0,
     
     val createdAt: LocalDateTime? = null,
-    val updatedAt: LocalDateTime? = null
+    val updatedAt: LocalDateTime? = null,
+
+    @Transient
+    val statsUpdatedAt: LocalDateTime? = null
 )

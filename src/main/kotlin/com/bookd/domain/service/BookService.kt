@@ -96,7 +96,12 @@ class BookService(
      */
     private suspend fun enrichBooksWithStats(books: List<Book>): List<Book> {
         if (books.isEmpty()) return emptyList()
-        val statsByBookId = documentRepository.findStatsByBookIds(books.map { it.id })
+        val booksMissingStats = books.filter { it.statsUpdatedAt == null }
+        val statsByBookId = if (booksMissingStats.isEmpty()) {
+            emptyMap()
+        } else {
+            documentRepository.findStatsByBookIds(booksMissingStats.map { it.id })
+        }
         return books.map { book -> enrichBookWithStats(book, statsByBookId[book.id]) }
     }
 
@@ -109,9 +114,9 @@ class BookService(
         }
         
         return book.copy(
-            chapterCount = stats?.chapterCount ?: 0,
-            totalWordCount = stats?.totalWordCount ?: 0,
-            totalImageCount = stats?.totalImageCount ?: 0,
+            chapterCount = stats?.chapterCount ?: book.chapterCount,
+            totalWordCount = stats?.totalWordCount ?: book.totalWordCount,
+            totalImageCount = stats?.totalImageCount ?: book.totalImageCount,
             coverAspectRatio = coverAspectRatio
         )
     }

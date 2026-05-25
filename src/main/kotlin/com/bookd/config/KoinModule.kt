@@ -30,6 +30,9 @@ import com.bookd.infrastructure.cache.RedisService
 import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
 import org.koin.dsl.module
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("KoinModule")
 
 val appModule = module {
     // Repositories
@@ -61,18 +64,18 @@ val appModule = module {
                 val redis = RedisService(redisHost, redisPort, redisPassword, redisDatabase)
                 try {
                     redis.ping()
-                    println("✅ Redis connected: $redisHost:$redisPort")
+                    logger.info("Redis connected: $redisHost:$redisPort")
                     redis
                 } catch (e: Exception) {
-                    println("⚠️  Redis connection test failed: ${e.message}, running without cache")
+                    logger.warn("Redis connection test failed: ${e.message}, running without cache")
                     null
                 }
             } else {
-                println("ℹ️  Redis disabled, running without cache")
+                logger.info("Redis disabled, running without cache")
                 null
             }
         } catch (e: Exception) {
-            println("⚠️  Redis initialization failed: ${e.message}, running without cache")
+            logger.warn("Redis initialization failed: ${e.message}, running without cache")
             null
         }
     }

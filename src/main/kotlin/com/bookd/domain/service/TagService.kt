@@ -40,7 +40,7 @@ class TagService(
             
             return tags
         } catch (e: Exception) {
-            println("❌ Failed to extract tags from filename: $filename - ${e.message}")
+            logger.warn("Failed to extract tags from filename: $filename - ${e.message}")
             return emptyList()
         }
     }

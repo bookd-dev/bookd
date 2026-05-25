@@ -1,6 +1,7 @@
 package com.bookd
 
 import com.bookd.config.DatabaseConfig
+import com.bookd.data.repository.BookRepository
 import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.plugins.*
@@ -10,6 +11,9 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.koin.ktor.ext.inject
+import org.slf4j.LoggerFactory
+
+private val applicationLogger = LoggerFactory.getLogger("Application")
 
 fun main(args: Array<String>) {
     EngineMain.main(args)
@@ -49,6 +53,11 @@ fun Application.module() {
             com.bookd.data.entity.Bookshelves,
             com.bookd.data.entity.BookshelfItems
         )
+    }
+
+    val backfilledBookStats = BookRepository().backfillMissingStatistics()
+    if (backfilledBookStats > 0) {
+        applicationLogger.info("Backfilled book statistics for $backfilledBookStats books")
     }
     
     // Note: First-time setup will be handled via /setup page

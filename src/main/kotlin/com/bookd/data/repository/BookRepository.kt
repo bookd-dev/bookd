@@ -4,9 +4,6 @@ import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.domain.model.Book
 import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
@@ -75,6 +72,19 @@ class BookRepository {
                 .where { Books.id inList ids }
                 .map { toBook(it) }
         }
+    }
+
+    fun findByFilePaths(filePaths: Collection<String>): Map<String, Book> = transaction {
+        if (filePaths.isEmpty()) return@transaction emptyMap()
+
+        filePaths.distinct()
+            .chunked(500)
+            .flatMap { chunk ->
+                Books.selectAll()
+                    .where { Books.filePath inList chunk }
+                    .map { toBook(it) }
+            }
+            .associateBy { it.filePath }
     }
     
     fun findByFilePath(filePath: String): Book? = transaction {
@@ -163,11 +173,15 @@ class BookRepository {
         sourceId = row[Books.sourceId]?.value,
         chaptersParsed = row[Books.chaptersParsed],
         chaptersCount = row[Books.chaptersCount],
+        chapterCount = row[Books.tocChapterCount] ?: 0,
+        totalWordCount = row[Books.totalWordCount] ?: 0,
+        totalImageCount = row[Books.totalImageCount] ?: 0,
         lastParsedAt = row[Books.lastParsedAt],
         parseStatus = row[Books.parseStatus],
         parseProgress = row[Books.parseProgress],
         createdAt = row[Books.createdAt],
-        updatedAt = row[Books.updatedAt]
+        updatedAt = row[Books.updatedAt],
+        statsUpdatedAt = row[Books.statsUpdatedAt]
     )
     
     fun deleteBySourceId(sourceId: Int): Int = transaction {
@@ -254,16 +268,86 @@ class BookRepository {
     /**
      * 更新章节解析状态
      */
-    fun updateChaptersParsed(id: Int, chaptersCount: Int): Int = transaction {
+    fun updateChaptersParsed(
+        id: Int,
+        chaptersCount: Int,
+        tocChapterCount: Int? = null,
+        totalWordCount: Int? = null,
+        totalImageCount: Int? = null
+    ): Int = transaction {
         val now = TimeProvider.now()
         Books.update({ Books.id eq id }) {
             it[chaptersParsed] = true
             it[Books.chaptersCount] = chaptersCount
+            if (tocChapterCount != null) it[Books.tocChapterCount] = tocChapterCount
+            if (totalWordCount != null) it[Books.totalWordCount] = totalWordCount
+            if (totalImageCount != null) it[Books.totalImageCount] = totalImageCount
+            if (tocChapterCount != null || totalWordCount != null || totalImageCount != null) {
+                it[statsUpdatedAt] = now
+            }
             it[lastParsedAt] = now
             it[parseStatus] = "completed"
             it[parseProgress] = 100
             it[updatedAt] = now
         }
+    }
+
+    fun updateStatistics(
+        id: Int,
+        tocChapterCount: Int,
+        totalWordCount: Int,
+        totalImageCount: Int
+    ): Int = transaction {
+        val now = TimeProvider.now()
+        Books.update({ Books.id eq id }) {
+            it[Books.tocChapterCount] = tocChapterCount
+            it[Books.totalWordCount] = totalWordCount
+            it[Books.totalImageCount] = totalImageCount
+            it[statsUpdatedAt] = now
+            it[updatedAt] = now
+        }
+    }
+
+    fun backfillMissingStatistics(): Int = transaction {
+        val missingIds = Books.select(Books.id)
+            .where { Books.statsUpdatedAt.isNull() }
+            .map { it[Books.id].value }
+
+        if (missingIds.isEmpty()) return@transaction 0
+
+        val statsByBookId = missingIds
+            .chunked(500)
+            .flatMap { chunk ->
+                com.bookd.data.entity.BookDocuments.select(
+                    com.bookd.data.entity.BookDocuments.bookId,
+                    com.bookd.data.entity.BookDocuments.inToc,
+                    com.bookd.data.entity.BookDocuments.wordCount,
+                    com.bookd.data.entity.BookDocuments.imageCount
+                )
+                    .where { com.bookd.data.entity.BookDocuments.bookId inList chunk }
+                    .toList()
+            }
+            .groupBy { it[com.bookd.data.entity.BookDocuments.bookId].value }
+            .mapValues { (_, rows) ->
+                BookStatisticsUpdate(
+                    tocChapterCount = rows.count { it[com.bookd.data.entity.BookDocuments.inToc] },
+                    totalWordCount = rows.sumOf { it[com.bookd.data.entity.BookDocuments.wordCount] },
+                    totalImageCount = rows.sumOf { it[com.bookd.data.entity.BookDocuments.imageCount] }
+                )
+            }
+
+        val now = TimeProvider.now()
+        var updatedCount = 0
+        missingIds.forEach { bookId ->
+            val stats = statsByBookId[bookId] ?: BookStatisticsUpdate(0, 0, 0)
+            updatedCount += Books.update({ Books.id eq bookId }) {
+                it[Books.tocChapterCount] = stats.tocChapterCount
+                it[Books.totalWordCount] = stats.totalWordCount
+                it[Books.totalImageCount] = stats.totalImageCount
+                it[Books.statsUpdatedAt] = now
+            }
+        }
+        updatedCount
     }
     
     /**
@@ -306,3 +390,9 @@ class BookRepository {
         }
     }
 }
+
+private data class BookStatisticsUpdate(
+    val tocChapterCount: Int,
+    val totalWordCount: Int,
+    val totalImageCount: Int
+)

@@ -1,7 +1,10 @@
 package com.bookd.domain.service
 
 import com.bookd.data.repository.BookDocumentRepository
+import com.bookd.data.repository.BookDocumentDraft
 import com.bookd.data.repository.BookRepository
+import com.bookd.data.repository.DocumentContentDraft
+import com.bookd.data.repository.DocumentResourceDraft
 import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.data.repository.ResourceInfo
 import com.bookd.domain.model.*
@@ -9,10 +12,8 @@ import com.bookd.domain.service.parser.*
 import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
 import kotlinx.coroutines.*
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.UUID
 import java.util.concurrent.Executors
 
 class BookContentService(
@@ -203,38 +204,33 @@ class BookContentService(
         
         // 2. 清理旧数据并创建文档
         try {
-            // 在独立事务中清理旧文档数据
-            transaction {
-                logger.info("Deleting old documents for book ID: $bookId")
-                val count = documentRepository.deleteByBookId(bookId)
-                logger.info("Deleted $count old documents for book ID: $bookId")
-                documentRepository.deleteResourcesByBookId(bookId)
-            }
-            
-            // 批量保存文档信息（在新事务中）
-            val createdCount = transaction {
-                logger.info("Creating ${structure.chapters.size} documents for book ID: $bookId")
-                var successCount = 0
-                structure.chapters.forEach { chapterInfo ->
-                    documentRepository.create(
-                        bookId = bookId,
+            logger.info("Replacing ${structure.chapters.size} documents for book ID: $bookId")
+            val documentsByIndex = documentRepository.replaceDocumentsForBook(
+                bookId = bookId,
+                documents = structure.chapters.map { chapterInfo ->
+                    BookDocumentDraft(
                         index = chapterInfo.index,
                         href = chapterInfo.href,
                         inToc = chapterInfo.inToc,
                         title = chapterInfo.title,
                         level = chapterInfo.level
                     )
-                    successCount++
                 }
-                successCount
-            }
-            
-            logger.info("Successfully created $createdCount documents for book ID: $bookId")
+            )
+            logger.info("Successfully created ${documentsByIndex.size} documents for book ID: $bookId")
             
             // 3. 解析并保存文档内容（在事务外，避免长事务）
+            val contentDrafts = mutableListOf<DocumentContentDraft>()
             structure.chapters.forEach { chapterInfo ->
-                parseAndSaveDocumentContent(bookId, file, parser, chapterInfo)
+                val document = documentsByIndex[chapterInfo.index]
+                if (document == null) {
+                    logger.error("Document not found after creation: bookId=$bookId, index=${chapterInfo.index}")
+                    return@forEach
+                }
+                parseDocumentContent(file, parser, chapterInfo, document.id)?.let { contentDrafts.add(it) }
             }
+
+            documentRepository.replaceDocumentContentsAndStats(contentDrafts)
             
             // 4. 保存资源文件（如果有）
             if (structure.resources.isNotEmpty()) {
@@ -242,7 +238,13 @@ class BookContentService(
             }
             
             // 5. 更新书籍解析状态
-            bookRepository.updateChaptersParsed(bookId, structure.chapters.size)
+            bookRepository.updateChaptersParsed(
+                id = bookId,
+                chaptersCount = structure.chapters.size,
+                tocChapterCount = structure.chapters.count { it.inToc },
+                totalWordCount = contentDrafts.sumOf { it.wordCount },
+                totalImageCount = contentDrafts.sumOf { it.imageCount }
+            )
             
             logger.info("Parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
         } catch (e: Exception) {
@@ -254,19 +256,13 @@ class BookContentService(
     /**
      * 解析并保存单个文档内容
      */
-    private suspend fun parseAndSaveDocumentContent(
-        bookId: Int,
+    private suspend fun parseDocumentContent(
         file: File,
         parser: BookParser,
-        chapterInfo: BookParser.ChapterInfo
-    ) {
-        try {
-            val document = documentRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
-            if (document == null) {
-                logger.error("Document not found after creation: bookId=$bookId, index=${chapterInfo.index}")
-                return
-            }
-            
+        chapterInfo: BookParser.ChapterInfo,
+        documentId: Int
+    ): DocumentContentDraft? {
+        return try {
             // 解析文档内容
             val elements = parser.parseChapterContent(file, chapterInfo)
             
@@ -274,13 +270,16 @@ class BookContentService(
             val wordCount = parser.countWords(elements)
             val imageCount = parser.countImages(elements)
             
-            // 保存内容和统计信息
-            documentRepository.saveDocumentContent(document.id, elements)
-            documentRepository.updateStats(document.id, wordCount, imageCount)
-            
-            logger.debug("Saved document ${document.index}: ${document.title} ($wordCount words, $imageCount images)")
+            logger.debug("Parsed document ${chapterInfo.index}: ${chapterInfo.title} ($wordCount words, $imageCount images)")
+            DocumentContentDraft(
+                documentId = documentId,
+                elements = elements,
+                wordCount = wordCount,
+                imageCount = imageCount
+            )
         } catch (e: Exception) {
             logger.error("Failed to parse document ${chapterInfo.index}", e)
+            null
         }
     }
     
@@ -288,6 +287,7 @@ class BookContentService(
      * 保存资源文件（使用新的图片存储服务）
      */
     private fun saveResources(bookId: Int, resources: Map<String, ByteArray>) {
+        val resourceDrafts = mutableListOf<DocumentResourceDraft>()
         resources.forEach { (path, bytes) ->
             try {
                 // 使用 BookImageStorage 保存图片
@@ -299,8 +299,8 @@ class BookContentService(
                 val dimensions = imageStorage.extractImageDimensions(bytes)
                 val (width, height) = dimensions ?: (null to null)
                 
-                // 保存到数据库，记录原始路径和存储路径的映射
-                documentRepository.saveResource(
+                resourceDrafts.add(
+                    DocumentResourceDraft(
                     bookId = bookId,
                     path = path,
                     storedPath = storedPath,  // 存储相对路径，如 "14/abc123.jpg"
@@ -308,6 +308,7 @@ class BookContentService(
                     size = bytes.size.toLong(),
                     width = width,
                     height = height
+                    )
                 )
                 
                 if (width != null && height != null) {
@@ -319,6 +320,7 @@ class BookContentService(
                 logger.error("Failed to save resource: $path", e)
             }
         }
+        documentRepository.saveResources(resourceDrafts)
     }
     
     /**

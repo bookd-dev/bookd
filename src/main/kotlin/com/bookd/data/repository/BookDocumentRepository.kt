@@ -199,6 +199,41 @@ class BookDocumentRepository {
             updatedAt = now
         )
     }
+
+    fun replaceDocumentsForBook(bookId: Int, documents: List<BookDocumentDraft>): Map<Int, BookDocument> = transaction {
+        DocumentResources.deleteWhere { DocumentResources.bookId eq bookId }
+        BookDocuments.deleteWhere { BookDocuments.bookId eq bookId }
+
+        val now = TimeProvider.now()
+        documents.associate { draft ->
+            val id = BookDocuments.insert {
+                it[BookDocuments.bookId] = bookId
+                it[BookDocuments.index] = draft.index
+                it[BookDocuments.href] = draft.href
+                it[BookDocuments.inToc] = draft.inToc
+                it[BookDocuments.title] = draft.title
+                it[BookDocuments.level] = draft.level
+                it[BookDocuments.wordCount] = draft.wordCount
+                it[BookDocuments.imageCount] = draft.imageCount
+                it[createdAt] = now
+                it[updatedAt] = now
+            }[BookDocuments.id]
+
+            draft.index to BookDocument(
+                id = id.value,
+                bookId = bookId,
+                index = draft.index,
+                href = draft.href,
+                inToc = draft.inToc,
+                title = draft.title,
+                level = draft.level,
+                wordCount = draft.wordCount,
+                imageCount = draft.imageCount,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+    }
     
     fun updateStats(documentId: Int, wordCount: Int, imageCount: Int): Int = transaction {
         val now = TimeProvider.now()
@@ -222,6 +257,24 @@ class BookDocumentRepository {
         DocumentContents.insert {
             it[DocumentContents.documentId] = documentId
             it[content] = contentJson
+        }
+    }
+
+    fun replaceDocumentContentsAndStats(contents: List<DocumentContentDraft>) = transaction {
+        if (contents.isEmpty()) return@transaction
+
+        val now = TimeProvider.now()
+        contents.forEach { draft ->
+            DocumentContents.deleteWhere { DocumentContents.documentId eq draft.documentId }
+            DocumentContents.insert {
+                it[DocumentContents.documentId] = draft.documentId
+                it[DocumentContents.content] = json.encodeToString(draft.elements)
+            }
+            BookDocuments.update({ BookDocuments.id eq draft.documentId }) {
+                it[wordCount] = draft.wordCount
+                it[imageCount] = draft.imageCount
+                it[updatedAt] = now
+            }
         }
     }
     
@@ -261,6 +314,22 @@ class BookDocumentRepository {
             it[DocumentResources.size] = size
             it[DocumentResources.width] = width
             it[DocumentResources.height] = height
+        }
+    }
+
+    fun saveResources(resources: List<DocumentResourceDraft>) = transaction {
+        if (resources.isEmpty()) return@transaction
+
+        resources.forEach { draft ->
+            DocumentResources.insert {
+                it[DocumentResources.bookId] = draft.bookId
+                it[DocumentResources.path] = draft.path
+                it[DocumentResources.storedPath] = draft.storedPath
+                it[DocumentResources.mediaType] = draft.mediaType
+                it[DocumentResources.size] = draft.size
+                it[DocumentResources.width] = draft.width
+                it[DocumentResources.height] = draft.height
+            }
         }
     }
     
@@ -337,4 +406,31 @@ data class BookDocumentStats(
 data class AdjacentDocumentIndexes(
     val prevIndex: Int?,
     val nextIndex: Int?
+)
+
+data class BookDocumentDraft(
+    val index: Int,
+    val href: String?,
+    val inToc: Boolean,
+    val title: String?,
+    val level: Int,
+    val wordCount: Int = 0,
+    val imageCount: Int = 0
+)
+
+data class DocumentContentDraft(
+    val documentId: Int,
+    val elements: List<ContentElement>,
+    val wordCount: Int,
+    val imageCount: Int
+)
+
+data class DocumentResourceDraft(
+    val bookId: Int,
+    val path: String,
+    val storedPath: String,
+    val mediaType: String,
+    val size: Long,
+    val width: Int?,
+    val height: Int?
 )

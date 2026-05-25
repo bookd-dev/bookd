@@ -71,9 +71,9 @@ class BookshelfService(
         }
         
         // 填充每个书架的书籍数量
+        val countsByBookshelfId = bookshelfItemRepository.countByBookshelfIds(bookshelves.map { it.id })
         return bookshelves.map { bookshelf ->
-            val count = bookshelfItemRepository.countByBookshelf(bookshelf.id)
-            bookshelf.copy(bookCount = count.toInt())
+            bookshelf.copy(bookCount = countsByBookshelfId[bookshelf.id]?.toInt() ?: 0)
         }
     }
     
@@ -225,14 +225,14 @@ class BookshelfService(
             return Result.failure(BookshelfException(ErrorCode.SHELF_NOT_FOUND))
         }
         
-        // 1. 获取书架中所有书籍的ID（用于排序，不分页）
-        val allBookIds = bookshelfItemRepository.findBookIdsByBookshelf(
+        val page = bookshelfItemRepository.findBooksWithProgressByBookshelf(
+            userId = userId,
             bookshelfId = bookshelfId,
-            limit = Int.MAX_VALUE,
-            offset = 0
+            limit = limit,
+            offset = offset
         )
-        
-        if (allBookIds.isEmpty()) {
+
+        if (page.total == 0) {
             return Result.success(BooksInBookshelfResponse(
                 books = emptyList(),
                 total = 0,
@@ -241,50 +241,13 @@ class BookshelfService(
                 hasMore = false
             ))
         }
-        
-        // 2. 批量查询阅读进度（优化 N+1 问题）
-        val progressMap = readingProgressRepository.findByUserAndBooks(userId, allBookIds)
-        
-        // 3. 按最新阅读时间排序（未读的排在最后）
-        // 分离有进度和无进度的书籍
-        val (readBooks, unreadBooks) = allBookIds.partition { progressMap.containsKey(it) }
-        
-        // 有进度的按 lastReadAt 降序排序
-        val sortedReadBooks = readBooks.sortedByDescending { bookId ->
-            progressMap[bookId]?.lastReadAt
-        }
-        
-        // 未读书籍保持原有顺序（按添加到书架的时间，即 allBookIds 中的顺序）
-        // 合并：有进度的在前，未读的在后
-        val sortedBookIds = sortedReadBooks + unreadBooks
-        
-        // 4. 应用分页
-        val safeOffset = when {
-            offset <= 0L -> 0
-            offset >= Int.MAX_VALUE.toLong() -> Int.MAX_VALUE
-            else -> offset.toInt()
-        }
-        val pagedBookIds = sortedBookIds.drop(safeOffset).take(limit)
-        
-        // 5. 获取完整的书籍信息（保持排序后的顺序）
-        // 批量查询以避免对每本书逐个调用 findById 带来的性能开销
-        val booksById = bookRepository.findAllById(pagedBookIds).associateBy { it.id }
-        val books = pagedBookIds.mapNotNull { booksById[it] }
-        
-        // 6. 组装带进度的书籍列表
-        val booksWithProgress = books.map { book ->
-            BookWithProgress(
-                book = book,
-                progress = progressMap[book.id]
-            )
-        }
-        
+
         return Result.success(BooksInBookshelfResponse(
-            books = booksWithProgress,
-            total = allBookIds.size,
+            books = page.books,
+            total = page.total,
             limit = limit,
             offset = offset,
-            hasMore = offset + booksWithProgress.size < allBookIds.size
+            hasMore = offset + page.books.size < page.total
         ))
     }
     
@@ -444,22 +407,18 @@ class BookshelfService(
      * 获取书籍所在的所有书架
      */
     fun getBookshelvesForBook(userId: Int, bookId: Int): List<Bookshelf> {
-        val bookshelves = bookshelfItemRepository.findUserBookshelvesForBook(userId, bookId)
-        
-        // 填充书籍数量
-        return bookshelves.map { bookshelf ->
-            val count = bookshelfItemRepository.countByBookshelf(bookshelf.id)
-            bookshelf.copy(bookCount = count.toInt())
-        }
+        return getBookshelfMembershipSummary(userId, bookId).bookshelves
+    }
+
+    fun getBookshelfMembershipSummary(userId: Int, bookId: Int): BookshelfMembershipSummary {
+        return bookshelfItemRepository.findUserBookshelfMembershipSummary(userId, bookId)
     }
     
     /**
      * 检查书籍是否在用户的默认书架("全部")中
      */
     fun isBookInDefaultBookshelf(userId: Int, bookId: Int): Boolean {
-        val defaultBookshelf = bookshelfRepository.getDefaultBookshelf(userId)
-            ?: return false
-        return bookshelfItemRepository.isBookInBookshelf(defaultBookshelf.id, bookId)
+        return getBookshelfMembershipSummary(userId, bookId).inDefaultBookshelf
     }
 }
 

@@ -2,11 +2,21 @@ package com.bookd.domain.service
 
 import com.bookd.data.repository.UserRepository
 import com.bookd.domain.model.*
+import com.bookd.infrastructure.time.TimeProvider
 import org.mindrot.jbcrypt.BCrypt
+import java.util.concurrent.ConcurrentHashMap
 
 class UserService(
     private val userRepository: UserRepository
 ) {
+    private data class CachedUser(
+        val user: User,
+        val expiresAtMillis: Long
+    )
+
+    private val tokenCache = ConcurrentHashMap<String, CachedUser>()
+    private val tokenCacheTtlMillis = 30_000L
+
     fun findByUsername(username: String): User? {
         return userRepository.findByUsername(username)
     }
@@ -34,11 +44,22 @@ class UserService(
     }
     
     fun logout(token: String): Boolean {
+        tokenCache.remove(token)
         return userRepository.deleteSession(token)
     }
     
     fun validateToken(token: String): User? {
-        return userRepository.findUserByToken(token)
+        val now = TimeProvider.nowInstant().toEpochMilliseconds()
+        tokenCache[token]?.let { cached ->
+            if (cached.expiresAtMillis > now) {
+                return cached.user
+            }
+            tokenCache.remove(token, cached)
+        }
+
+        val user = userRepository.findUserByToken(token) ?: return null
+        tokenCache[token] = CachedUser(user, now + tokenCacheTtlMillis)
+        return user
     }
     
     fun registerGuest(username: String, password: String, email: String?): User {
@@ -69,6 +90,7 @@ class UserService(
     }
     
     fun deleteUser(userId: Int): Boolean {
+        tokenCache.entries.removeIf { it.value.user.id == userId }
         return userRepository.deleteUser(userId)
     }
     

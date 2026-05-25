@@ -103,7 +103,6 @@ class BookMetadataService(
                 }
             } catch (e: Exception) {
                 logger.error("Error extracting metadata from file: ${file.name} - ${e.javaClass.simpleName}: ${e.message}")
-                e.printStackTrace()
             }
         }
     }

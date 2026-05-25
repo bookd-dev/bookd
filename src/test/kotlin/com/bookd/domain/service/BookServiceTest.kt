@@ -8,6 +8,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDateTime
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
@@ -75,11 +76,40 @@ class BookServiceTest {
         assertEquals(1.5, result?.coverAspectRatio)
     }
 
+    @Test
+    fun `given precomputed statistics when listing books then document aggregation is skipped`() {
+        val statsUpdatedAt = LocalDateTime(2026, 5, 25, 10, 0)
+        val book = createBook(
+            id = 4,
+            title = "Precomputed Book",
+            coverWidth = 300,
+            coverHeight = 150,
+            chapterCount = 8,
+            totalWordCount = 12345,
+            totalImageCount = 6,
+            statsUpdatedAt = statsUpdatedAt
+        )
+        coEvery { bookRepository.findAllAsync(limit = 20, offset = 0) } returns listOf(book)
+
+        val result = runBlocking { bookService.getAllBooks(limit = 20, offset = 0) }
+
+        assertEquals(1, result.size)
+        assertEquals(8, result[0].chapterCount)
+        assertEquals(12345, result[0].totalWordCount)
+        assertEquals(6, result[0].totalImageCount)
+        assertEquals(2.0, result[0].coverAspectRatio)
+        coVerify(exactly = 0) { documentRepository.findStatsByBookIds(any()) }
+    }
+
     private fun createBook(
         id: Int,
         title: String,
         coverWidth: Int? = null,
-        coverHeight: Int? = null
+        coverHeight: Int? = null,
+        chapterCount: Int = 0,
+        totalWordCount: Int = 0,
+        totalImageCount: Int = 0,
+        statsUpdatedAt: LocalDateTime? = null
     ): Book = Book(
         id = id,
         title = title,
@@ -88,7 +118,11 @@ class BookServiceTest {
         filePath = "/books/$title.epub",
         fileSize = 1024,
         coverWidth = coverWidth,
-        coverHeight = coverHeight
+        coverHeight = coverHeight,
+        chapterCount = chapterCount,
+        totalWordCount = totalWordCount,
+        totalImageCount = totalImageCount,
+        statsUpdatedAt = statsUpdatedAt
     )
 
 }

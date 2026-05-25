@@ -3,9 +3,13 @@ package com.bookd.data.repository
 import com.bookd.data.entity.BookshelfItems
 import com.bookd.data.entity.Books
 import com.bookd.data.entity.Bookshelves
+import com.bookd.data.entity.ReadingProgress
 import com.bookd.domain.model.Book
+import com.bookd.domain.model.BookWithProgress
 import com.bookd.domain.model.Bookshelf
+import com.bookd.domain.model.BookshelfMembershipSummary
 import com.bookd.domain.model.BookshelfItem
+import com.bookd.domain.model.ReadingProgressResponse
 import com.bookd.infrastructure.time.TimeProvider
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
@@ -109,6 +113,49 @@ class BookshelfItemRepository {
             .limit(limit).offset(offset)
             .map { it[BookshelfItems.bookId].value }
     }
+
+    fun findBooksWithProgressByBookshelf(
+        userId: Int,
+        bookshelfId: Int,
+        limit: Int = 20,
+        offset: Long = 0
+    ): BookshelfBooksPage = transaction {
+        val total = BookshelfItems.selectAll()
+            .where { BookshelfItems.bookshelfId eq bookshelfId }
+            .count()
+            .toInt()
+
+        if (total == 0) {
+            return@transaction BookshelfBooksPage(emptyList(), total)
+        }
+
+        val joined = (BookshelfItems innerJoin Books).join(
+            ReadingProgress,
+            JoinType.LEFT,
+            BookshelfItems.bookId,
+            ReadingProgress.bookId
+        ) {
+            ReadingProgress.userId eq userId
+        }
+
+        val books = joined
+            .selectAll()
+            .where { BookshelfItems.bookshelfId eq bookshelfId }
+            .orderBy(
+                ReadingProgress.lastReadAt to SortOrder.DESC_NULLS_LAST,
+                BookshelfItems.addedAt to SortOrder.DESC
+            )
+            .limit(limit)
+            .offset(offset)
+            .map { row ->
+                BookWithProgress(
+                    book = toBook(row),
+                    progress = toProgressOrNull(row)
+                )
+            }
+
+        BookshelfBooksPage(books, total)
+    }
     
     /**
      * 查询书籍所在的所有书架
@@ -133,6 +180,28 @@ class BookshelfItemRepository {
             .orderBy(Bookshelves.sortOrder to SortOrder.ASC)
             .map { toBookshelf(it) }
     }
+
+    fun findUserBookshelfMembershipSummary(userId: Int, bookId: Int): BookshelfMembershipSummary = transaction {
+        val bookshelves = (BookshelfItems innerJoin Bookshelves)
+            .selectAll()
+            .where {
+                (BookshelfItems.bookId eq bookId) and (Bookshelves.userId eq userId)
+            }
+            .orderBy(Bookshelves.sortOrder to SortOrder.ASC)
+            .map { toBookshelf(it) }
+
+        if (bookshelves.isEmpty()) {
+            return@transaction BookshelfMembershipSummary(emptyList(), inDefaultBookshelf = false)
+        }
+
+        val countsByBookshelfId = countByBookshelfIdsInCurrentTransaction(bookshelves.map { it.id })
+        BookshelfMembershipSummary(
+            bookshelves = bookshelves.map { bookshelf ->
+                bookshelf.copy(bookCount = countsByBookshelfId[bookshelf.id]?.toInt() ?: 0)
+            },
+            inDefaultBookshelf = bookshelves.any { it.isSystemDefault }
+        )
+    }
     
     /**
      * 检查书籍是否在书架中
@@ -150,6 +219,10 @@ class BookshelfItemRepository {
         BookshelfItems.selectAll()
             .where { BookshelfItems.bookshelfId eq bookshelfId }
             .count()
+    }
+
+    fun countByBookshelfIds(bookshelfIds: List<Int>): Map<Int, Long> = transaction {
+        countByBookshelfIdsInCurrentTransaction(bookshelfIds)
     }
     
     /**
@@ -169,18 +242,24 @@ class BookshelfItemRepository {
         format = row[Books.format],
         filePath = row[Books.filePath],
         coverPath = row[Books.coverPath],
+        coverWidth = row[Books.coverWidth],
+        coverHeight = row[Books.coverHeight],
         fileSize = row[Books.fileSize],
         isbn = row[Books.isbn],
         publisher = row[Books.publisher],
         description = row[Books.description],
         sourceId = row[Books.sourceId]?.value,
+        chapterCount = row[Books.tocChapterCount] ?: 0,
+        totalWordCount = row[Books.totalWordCount] ?: 0,
+        totalImageCount = row[Books.totalImageCount] ?: 0,
         chaptersParsed = row[Books.chaptersParsed],
         chaptersCount = row[Books.chaptersCount],
         lastParsedAt = row[Books.lastParsedAt],
         parseStatus = row[Books.parseStatus],
         parseProgress = row[Books.parseProgress],
         createdAt = row[Books.createdAt],
-        updatedAt = row[Books.updatedAt]
+        updatedAt = row[Books.updatedAt],
+        statsUpdatedAt = row[Books.statsUpdatedAt]
     )
     
     private fun toBookshelf(row: ResultRow) = Bookshelf(
@@ -201,4 +280,40 @@ class BookshelfItemRepository {
         bookId = row[BookshelfItems.bookId].value,
         addedAt = row[BookshelfItems.addedAt]
     )
+
+    private fun countByBookshelfIdsInCurrentTransaction(bookshelfIds: List<Int>): Map<Int, Long> {
+        if (bookshelfIds.isEmpty()) return emptyMap()
+
+        val countExpression = BookshelfItems.id.count()
+        return BookshelfItems
+            .select(BookshelfItems.bookshelfId, countExpression)
+            .where { BookshelfItems.bookshelfId inList bookshelfIds }
+            .groupBy(BookshelfItems.bookshelfId)
+            .associate { row ->
+                row[BookshelfItems.bookshelfId].value to row[countExpression]
+            }
+    }
+
+    private fun toProgressOrNull(row: ResultRow): ReadingProgressResponse? {
+        row.getOrNull(ReadingProgress.id) ?: return null
+        return ReadingProgressResponse(
+            id = row[ReadingProgress.id].value,
+            bookId = row[ReadingProgress.bookId].value,
+            progress = row[ReadingProgress.progress].toDouble(),
+            currentPage = row[ReadingProgress.currentPage],
+            totalPages = row[ReadingProgress.totalPages],
+            cfiLocation = row[ReadingProgress.cfiLocation],
+            documentId = row[ReadingProgress.documentId],
+            deviceId = row[ReadingProgress.deviceId],
+            lastReadAt = row[ReadingProgress.lastReadAt],
+            chapterPageIndex = row[ReadingProgress.chapterPageIndex],
+            chapterTotalPages = row[ReadingProgress.chapterTotalPages],
+            chapterScrollPercent = row[ReadingProgress.chapterScrollPercent]?.toDouble()
+        )
+    }
 }
+
+data class BookshelfBooksPage(
+    val books: List<BookWithProgress>,
+    val total: Int
+)

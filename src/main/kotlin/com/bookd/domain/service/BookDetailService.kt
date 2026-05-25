@@ -43,28 +43,20 @@ class BookDetailService(
             null
         }
         
-        // 获取书籍所在的书架
-        val bookshelves = try {
-            bookshelfService.getBookshelvesForBook(userId, bookId)
+        // 获取书籍所在书架和默认书架状态
+        val membership = try {
+            bookshelfService.getBookshelfMembershipSummary(userId, bookId)
         } catch (e: Exception) {
             logger.warn("获取书籍书架信息失败: bookId=$bookId, userId=$userId, error=${e.message}")
-            emptyList()
-        }
-        
-        // 检查是否在默认书架（"全部"）中
-        val inDefaultBookshelf = try {
-            bookshelfService.isBookInDefaultBookshelf(userId, bookId)
-        } catch (e: Exception) {
-            logger.warn("检查默认书架状态失败: bookId=$bookId, userId=$userId, error=${e.message}")
-            false
+            null
         }
         
         return BookDetailResponse(
             book = book,
             tags = tags,
             readingProgress = readingProgress,
-            bookshelves = bookshelves,
-            inDefaultBookshelf = inDefaultBookshelf
+            bookshelves = membership?.bookshelves ?: emptyList(),
+            inDefaultBookshelf = membership?.inDefaultBookshelf ?: false
         )
     }
 }

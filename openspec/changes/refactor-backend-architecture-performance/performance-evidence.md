@@ -20,7 +20,7 @@ After this refactor, `BookDocumentRepository.findAdjacentIndexes(bookId, index)`
 
 ## Real Library Benchmark
 
-Measured on May 25, 2026 using `/Users/shenchao/ebook` with a temporary H2 in-memory database and temporary image directory. The benchmark imported 262 EPUB/TXT files, parsed content for the first 60 books, and created 3,448 document rows plus 995 resource rows. Each scenario used 5 warmups and 30 measured repeats.
+Measured on May 25, 2026 using `/Users/***/ebook` with a temporary H2 in-memory database and temporary image directory. The benchmark imported 262 EPUB/TXT files, parsed content for the first 60 books, and created 3,448 document rows plus 995 resource rows. Each scenario used 5 warmups and 30 measured repeats.
 
 | Scenario | Legacy median | Current median | Improvement | Query model |
 |---|---:|---:|---:|---|
