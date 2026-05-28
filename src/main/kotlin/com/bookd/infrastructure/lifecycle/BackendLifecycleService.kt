@@ -1,5 +1,6 @@
 package com.bookd.infrastructure.lifecycle
 
+import com.bookd.config.DatabaseConfig
 import com.bookd.domain.service.BackgroundParseService
 import com.bookd.domain.service.BookTaskCoordinator
 import com.bookd.infrastructure.cache.RedisService
@@ -9,7 +10,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BackendLifecycleService(
     private val backgroundParseService: BackgroundParseService,
     private val taskCoordinator: BookTaskCoordinator,
-    private val redisService: RedisService? = null
+    private val redisService: RedisService? = null,
+    private val closeDatabase: () -> Unit = { DatabaseConfig.close() }
 ) : AutoCloseable {
     private val logger = LoggerFactory.getLogger(BackendLifecycleService::class.java)
     private val closed = AtomicBoolean(false)
@@ -25,6 +27,9 @@ class BackendLifecycleService(
         }
         closeResource("Redis service") {
             redisService?.close()
+        }
+        closeResource("database connection pool") {
+            closeDatabase()
         }
     }
 

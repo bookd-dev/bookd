@@ -5,10 +5,14 @@ import com.bookd.domain.model.*
 import com.bookd.infrastructure.time.TimeProvider
 import org.mindrot.jbcrypt.BCrypt
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 class UserService(
     private val userRepository: UserRepository,
-    private val bookshelfService: BookshelfService? = null
+    private val bookshelfService: BookshelfService? = null,
+    private val nowMillis: () -> Long = { TimeProvider.nowInstant().toEpochMilliseconds() },
+    private val tokenCacheTtlMillis: Long = 30_000L,
+    private val tokenCachePruneIntervalMillis: Long = tokenCacheTtlMillis
 ) {
     private data class CachedUser(
         val user: User,
@@ -16,7 +20,7 @@ class UserService(
     )
 
     private val tokenCache = ConcurrentHashMap<String, CachedUser>()
-    private val tokenCacheTtlMillis = 30_000L
+    private val lastTokenCachePruneMillis = AtomicLong(0L)
 
     fun findByUsername(username: String): User? {
         return userRepository.findByUsername(username)
@@ -71,7 +75,8 @@ class UserService(
     }
     
     fun validateToken(token: String): User? {
-        val now = TimeProvider.nowInstant().toEpochMilliseconds()
+        val now = nowMillis()
+        pruneExpiredTokenCache(now)
         getCachedUser(token, now)?.let { return it }
 
         val user = userRepository.findUserByToken(token) ?: return null
@@ -80,7 +85,8 @@ class UserService(
     }
 
     suspend fun validateTokenAsync(token: String): User? {
-        val now = TimeProvider.nowInstant().toEpochMilliseconds()
+        val now = nowMillis()
+        pruneExpiredTokenCache(now)
         getCachedUser(token, now)?.let { return it }
 
         val user = userRepository.findUserByTokenAsync(token) ?: return null
@@ -215,9 +221,30 @@ class UserService(
         tokenCache[token] = CachedUser(user, nowMillis + tokenCacheTtlMillis)
     }
 
+    private fun pruneExpiredTokenCache(nowMillis: Long) {
+        if (tokenCache.isEmpty()) return
+        if (tokenCachePruneIntervalMillis <= 0) {
+            removeExpiredTokenCacheEntries(nowMillis)
+            lastTokenCachePruneMillis.set(nowMillis)
+            return
+        }
+
+        val lastPrunedAt = lastTokenCachePruneMillis.get()
+        if (nowMillis - lastPrunedAt < tokenCachePruneIntervalMillis) return
+        if (lastTokenCachePruneMillis.compareAndSet(lastPrunedAt, nowMillis)) {
+            removeExpiredTokenCacheEntries(nowMillis)
+        }
+    }
+
+    private fun removeExpiredTokenCacheEntries(nowMillis: Long) {
+        tokenCache.entries.removeIf { it.value.expiresAtMillis <= nowMillis }
+    }
+
     private fun invalidateUserTokens(userId: Int) {
         tokenCache.entries.removeIf { it.value.user.id == userId }
     }
+
+    internal fun cachedTokenCountForTesting(): Int = tokenCache.size
 
     private fun hasAdmin(users: List<User>): Boolean {
         return users.any { it.role == UserRole.ADMIN.value }

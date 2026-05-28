@@ -14,7 +14,8 @@ import kotlin.concurrent.timer
  */
 class BackgroundParseService(
     private val bookRepository: BookRepository,
-    private val contentService: BookContentService
+    private val contentService: BookContentService,
+    private val environment: (String) -> String? = System::getenv
 ) {
     private val logger = LoggerFactory.getLogger(BackgroundParseService::class.java)
     
@@ -25,9 +26,9 @@ class BackgroundParseService(
     private var scheduledTimer: java.util.Timer? = null
     
     // 配置参数
-    private val intervalSeconds = System.getenv("BACKGROUND_PARSE_INTERVAL")?.toLongOrNull() ?: 60L
-    private val batchSize = System.getenv("BACKGROUND_PARSE_BATCH_SIZE")?.toIntOrNull() ?: 5
-    private val enabled = System.getenv("BACKGROUND_PARSE_ENABLED")?.toBoolean() ?: true
+    private val intervalSeconds = readLongConfig("PARSE_BACKGROUND_INTERVAL", "BACKGROUND_PARSE_INTERVAL", 60L)
+    private val batchSize = readIntConfig("PARSE_BACKGROUND_BATCH_SIZE", "BACKGROUND_PARSE_BATCH_SIZE", 5)
+    private val enabled = readBooleanConfig("PARSE_BACKGROUND_ENABLED", "BACKGROUND_PARSE_ENABLED", true)
     
     /**
      * 启动后台解析服务
@@ -138,6 +139,30 @@ class BackgroundParseService(
         val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
         parseDispatcher = dispatcher
         return CoroutineScope(dispatcher + SupervisorJob()).also { scope = it }
+    }
+
+    private fun readLongConfig(primaryName: String, fallbackName: String, defaultValue: Long): Long {
+        return environment(primaryName)?.toLongOrNull()
+            ?: environment(fallbackName)?.toLongOrNull()
+            ?: defaultValue
+    }
+
+    private fun readIntConfig(primaryName: String, fallbackName: String, defaultValue: Int): Int {
+        return environment(primaryName)?.toIntOrNull()
+            ?: environment(fallbackName)?.toIntOrNull()
+            ?: defaultValue
+    }
+
+    private fun readBooleanConfig(primaryName: String, fallbackName: String, defaultValue: Boolean): Boolean {
+        return environment(primaryName)?.parseBoolean()
+            ?: environment(fallbackName)?.parseBoolean()
+            ?: defaultValue
+    }
+
+    private fun String.parseBoolean(): Boolean? = when (lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> null
     }
     
     /**

@@ -58,33 +58,7 @@ val appModule = module {
     single { BookImageStorage() }
     
     // Redis (optional, graceful degradation if not available)
-    single<RedisService?> {
-        try {
-            val redisHost = System.getenv("REDIS_HOST") ?: "localhost"
-            val redisPort = System.getenv("REDIS_PORT")?.toIntOrNull() ?: 6379
-            val redisPassword = System.getenv("REDIS_PASSWORD")?.takeIf { it.isNotBlank() }
-            val redisDatabase = System.getenv("REDIS_DATABASE")?.toIntOrNull() ?: 0
-            val redisEnabled = System.getenv("REDIS_ENABLED")?.toBoolean() ?: false
-            
-            if (redisEnabled) {
-                val redis = RedisService(redisHost, redisPort, redisPassword, redisDatabase)
-                try {
-                    redis.ping()
-                    logger.info("Redis connected: $redisHost:$redisPort")
-                    redis
-                } catch (e: Exception) {
-                    logger.warn("Redis connection test failed: ${e.message}, running without cache")
-                    null
-                }
-            } else {
-                logger.info("Redis disabled, running without cache")
-                null
-            }
-        } catch (e: Exception) {
-            logger.warn("Redis initialization failed: ${e.message}, running without cache")
-            null
-        }
-    }
+    single<RedisService?> { createRedisServiceOrNull() }
     
     single<BookCacheService> { BookCacheService(getOrNull()) }
     
@@ -106,4 +80,40 @@ val appModule = module {
     single { ImageDimensionMigrationService(get(), get()) }
     single { FileSystemService() }
     single { BackendLifecycleService(get(), get(), getOrNull()) }
+}
+
+internal fun createRedisServiceOrNull(
+    redisHost: String = System.getenv("REDIS_HOST") ?: "localhost",
+    redisPort: Int = System.getenv("REDIS_PORT")?.toIntOrNull() ?: 6379,
+    redisPassword: String? = System.getenv("REDIS_PASSWORD")?.takeIf { it.isNotBlank() },
+    redisDatabase: Int = System.getenv("REDIS_DATABASE")?.toIntOrNull() ?: 0,
+    redisEnabled: Boolean = System.getenv("REDIS_ENABLED")?.toBoolean() ?: false,
+    redisFactory: (String, Int, String?, Int) -> RedisService = ::RedisService
+): RedisService? {
+    if (!redisEnabled) {
+        logger.info("Redis disabled, running without cache")
+        return null
+    }
+
+    return try {
+        val redis = redisFactory(redisHost, redisPort, redisPassword, redisDatabase)
+        val connected = try {
+            redis.ping()
+        } catch (e: Exception) {
+            logger.warn("Redis connection test failed: ${e.message}, running without cache")
+            false
+        }
+
+        if (connected) {
+            logger.info("Redis connected: $redisHost:$redisPort")
+            redis
+        } else {
+            redis.close()
+            logger.warn("Redis connection test failed, running without cache")
+            null
+        }
+    } catch (e: Exception) {
+        logger.warn("Redis initialization failed: ${e.message}, running without cache")
+        null
+    }
 }

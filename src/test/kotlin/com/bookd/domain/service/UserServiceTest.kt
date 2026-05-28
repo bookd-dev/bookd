@@ -13,6 +13,7 @@ import kotlinx.datetime.LocalDateTime
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import java.util.concurrent.atomic.AtomicLong
 
 class UserServiceTest {
 
@@ -45,6 +46,35 @@ class UserServiceTest {
 
         verify(exactly = 2) { userRepository.findUserByToken("token-1") }
         verify(exactly = 1) { userRepository.deleteSession("token-1") }
+    }
+
+    @Test
+    fun `given expired cached tokens when another token is validated then expired entries are pruned`() {
+        val userRepository = mockk<UserRepository>()
+        val nowMillis = AtomicLong(0L)
+        val userService = UserService(
+            userRepository = userRepository,
+            nowMillis = { nowMillis.get() },
+            tokenCacheTtlMillis = 10L,
+            tokenCachePruneIntervalMillis = 0L
+        )
+        val user = User(id = 1, username = "admin", password = "hash", email = null, role = "admin")
+
+        every { userRepository.findUserByToken("token-1") } returns user
+        every { userRepository.findUserByToken("token-2") } returns user
+        every { userRepository.findUserByToken("token-3") } returns user
+
+        assertEquals(user, userService.validateToken("token-1"))
+        assertEquals(user, userService.validateToken("token-2"))
+        assertEquals(2, userService.cachedTokenCountForTesting())
+
+        nowMillis.set(11L)
+        assertEquals(user, userService.validateToken("token-3"))
+
+        assertEquals(1, userService.cachedTokenCountForTesting())
+        verify(exactly = 1) { userRepository.findUserByToken("token-1") }
+        verify(exactly = 1) { userRepository.findUserByToken("token-2") }
+        verify(exactly = 1) { userRepository.findUserByToken("token-3") }
     }
 
     @Test
