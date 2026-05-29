@@ -33,5 +33,6 @@ fun Application.configureRouting() {
         appRoutes()
         bookshelfRoutes()
         adminRoutes()
+        adminPersonalizationRoutes()
     }
 }

@@ -3,6 +3,7 @@ package com.bookd
 import com.bookd.config.DatabaseConfig
 import com.bookd.data.repository.BookRepository
 import com.bookd.domain.service.BackgroundParseService
+import com.bookd.domain.service.PersonalizationSettingsService
 import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.infrastructure.database.SchemaMigrationRunner
 import com.bookd.plugins.*
@@ -49,6 +50,12 @@ fun Application.module() {
     configureSerialization()
     configureMonitoring()
     configureStatusPages()
+
+    val personalizationSettingsService by inject<PersonalizationSettingsService>()
+    runBlocking {
+        personalizationSettingsService.initializeTimeZone()
+    }
+
     configureRouting()
     
     // Initialize TXT parse rules from JSON file if database is empty

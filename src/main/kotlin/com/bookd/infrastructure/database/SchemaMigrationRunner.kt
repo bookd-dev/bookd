@@ -1,9 +1,14 @@
 package com.bookd.infrastructure.database
 
 import com.bookd.infrastructure.time.TimeProvider
+import com.bookd.data.entity.AiModels
+import com.bookd.data.entity.AiProviderEndpoints
+import com.bookd.data.entity.AiProviders
+import com.bookd.data.entity.SystemSettings
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.datetime.datetime
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -40,6 +45,26 @@ class SchemaMigrationRunner(
                 description = "baseline current backend schema"
             ) {
                 SchemaUtils.create(*BackendSchemaTables.all)
+            },
+            SchemaMigration(
+                version = "2",
+                description = "add admin personalization and AI service configuration"
+            ) {
+                SchemaUtils.create(
+                    SystemSettings,
+                    AiProviders,
+                    AiProviderEndpoints,
+                    AiModels
+                )
+            },
+            SchemaMigration(
+                version = "3",
+                description = "move AI capability flags to model configuration only"
+            ) {
+                TransactionManager.current().exec("ALTER TABLE ai_providers DROP COLUMN IF EXISTS supports_tts")
+                TransactionManager.current().exec("ALTER TABLE ai_providers DROP COLUMN IF EXISTS supports_llm")
+                TransactionManager.current().exec("ALTER TABLE ai_provider_endpoints DROP COLUMN IF EXISTS supports_tts")
+                TransactionManager.current().exec("ALTER TABLE ai_provider_endpoints DROP COLUMN IF EXISTS supports_llm")
             }
         )
     }

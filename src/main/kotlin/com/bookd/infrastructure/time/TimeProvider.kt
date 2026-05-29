@@ -7,6 +7,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import org.slf4j.LoggerFactory
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 统一的时间提供者
@@ -15,27 +16,39 @@ import org.slf4j.LoggerFactory
 object TimeProvider {
     
     private val logger = LoggerFactory.getLogger(TimeProvider::class.java)
-    
-    /**
-     * 应用时区，从环境变量 TZ 读取，默认使用系统时区
-     */
-    val timeZone: TimeZone by lazy {
-        val tzEnv = System.getenv("TZ")
-        
-        val tz = if (tzEnv.isNullOrBlank()) {
-            // 使用系统时区
-            TimeZone.currentSystemDefault()
-        } else {
-            try {
-                TimeZone.of(tzEnv)
-            } catch (e: Exception) {
-                logger.warn("Invalid TZ environment variable: $tzEnv, falling back to system default")
-                TimeZone.currentSystemDefault()
-            }
+
+    private val timeZoneRef = AtomicReference(resolveDefaultTimeZone())
+
+    val timeZone: TimeZone
+        get() = timeZoneRef.get()
+
+    fun setTimeZone(timeZone: TimeZone) {
+        timeZoneRef.set(timeZone)
+        logger.info("Time zone initialized: ${timeZone.id}")
+    }
+
+    fun parseTimeZone(timeZoneId: String): TimeZone? {
+        return try {
+            TimeZone.of(timeZoneId)
+        } catch (e: Exception) {
+            null
         }
-        
-        logger.info("Time zone initialized: ${tz.id}")
-        tz
+    }
+
+    fun resolveDefaultTimeZone(environment: (String) -> String? = System::getenv): TimeZone {
+        val tzEnv = environment("TZ")
+        if (!tzEnv.isNullOrBlank()) {
+            val configured = parseTimeZone(tzEnv)
+            if (configured != null) {
+                return configured
+            }
+            logger.warn("Invalid TZ environment variable: $tzEnv, falling back to system default")
+        }
+        return TimeZone.currentSystemDefault()
+    }
+
+    internal fun resetForTests(timeZone: TimeZone = resolveDefaultTimeZone()) {
+        timeZoneRef.set(timeZone)
     }
     
     /**
