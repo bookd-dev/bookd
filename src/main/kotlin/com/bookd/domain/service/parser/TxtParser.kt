@@ -164,6 +164,10 @@ class TxtParser(
      */
     fun extractChapterContent(fullText: String, chapterInfo: ChapterInfo): List<ContentElement> {
         val chapterText = fullText.substring(chapterInfo.startPos, chapterInfo.endPos)
+        val anchorGenerator = ContentAnchorGenerator(
+            sourceKind = "txt",
+            chapterIdentity = chapterInfo.index.toString()
+        )
         
         // 统一换行符为 \n，然后按行分割
         val normalizedText = chapterText.replace("\r\n", "\n").replace("\r", "\n")
@@ -182,11 +186,22 @@ class TxtParser(
             
             // 第一个非空行如果是标题，添加为 Heading
             if (isFirstNonEmpty && chapterInfo.title != null && trimmedLine.startsWith(chapterInfo.title.trim())) {
-                elements.add(ContentElement.Heading(1, trimmedLine))
+                elements.add(
+                    ContentElement.Heading(
+                        level = 1,
+                        text = trimmedLine,
+                        anchorId = anchorGenerator.generatedAnchor("heading", trimmedLine)
+                    )
+                )
                 isFirstNonEmpty = false
             } else {
                 // 每行作为一个独立段落
-                elements.add(ContentElement.Paragraph(listOf(TextSpan(trimmedLine))))
+                elements.add(
+                    ContentElement.Paragraph(
+                        spans = listOf(TextSpan(trimmedLine)),
+                        anchorId = anchorGenerator.generatedAnchor("paragraph", trimmedLine)
+                    )
+                )
                 isFirstNonEmpty = false
             }
         }

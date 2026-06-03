@@ -21,11 +21,14 @@ class ReadingService(
             userId = userId,
             bookId = bookId,
             progress = dto.progress,
-            currentPage = dto.currentPage,
+            currentPage = dto.chapterIndex ?: dto.currentPage,
             totalPages = dto.totalPages,
             cfiLocation = dto.cfiLocation,
             documentId = dto.documentId,
             deviceId = dto.deviceId,
+            anchorId = dto.anchorId,
+            paragraphIndex = dto.paragraphIndex,
+            scrollOffset = dto.scrollOffset,
             chapterPageIndex = dto.chapterPageIndex,
             chapterTotalPages = dto.chapterTotalPages,
             chapterScrollPercent = dto.chapterScrollPercent
@@ -62,9 +65,13 @@ class ReadingService(
         return bookmarkRepository.create(
             userId = userId,
             bookId = bookId,
-            positionType = dto.positionType,
-            positionValue = dto.positionValue,
+            positionType = dto.positionType ?: if (dto.anchorId != null) "anchor" else "page",
+            positionValue = dto.positionValue ?: buildBookmarkPositionValue(dto),
             documentId = dto.documentId,
+            chapterIndex = dto.chapterIndex,
+            anchorId = dto.anchorId,
+            paragraphIndex = dto.paragraphIndex,
+            scrollOffset = dto.scrollOffset,
             title = dto.title,
             note = dto.note,
             color = dto.color
@@ -83,6 +90,14 @@ class ReadingService(
     
     suspend fun deleteBookmark(userId: Int, bookmarkId: Int): Boolean {
         return bookmarkRepository.delete(bookmarkId, userId)
+    }
+
+    private fun buildBookmarkPositionValue(dto: BookmarkDTO): String {
+        val chapter = dto.chapterIndex ?: 0
+        val fallback = dto.paragraphIndex ?: 0
+        val offset = dto.scrollOffset ?: 0
+        return dto.anchorId?.let { "anchor:$chapter:$it:$fallback:$offset" }
+            ?: "chapter:$chapter:$fallback:$offset"
     }
     
     // ============ 阅读器设置 ============

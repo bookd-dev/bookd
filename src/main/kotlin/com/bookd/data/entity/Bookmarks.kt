@@ -10,6 +10,10 @@ object Bookmarks : IntIdTable("bookmarks") {
     val positionType = varchar("position_type", 20)  // cfi | page | percentage
     val positionValue = varchar("position_value", 500)
     val documentId = varchar("document_id", 100).nullable()
+    val chapterIndex = integer("chapter_index").nullable()
+    val anchorId = varchar("anchor_id", 500).nullable()
+    val paragraphIndex = integer("paragraph_index").nullable()
+    val scrollOffset = integer("scroll_offset").nullable()
     val title = varchar("title", 255).nullable()
     val note = text("note").nullable()
     val color = varchar("color", 20).default("#FFD700")

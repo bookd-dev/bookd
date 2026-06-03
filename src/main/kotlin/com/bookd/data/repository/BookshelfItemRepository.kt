@@ -410,6 +410,10 @@ class BookshelfItemRepository {
             documentId = row[ReadingProgress.documentId],
             deviceId = row[ReadingProgress.deviceId],
             lastReadAt = row[ReadingProgress.lastReadAt],
+            chapterIndex = row[ReadingProgress.currentPage],
+            anchorId = row[ReadingProgress.anchorId],
+            paragraphIndex = row[ReadingProgress.paragraphIndex],
+            scrollOffset = row[ReadingProgress.scrollOffset],
             chapterPageIndex = row[ReadingProgress.chapterPageIndex],
             chapterTotalPages = row[ReadingProgress.chapterTotalPages],
             chapterScrollPercent = row[ReadingProgress.chapterScrollPercent]?.toDouble()

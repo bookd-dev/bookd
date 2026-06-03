@@ -51,6 +51,9 @@ class ReadingProgressRepository {
         cfiLocation: String?,
         documentId: String?,
         deviceId: String?,
+        anchorId: String? = null,
+        paragraphIndex: Int? = null,
+        scrollOffset: Int? = null,
         chapterPageIndex: Int? = null,
         chapterTotalPages: Int? = null,
         chapterScrollPercent: Double? = null
@@ -69,6 +72,9 @@ class ReadingProgressRepository {
                 if (cfiLocation != null) it[ReadingProgress.cfiLocation] = cfiLocation
                 if (documentId != null) it[ReadingProgress.documentId] = documentId
                 if (deviceId != null) it[ReadingProgress.deviceId] = deviceId
+                if (anchorId != null) it[ReadingProgress.anchorId] = anchorId
+                if (paragraphIndex != null) it[ReadingProgress.paragraphIndex] = paragraphIndex
+                if (scrollOffset != null) it[ReadingProgress.scrollOffset] = scrollOffset
                 if (chapterPageIndex != null) it[ReadingProgress.chapterPageIndex] = chapterPageIndex
                 if (chapterTotalPages != null) it[ReadingProgress.chapterTotalPages] = chapterTotalPages
                 if (chapterScrollPercent != null) it[ReadingProgress.chapterScrollPercent] = BigDecimal.valueOf(chapterScrollPercent)
@@ -84,6 +90,9 @@ class ReadingProgressRepository {
                 it[ReadingProgress.cfiLocation] = cfiLocation
                 it[ReadingProgress.documentId] = documentId
                 it[ReadingProgress.deviceId] = deviceId
+                it[ReadingProgress.anchorId] = anchorId
+                it[ReadingProgress.paragraphIndex] = paragraphIndex
+                it[ReadingProgress.scrollOffset] = scrollOffset
                 it[ReadingProgress.chapterPageIndex] = chapterPageIndex
                 it[ReadingProgress.chapterTotalPages] = chapterTotalPages
                 it[ReadingProgress.chapterScrollPercent] = chapterScrollPercent?.let { BigDecimal.valueOf(it) }
@@ -142,6 +151,10 @@ class ReadingProgressRepository {
         documentId = row[ReadingProgress.documentId],
         deviceId = row[ReadingProgress.deviceId],
         lastReadAt = row[ReadingProgress.lastReadAt],
+        chapterIndex = row[ReadingProgress.currentPage],
+        anchorId = row[ReadingProgress.anchorId],
+        paragraphIndex = row[ReadingProgress.paragraphIndex],
+        scrollOffset = row[ReadingProgress.scrollOffset],
         chapterPageIndex = row[ReadingProgress.chapterPageIndex],
         chapterTotalPages = row[ReadingProgress.chapterTotalPages],
         chapterScrollPercent = row[ReadingProgress.chapterScrollPercent]?.toDouble()

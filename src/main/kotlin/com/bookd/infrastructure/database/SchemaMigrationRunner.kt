@@ -65,6 +65,18 @@ class SchemaMigrationRunner(
                 TransactionManager.current().exec("ALTER TABLE ai_providers DROP COLUMN IF EXISTS supports_llm")
                 TransactionManager.current().exec("ALTER TABLE ai_provider_endpoints DROP COLUMN IF EXISTS supports_tts")
                 TransactionManager.current().exec("ALTER TABLE ai_provider_endpoints DROP COLUMN IF EXISTS supports_llm")
+            },
+            SchemaMigration(
+                version = "4",
+                description = "add reader content anchor position fields"
+            ) {
+                TransactionManager.current().exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS anchor_id VARCHAR(500)")
+                TransactionManager.current().exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS paragraph_index INT")
+                TransactionManager.current().exec("ALTER TABLE reading_progress ADD COLUMN IF NOT EXISTS scroll_offset INT")
+                TransactionManager.current().exec("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS chapter_index INT")
+                TransactionManager.current().exec("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS anchor_id VARCHAR(500)")
+                TransactionManager.current().exec("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS paragraph_index INT")
+                TransactionManager.current().exec("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS scroll_offset INT")
             }
         )
     }

@@ -86,14 +86,21 @@ class RepositoryDatabaseBoundaryTest {
             totalPages = 20,
             cfiLocation = null,
             documentId = null,
-            deviceId = null
+            deviceId = null,
+            anchorId = "epub:chapter#p4",
+            paragraphIndex = 7,
+            scrollOffset = 12
         )
         val bookmark = bookmarkRepository.create(
             userId = user.id,
             bookId = book.id,
-            positionType = "page",
-            positionValue = "4",
+            positionType = "anchor",
+            positionValue = "anchor:4:epub:chapter#p4:7:12",
             documentId = null,
+            chapterIndex = 4,
+            anchorId = "epub:chapter#p4",
+            paragraphIndex = 7,
+            scrollOffset = 12,
             title = "Page 4",
             note = null,
             color = "#FFD700"
@@ -115,9 +122,19 @@ class RepositoryDatabaseBoundaryTest {
             pageAnimationType = null
         )
 
-        assertEquals(progress.id, progressRepository.findByUserAndBook(user.id, book.id)?.id)
+        val savedProgress = progressRepository.findByUserAndBook(user.id, book.id)
+        assertEquals(progress.id, savedProgress?.id)
+        assertEquals(4, savedProgress?.chapterIndex)
+        assertEquals("epub:chapter#p4", savedProgress?.anchorId)
+        assertEquals(7, savedProgress?.paragraphIndex)
+        assertEquals(12, savedProgress?.scrollOffset)
         assertEquals(1, progressRepository.getReadingHistory(user.id).size)
-        assertEquals(bookmark.id, bookmarkRepository.findByUserAndBook(user.id, book.id).single().id)
+        val savedBookmark = bookmarkRepository.findByUserAndBook(user.id, book.id).single()
+        assertEquals(bookmark.id, savedBookmark.id)
+        assertEquals(4, savedBookmark.chapterIndex)
+        assertEquals("epub:chapter#p4", savedBookmark.anchorId)
+        assertEquals(7, savedBookmark.paragraphIndex)
+        assertEquals(12, savedBookmark.scrollOffset)
         assertNotNull(bookmarkRepository.update(bookmark.id, user.id, title = "Updated", note = null, color = null))
         assertEquals(settings.id, settingsRepository.findByUser(user.id)?.id)
         assertTrue(bookmarkRepository.delete(bookmark.id, user.id))

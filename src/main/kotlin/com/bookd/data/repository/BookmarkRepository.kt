@@ -39,6 +39,10 @@ class BookmarkRepository {
         positionType: String,
         positionValue: String,
         documentId: String?,
+        chapterIndex: Int?,
+        anchorId: String?,
+        paragraphIndex: Int?,
+        scrollOffset: Int?,
         title: String?,
         note: String?,
         color: String
@@ -51,6 +55,10 @@ class BookmarkRepository {
             it[Bookmarks.positionType] = positionType
             it[Bookmarks.positionValue] = positionValue
             it[Bookmarks.documentId] = documentId
+            it[Bookmarks.chapterIndex] = chapterIndex
+            it[Bookmarks.anchorId] = anchorId
+            it[Bookmarks.paragraphIndex] = paragraphIndex
+            it[Bookmarks.scrollOffset] = scrollOffset
             it[Bookmarks.title] = title
             it[Bookmarks.note] = note
             it[Bookmarks.color] = color
@@ -105,9 +113,30 @@ class BookmarkRepository {
         positionType = row[Bookmarks.positionType],
         positionValue = row[Bookmarks.positionValue],
         documentId = row[Bookmarks.documentId],
+        chapterIndex = row[Bookmarks.chapterIndex] ?: parseLegacyChapterIndex(row[Bookmarks.positionValue]),
+        anchorId = row[Bookmarks.anchorId],
+        paragraphIndex = row[Bookmarks.paragraphIndex] ?: parseLegacyParagraphIndex(row[Bookmarks.positionValue]),
+        scrollOffset = row[Bookmarks.scrollOffset],
         title = row[Bookmarks.title],
         note = row[Bookmarks.note],
         color = row[Bookmarks.color],
         createdAt = row[Bookmarks.createdAt]
     )
+
+    private fun parseLegacyChapterIndex(positionValue: String): Int? {
+        val parts = positionValue.split(':')
+        return when (parts.firstOrNull()) {
+            "anchor", "chapter" -> parts.getOrNull(1)?.toIntOrNull()
+            else -> null
+        }
+    }
+
+    private fun parseLegacyParagraphIndex(positionValue: String): Int? {
+        val parts = positionValue.split(':')
+        return when (parts.firstOrNull()) {
+            "anchor" -> parts.getOrNull(3)?.toIntOrNull()
+            "chapter" -> parts.getOrNull(2)?.toIntOrNull()
+            else -> null
+        }
+    }
 }

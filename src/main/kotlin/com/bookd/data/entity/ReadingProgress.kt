@@ -14,6 +14,9 @@ object ReadingProgress : IntIdTable("reading_progress") {
     val documentId = varchar("document_id", 100).nullable()
     val deviceId = varchar("device_id", 100).nullable()
     val lastReadAt = datetime("last_read_at")
+    val anchorId = varchar("anchor_id", 500).nullable()
+    val paragraphIndex = integer("paragraph_index").nullable()
+    val scrollOffset = integer("scroll_offset").nullable()
     
     // 章节详细进度
     val chapterPageIndex = integer("chapter_page_index").nullable()       // 翻页模式：当前页索引

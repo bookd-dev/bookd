@@ -22,9 +22,9 @@ class SchemaMigrationRunnerTest {
 
         val applied = SchemaMigrationRunner().migrate()
 
-        assertEquals(listOf("1", "2", "3"), applied)
+        assertEquals(listOf("1", "2", "3", "4"), applied)
         transaction {
-            assertEquals(3, SchemaMigrations.selectAll().count())
+            assertEquals(4, SchemaMigrations.selectAll().count())
         }
         val book = BookRepository().create(
             title = "Migrated Book",
@@ -53,10 +53,10 @@ class SchemaMigrationRunnerTest {
 
         val applied = SchemaMigrationRunner().migrate()
 
-        assertEquals(listOf("1", "2", "3"), applied)
+        assertEquals(listOf("1", "2", "3", "4"), applied)
         assertEquals("Existing Book", repository.findById(existingBook.id)?.title)
         transaction {
-            assertEquals(3, SchemaMigrations.selectAll().count())
+            assertEquals(4, SchemaMigrations.selectAll().count())
         }
     }
 
@@ -64,13 +64,13 @@ class SchemaMigrationRunnerTest {
     fun `given migration already recorded when migrating again then no migration is reapplied`() {
         connectDatabase("idempotent")
         val runner = SchemaMigrationRunner()
-        assertEquals(listOf("1", "2", "3"), runner.migrate())
+        assertEquals(listOf("1", "2", "3", "4"), runner.migrate())
 
         val appliedAgain = runner.migrate()
 
         assertTrue(appliedAgain.isEmpty())
         transaction {
-            assertEquals(3, SchemaMigrations.selectAll().count())
+            assertEquals(4, SchemaMigrations.selectAll().count())
         }
     }
 
@@ -97,12 +97,47 @@ class SchemaMigrationRunnerTest {
 
         val applied = SchemaMigrationRunner().migrate()
 
-        assertEquals(listOf("3"), applied)
+        assertEquals(listOf("3", "4"), applied)
         transaction {
             assertFalse(hasColumn("AI_PROVIDERS", "SUPPORTS_TTS"))
             assertFalse(hasColumn("AI_PROVIDERS", "SUPPORTS_LLM"))
             assertFalse(hasColumn("AI_PROVIDER_ENDPOINTS", "SUPPORTS_TTS"))
             assertFalse(hasColumn("AI_PROVIDER_ENDPOINTS", "SUPPORTS_LLM"))
+        }
+    }
+
+    @Test
+    fun `given schema before reader anchor columns when migrating then anchor columns are added`() {
+        connectDatabase("reader_anchor_columns")
+        transaction {
+            SchemaUtils.create(SchemaMigrations, *BackendSchemaTables.all)
+            exec("ALTER TABLE reading_progress DROP COLUMN anchor_id")
+            exec("ALTER TABLE reading_progress DROP COLUMN paragraph_index")
+            exec("ALTER TABLE reading_progress DROP COLUMN scroll_offset")
+            exec("ALTER TABLE bookmarks DROP COLUMN chapter_index")
+            exec("ALTER TABLE bookmarks DROP COLUMN anchor_id")
+            exec("ALTER TABLE bookmarks DROP COLUMN paragraph_index")
+            exec("ALTER TABLE bookmarks DROP COLUMN scroll_offset")
+            listOf("1", "2", "3").forEach { migrationVersion ->
+                SchemaMigrations.insert {
+                    it[version] = migrationVersion
+                    it[description] = "migration $migrationVersion"
+                    it[installedAt] = TimeProvider.now()
+                }
+            }
+        }
+
+        val applied = SchemaMigrationRunner().migrate()
+
+        assertEquals(listOf("4"), applied)
+        transaction {
+            assertTrue(hasColumn("READING_PROGRESS", "ANCHOR_ID"))
+            assertTrue(hasColumn("READING_PROGRESS", "PARAGRAPH_INDEX"))
+            assertTrue(hasColumn("READING_PROGRESS", "SCROLL_OFFSET"))
+            assertTrue(hasColumn("BOOKMARKS", "CHAPTER_INDEX"))
+            assertTrue(hasColumn("BOOKMARKS", "ANCHOR_ID"))
+            assertTrue(hasColumn("BOOKMARKS", "PARAGRAPH_INDEX"))
+            assertTrue(hasColumn("BOOKMARKS", "SCROLL_OFFSET"))
         }
     }
 

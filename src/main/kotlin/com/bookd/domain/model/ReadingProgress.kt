@@ -14,6 +14,10 @@ data class ReadingProgressDTO(
     val documentId: String? = null,
     val deviceId: String? = null,
     val lastReadAt: String? = null,
+    val chapterIndex: Int? = null,
+    val anchorId: String? = null,
+    val paragraphIndex: Int? = null,
+    val scrollOffset: Int? = null,
     // 章节详细进度（用于计算章节阅读百分比）
     val chapterPageIndex: Int? = null,      // 翻页模式：当前页索引
     val chapterTotalPages: Int? = null,     // 翻页模式：章节总页数
@@ -31,6 +35,10 @@ data class ReadingProgressResponse(
     val documentId: String?,
     val deviceId: String?,
     val lastReadAt: LocalDateTime,
+    val chapterIndex: Int = currentPage,
+    val anchorId: String? = null,
+    val paragraphIndex: Int? = null,
+    val scrollOffset: Int? = null,
     // 章节详细进度
     val chapterPageIndex: Int?,
     val chapterTotalPages: Int?,
