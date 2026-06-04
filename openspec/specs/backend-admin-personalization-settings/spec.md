@@ -1,7 +1,7 @@
 # backend-admin-personalization-settings Specification
 
 ## Purpose
-TBD - created by archiving change add-admin-personalization-ai-settings. Update Purpose after archive.
+Define backend admin personalization, AI provider, TTS provider, and capability settings behavior.
 ## Requirements
 ### Requirement: Backend persists administrator personalization settings
 The backend SHALL persist administrator-owned personalization settings using deterministic schema migrations.
@@ -95,4 +95,3 @@ The backend SHALL store AI configuration metadata without calling configured AI 
 - **WHEN** an administrator saves AI provider, endpoint, or model configuration
 - **THEN** the backend SHALL NOT call external TTS or LLM APIs.
 - **AND** it SHALL NOT expose generation, dispatch, retry, or fallback endpoints for AI execution.
-

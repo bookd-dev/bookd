@@ -158,3 +158,61 @@ Backend runtime services SHALL avoid unbounded in-process retention and SHALL cl
 
 - **WHEN** Redis is enabled but the created Redis service fails its startup ping
 - **THEN** the backend SHALL close that Redis service and continue with cache disabled.
+
+### Requirement: Remaining route-facing repositories use the database execution boundary
+Route-facing auth, user, tag, and bookshelf database work SHALL migrate to suspend repository methods backed by `DatabaseExecutor.dbQuery`.
+
+#### Scenario: Auth and user paths are migrated
+- **WHEN** route-facing auth or user-management methods perform database work
+- **THEN** they SHALL use suspend repository methods backed by `DatabaseExecutor.dbQuery`
+- **AND** login, logout, token validation, user deletion, and invite-token semantics SHALL remain compatible.
+
+#### Scenario: Tag paths are migrated
+- **WHEN** route-facing tag methods perform database work
+- **THEN** they SHALL use suspend repository methods backed by `DatabaseExecutor.dbQuery`
+- **AND** duplicate tag association behavior SHALL remain idempotent.
+
+#### Scenario: Bookshelf paths are migrated
+- **WHEN** route-facing bookshelf methods perform database work
+- **THEN** they SHALL use suspend repository methods backed by `DatabaseExecutor.dbQuery`
+- **AND** ownership checks, default shelf behavior, paging, and ordering SHALL remain compatible.
+
+### Requirement: Backend code-quality refactors preserve layering
+Backend code-quality refactors SHALL reduce concrete duplication or complexity while preserving the established route-service-repository layering.
+
+#### Scenario: Route helpers are introduced
+- **WHEN** route parameter or query parsing is moved to shared helpers
+- **THEN** each caller SHALL pass or preserve its existing `ErrorCode`
+- **AND** successful response behavior SHALL remain unchanged.
+
+#### Scenario: Extension package naming is normalized
+- **WHEN** route extension helpers are moved into the normal backend extension package
+- **THEN** all call sites SHALL import the normalized package
+- **AND** public cover URL conversion SHALL preserve existing behavior.
+
+#### Scenario: Content image transformation is extracted
+- **WHEN** image transformation logic is shared between regular images and footnote images
+- **THEN** URL construction, dimensions, aspect ratio, and missing-resource behavior SHALL remain compatible.
+
+#### Scenario: Route response mapping is extracted
+- **WHEN** response mapping helpers are introduced
+- **THEN** routes SHALL continue to parse transport input and delegate business work to services
+- **AND** helpers SHALL NOT introduce new business rules.
+
+### Requirement: Admin image migration data access is repository-owned
+Image-dimension migration database access SHALL be delegated to a repository while the service coordinates image probing and result counting.
+
+#### Scenario: Resource dimension candidates are migrated
+- **WHEN** resource image candidates are loaded or updated
+- **THEN** the repository SHALL execute database work through `DatabaseExecutor.dbQuery`
+- **AND** image file probing SHALL happen outside the database transaction.
+
+#### Scenario: Cover dimension candidates are migrated
+- **WHEN** book cover candidates are loaded or updated
+- **THEN** the repository SHALL execute database work through `DatabaseExecutor.dbQuery`
+- **AND** legacy `/covers/` and `/book_images/` path handling SHALL preserve existing behavior.
+
+#### Scenario: Admin route executes migration
+- **WHEN** an administrator calls an image-dimension migration endpoint
+- **THEN** the route SHALL await the migration service result
+- **AND** it SHALL preserve the current success response fields.
