@@ -361,7 +361,18 @@ class BookContentService(
                 publishDate = null,
                 description = book.description,
                 isbn = book.isbn
-            )
+            ),
+            documents = allDocuments.map { document ->
+                BookManifestDocument(
+                    index = document.index,
+                    href = document.href,
+                    title = document.title,
+                    inToc = document.inToc,
+                    anchorPrefix = document.href?.let { href ->
+                        ContentAnchorGenerator.sourceAnchorPrefix(book.format.lowercase(), href)
+                    }
+                )
+            }
         )
     }
     

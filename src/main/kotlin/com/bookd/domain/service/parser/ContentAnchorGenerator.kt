@@ -11,7 +11,7 @@ class ContentAnchorGenerator(
 
     fun sourceAnchor(sourceId: String?): String? {
         val normalized = sourceId?.trim()?.trimStart('#')?.takeIf { it.isNotBlank() } ?: return null
-        return "$sourceKind:$chapterKey#${sanitize(normalized)}"
+        return "$sourceKind:$chapterKey#${sanitizeSourceId(normalized)}"
     }
 
     fun generatedAnchor(elementType: String, fingerprint: String): String {
@@ -27,24 +27,35 @@ class ContentAnchorGenerator(
         return sourceAnchor(sourceId) ?: generatedAnchor(elementType, fingerprint)
     }
 
-    private fun sanitize(value: String): String {
-        return value
-            .lowercase()
-            .replace(Regex("[^a-z0-9._:-]+"), "-")
-            .trim('-')
-            .ifBlank { shortHash(value) }
-    }
+    companion object {
+        fun sourceAnchorPrefix(sourceKind: String, chapterIdentity: String): String {
+            return "$sourceKind:${shortHash(chapterIdentity)}#"
+        }
 
-    private fun normalize(value: String): String {
-        return value
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .lowercase()
-    }
+        fun sourceAnchorFor(sourceKind: String, chapterIdentity: String, sourceId: String?): String? {
+            val normalized = sourceId?.trim()?.trimStart('#')?.takeIf { it.isNotBlank() } ?: return null
+            return "${sourceAnchorPrefix(sourceKind, chapterIdentity)}${sanitizeSourceId(normalized)}"
+        }
 
-    private fun shortHash(value: String): String {
-        val bytes = MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray(Charsets.UTF_8))
-        return bytes.take(8).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+        fun sanitizeSourceId(value: String): String {
+            return value
+                .lowercase()
+                .replace(Regex("[^a-z0-9._:-]+"), "-")
+                .trim('-')
+                .ifBlank { shortHash(value) }
+        }
+
+        private fun normalize(value: String): String {
+            return value
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .lowercase()
+        }
+
+        private fun shortHash(value: String): String {
+            val bytes = MessageDigest.getInstance("SHA-256")
+                .digest(value.toByteArray(Charsets.UTF_8))
+            return bytes.take(8).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+        }
     }
 }

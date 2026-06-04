@@ -20,6 +20,23 @@ The backend SHALL provide a stable `anchorId` for each renderable `ContentElemen
 - **THEN** the backend SHALL still decode and serve the content without failing
 - **AND** newly parsed content SHALL include anchors.
 
+### Requirement: Backend exposes EPUB document metadata for internal link resolution
+The backend SHALL include EPUB spine document metadata in the book manifest so clients can resolve in-book HTML document links without guessing from TOC titles.
+
+#### Scenario: Client loads an EPUB manifest
+- **WHEN** the backend returns a book manifest for parsed EPUB content
+- **THEN** the manifest SHALL include a `documents` list in spine reading order
+- **AND** each document entry SHALL expose its chapter index, original href, title when available, TOC membership, and source anchor prefix when an href exists.
+
+#### Scenario: Client resolves an EPUB href fragment
+- **WHEN** a document entry has an href
+- **THEN** its source anchor prefix SHALL be deterministic from the book format and document href
+- **AND** clients SHALL be able to combine the prefix with a sanitized source fragment to address anchors generated from EPUB HTML ids.
+
+#### Scenario: Existing clients ignore document metadata
+- **WHEN** a client does not understand the manifest `documents` field
+- **THEN** existing manifest fields such as `toc`, `spine`, and `metadata` SHALL remain available and compatible.
+
 ### Requirement: Backend supports anchor-aware reader progress
 The backend SHALL accept and return anchor-aware reader progress while preserving existing index-based progress fields.
 

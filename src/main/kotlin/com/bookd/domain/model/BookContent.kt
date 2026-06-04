@@ -34,7 +34,17 @@ data class BookManifest(
     val totalChapters: Int,
     val toc: List<TocItem>,
     val spine: List<Int>,
-    val metadata: BookMetadata?
+    val metadata: BookMetadata?,
+    val documents: List<BookManifestDocument> = emptyList()
+)
+
+@Serializable
+data class BookManifestDocument(
+    val index: Int,
+    val href: String?,
+    val title: String? = null,
+    val inToc: Boolean = false,
+    val anchorPrefix: String? = null
 )
 
 @OptIn(ExperimentalSerializationApi::class)

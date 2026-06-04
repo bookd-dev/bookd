@@ -174,6 +174,33 @@ class BookContentServiceTest {
     }
 
     @Test
+    fun `given epub documents when loading manifest then document hrefs and anchor prefixes are exposed`() {
+        coEvery { bookRepository.findByIdAsync(7) } returns Book(
+            id = 7,
+            title = "Linked EPUB",
+            author = "Author",
+            format = "epub",
+            filePath = "/books/linked.epub",
+            fileSize = 2048L,
+            chaptersParsed = true
+        )
+        coEvery { documentRepository.findByBookIdAsync(7) } returns listOf(
+            createDocument(id = 70, index = 0, title = "目录", href = "Text/nav.xhtml"),
+            createDocument(id = 71, index = 1, title = "第一章", href = "Text/Chapter_1.xhtml"),
+        )
+
+        val result = runBlocking { bookContentService.getBookManifest(7) }
+
+        requireNotNull(result)
+        assertEquals(listOf(0, 1), result.spine)
+        assertEquals(2, result.documents.size)
+        assertEquals("Text/nav.xhtml", result.documents[0].href)
+        assertEquals("Text/Chapter_1.xhtml", result.documents[1].href)
+        assertTrue(result.documents[1].anchorPrefix?.startsWith("epub:") == true)
+        assertTrue(result.documents[1].anchorPrefix?.endsWith("#") == true)
+    }
+
+    @Test
     fun `given missing file when parsing on demand then parse fails and parsed cache is not written`() {
         val cacheService = mockk<BookCacheService>(relaxed = true)
         val service = BookContentService(
@@ -253,10 +280,11 @@ class BookContentServiceTest {
         return this!!.elements[position] as ContentElement.Footnote
     }
 
-    private fun createDocument(id: Int, index: Int, title: String): BookDocument = BookDocument(
+    private fun createDocument(id: Int, index: Int, title: String, href: String? = null): BookDocument = BookDocument(
         id = id,
         bookId = 1,
         index = index,
+        href = href,
         inToc = true,
         title = title,
         wordCount = 100,
