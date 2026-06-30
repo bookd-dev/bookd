@@ -39,6 +39,10 @@ class BookService(
     suspend fun getBooksBySourceIdPaged(sourceId: Int, limit: Int, offset: Long): List<Book> {
         return enrichBooksWithStats(bookRepository.findBySourceIdPagedAsync(sourceId, limit, offset))
     }
+
+    suspend fun searchBooks(query: String, limit: Int, offset: Long, sourceId: Int? = null): List<Book> {
+        return enrichBooksWithStats(bookRepository.searchAsync(query, limit, offset, sourceId))
+    }
     
     suspend fun getTotalCount(): Long {
         return bookRepository.countAsync()
@@ -46,6 +50,10 @@ class BookService(
     
     suspend fun getCountBySourceId(sourceId: Int): Long {
         return bookRepository.countBySourceIdAsync(sourceId)
+    }
+
+    suspend fun getSearchCount(query: String, sourceId: Int? = null): Long {
+        return bookRepository.countSearchResultsAsync(query, sourceId)
     }
 
     suspend fun getRawBookById(id: Int): Book? {

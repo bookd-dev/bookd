@@ -105,6 +105,28 @@ class BookServiceTest {
     }
 
     @Test
+    fun `given search results missing statistics when searching then document statistics are enriched`() {
+        val book = createBook(id = 5, title = "Searchable Book")
+        coEvery { bookRepository.searchAsync("search", 20, 0, null) } returns listOf(book)
+        coEvery { bookRepository.countSearchResultsAsync("search", null) } returns 1
+        coEvery { documentRepository.findStatsByBookIds(listOf(5)) } returns mapOf(
+            5 to BookDocumentStats(chapterCount = 3, totalWordCount = 900, totalImageCount = 2)
+        )
+
+        val result = runBlocking { bookService.searchBooks("search", 20, 0) }
+        val count = runBlocking { bookService.getSearchCount("search") }
+
+        assertEquals(1, result.size)
+        assertEquals(3, result[0].chapterCount)
+        assertEquals(900, result[0].totalWordCount)
+        assertEquals(2, result[0].totalImageCount)
+        assertEquals(1, count)
+        coVerify(exactly = 1) { bookRepository.searchAsync("search", 20, 0, null) }
+        coVerify(exactly = 1) { bookRepository.countSearchResultsAsync("search", null) }
+        coVerify(exactly = 1) { documentRepository.findStatsByBookIds(listOf(5)) }
+    }
+
+    @Test
     fun `given valid cover upload when saving then storage dimensions and book cover are updated`() {
         val imageStorage = mockk<BookImageStorage>()
         val service = BookService(bookRepository, documentRepository, imageStorage)

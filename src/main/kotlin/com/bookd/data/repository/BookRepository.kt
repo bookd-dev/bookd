@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import java.util.Locale
 
 class BookRepository {
     fun count(): Long = transaction {
@@ -24,6 +25,12 @@ class BookRepository {
 
     suspend fun countBySourceIdAsync(sourceId: Int): Long = dbQuery {
         Books.selectAll().where { Books.sourceId eq sourceId }.count()
+    }
+
+    suspend fun countSearchResultsAsync(query: String, sourceId: Int? = null): Long = dbQuery {
+        Books.selectAll()
+            .where { searchCondition(query, sourceId) }
+            .count()
     }
     
     fun findAll(limit: Int = 100, offset: Long = 0): List<Book> = transaction {
@@ -122,6 +129,19 @@ class BookRepository {
         Books.selectAll()
             .where { Books.sourceId eq sourceId }
             .orderBy(Books.title to SortOrder.ASC)
+            .limit(limit).offset(offset)
+            .map { toBook(it) }
+    }
+
+    suspend fun searchAsync(
+        query: String,
+        limit: Int,
+        offset: Long,
+        sourceId: Int? = null
+    ): List<Book> = dbQuery {
+        Books.selectAll()
+            .where { searchCondition(query, sourceId) }
+            .orderBy(Books.title to SortOrder.ASC, Books.id to SortOrder.ASC)
             .limit(limit).offset(offset)
             .map { toBook(it) }
     }
@@ -446,6 +466,21 @@ class BookRepository {
             it[parseStatus] = "pending"
             it[parseProgress] = 0
             it[updatedAt] = now
+        }
+    }
+
+    private fun searchCondition(query: String, sourceId: Int?): Op<Boolean> {
+        val pattern = "%${query.trim().lowercase(Locale.ROOT)}%"
+        val metadataCondition =
+            LowerCase(Books.title) like pattern or
+                (LowerCase(Books.author) like pattern) or
+                (LowerCase(Books.isbn) like pattern) or
+                (LowerCase(Books.publisher) like pattern)
+
+        return if (sourceId != null) {
+            (Books.sourceId eq sourceId) and metadataCondition
+        } else {
+            metadataCondition
         }
     }
 }

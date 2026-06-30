@@ -27,6 +27,36 @@ data class AppBooksResponse(
 
 fun Route.appRoutes() {
     route("/api/app") {
+        // 搜索书籍（支持全局或指定书源）
+        get("/books/search") {
+            call.getAuthenticatedUser() ?: return@get
+            val bookService = get<BookService>(BookService::class.java)
+            val query = call.request.queryParameters["q"]?.trim()
+
+            if (query.isNullOrBlank()) {
+                call.respondError(ErrorCode.BOOK_INVALID_PARAMS)
+                return@get
+            }
+
+            val limit = call.intQueryParameter("limit", 20).coerceIn(1, 100)
+            val offset = call.longQueryParameter("offset", 0).coerceAtLeast(0)
+            val sourceId = call.optionalIntQueryParameter("sourceId")
+            val baseUrl = call.buildBaseUrl()
+
+            val books = bookService.searchBooks(query, limit, offset, sourceId)
+                .map { it.withPublicCoverUrl(baseUrl) }
+            val total = bookService.getSearchCount(query, sourceId).toInt()
+            val hasMore = offset + books.size < total
+
+            call.respondSuccess(AppBooksResponse(
+                books = books,
+                total = total,
+                limit = limit,
+                offset = offset,
+                hasMore = hasMore
+            ))
+        }
+
         // 获取书籍列表（支持分页）
         get("/books") {
             call.getAuthenticatedUser() ?: return@get
