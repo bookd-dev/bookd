@@ -72,12 +72,16 @@ class ReadingProgressRepository {
                 if (cfiLocation != null) it[ReadingProgress.cfiLocation] = cfiLocation
                 if (documentId != null) it[ReadingProgress.documentId] = documentId
                 if (deviceId != null) it[ReadingProgress.deviceId] = deviceId
-                if (anchorId != null) it[ReadingProgress.anchorId] = anchorId
-                if (paragraphIndex != null) it[ReadingProgress.paragraphIndex] = paragraphIndex
-                if (scrollOffset != null) it[ReadingProgress.scrollOffset] = scrollOffset
-                if (chapterPageIndex != null) it[ReadingProgress.chapterPageIndex] = chapterPageIndex
-                if (chapterTotalPages != null) it[ReadingProgress.chapterTotalPages] = chapterTotalPages
-                if (chapterScrollPercent != null) it[ReadingProgress.chapterScrollPercent] = BigDecimal.valueOf(chapterScrollPercent)
+                // PUT 表示完整阅读位置快照。可空位置字段也必须覆盖，避免切换章节后
+                // 将上一章节的锚点、偏移或分页信息残留到新位置。
+                it[ReadingProgress.anchorId] = anchorId
+                it[ReadingProgress.paragraphIndex] = paragraphIndex
+                it[ReadingProgress.scrollOffset] = scrollOffset
+                it[ReadingProgress.chapterPageIndex] = chapterPageIndex
+                it[ReadingProgress.chapterTotalPages] = chapterTotalPages
+                it[ReadingProgress.chapterScrollPercent] = chapterScrollPercent?.let { value ->
+                    BigDecimal.valueOf(value)
+                }
                 it[lastReadAt] = now
             }
         } else {
