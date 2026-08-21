@@ -75,7 +75,7 @@ class TxtParser(
      */
     suspend fun parseStructure(file: File): TxtStructure? {
         try {
-            val fullText = file.readText()
+            val fullText = TxtFileDecoder.read(file)
             val chapters = detectChapters(fullText)
             
             logger.info("Detected ${chapters.size} chapters in TXT file")
@@ -92,16 +92,13 @@ class TxtParser(
     private suspend fun detectChapters(text: String): List<ChapterInfo> {
         val chapterPatterns = getChapterPatterns()
         val chapters = mutableListOf<ChapterInfo>()
-        val lines = text.lines()
+        val lines = splitLinesWithOffsets(text)
         
         var currentChapterStart = 0
         var chapterIndex = 0
         var lastChapterLine = 0
-        var currentPosition = 0 // 追踪当前字符位置
-        
         lines.forEachIndexed { lineIndex, line ->
-            val trimmedLine = line.trim()
-            val lineLength = line.length + 1 // +1 for newline
+            val trimmedLine = line.text.trim()
             
             // 跳过空行
             if (trimmedLine.isNotEmpty()) {
@@ -113,15 +110,15 @@ class TxtParser(
                             chapters.add(
                                 ChapterInfo(
                                     index = chapterIndex - 1,
-                                    title = lines[lastChapterLine].trim(),
+                                    title = lines[lastChapterLine].text.trim(),
                                     startPos = currentChapterStart,
-                                    endPos = currentPosition
+                                    endPos = line.startOffset
                                 )
                             )
                         }
                         
                         // 开始新章节
-                        currentChapterStart = currentPosition
+                        currentChapterStart = line.startOffset
                         lastChapterLine = lineIndex
                         chapterIndex++
                         
@@ -131,7 +128,6 @@ class TxtParser(
                 }
             }
             
-            currentPosition += lineLength
         }
         
         // 添加最后一章或整本书作为一章
@@ -139,7 +135,7 @@ class TxtParser(
             chapters.add(
                 ChapterInfo(
                     index = chapterIndex - 1,
-                    title = lines[lastChapterLine].trim(),
+                    title = lines[lastChapterLine].text.trim(),
                     startPos = currentChapterStart,
                     endPos = text.length
                 )
@@ -158,6 +154,29 @@ class TxtParser(
         
         return chapters
     }
+
+    /**
+     * 保留原始换行符所占的字符位置，避免 CRLF/CR 文本的章节区间逐行漂移。
+     */
+    private fun splitLinesWithOffsets(text: String): List<TextLine> {
+        val lines = mutableListOf<TextLine>()
+        var lineStart = 0
+        var index = 0
+        while (index < text.length) {
+            val char = text[index]
+            if (char == '\r' || char == '\n') {
+                lines.add(TextLine(text.substring(lineStart, index), lineStart))
+                index += if (char == '\r' && index + 1 < text.length && text[index + 1] == '\n') 2 else 1
+                lineStart = index
+            } else {
+                index++
+            }
+        }
+        lines.add(TextLine(text.substring(lineStart), lineStart))
+        return lines
+    }
+
+    private data class TextLine(val text: String, val startOffset: Int)
     
     /**
      * 提取章节内容

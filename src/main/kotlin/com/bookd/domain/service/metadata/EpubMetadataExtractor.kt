@@ -1,5 +1,7 @@
 package com.bookd.domain.service.metadata
 
+import com.bookd.domain.service.parser.epub.EpubArchiveSafety
+import com.bookd.domain.service.parser.epub.SecureXml
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Document
 import java.io.File
@@ -8,10 +10,8 @@ import java.io.InputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.imageio.ImageIO
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * EPUB 元数据提取器
@@ -27,15 +27,14 @@ class EpubMetadataExtractor internal constructor(
     override fun extractMetadata(file: File): BookMetadata? {
         return try {
             ZipFile(file).use { zipFile ->
+                EpubArchiveSafety.validate(zipFile)
                 // Find container.xml to locate content.opf
                 val containerEntry = zipFile.getEntry("META-INF/container.xml")
                 var opfPath = "EPUB/content.opf" // Default path
                 
                 if (containerEntry != null) {
-                    zipFile.getInputStream(containerEntry).use { stream ->
-                        val factory = DocumentBuilderFactory.newInstance()
-                        factory.isNamespaceAware = true
-                        val doc = factory.newDocumentBuilder().parse(stream)
+                    EpubArchiveSafety.readBytes(zipFile, containerEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+                        val doc = SecureXml.parse(stream)
                         val rootfiles = doc.getElementsByTagName("rootfile")
                         if (rootfiles.length > 0) {
                             val fullPath = rootfiles.item(0).attributes.getNamedItem("full-path")?.nodeValue
@@ -49,10 +48,8 @@ class EpubMetadataExtractor internal constructor(
                 // Parse content.opf
                 val opfEntry = zipFile.getEntry(opfPath) ?: return null
                 
-                zipFile.getInputStream(opfEntry).use { stream ->
-                    val factory = DocumentBuilderFactory.newInstance()
-                    factory.isNamespaceAware = true
-                    val doc = factory.newDocumentBuilder().parse(stream)
+                EpubArchiveSafety.readBytes(zipFile, opfEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+                    val doc = SecureXml.parse(stream)
                     
                     BookMetadata(
                         title = extractElement(doc, "http://purl.org/dc/elements/1.1/", "title", "dc:title"),
@@ -72,6 +69,7 @@ class EpubMetadataExtractor internal constructor(
     override fun extractCover(file: File, bookId: Int): String? {
         return try {
             ZipFile(file).use { zipFile ->
+                EpubArchiveSafety.validate(zipFile)
                 // 1. 先尝试从 OPF 的 manifest 中查找封面定义 (标准方式)
                 val coverFromOpf = findCoverFromOpf(zipFile)
                 if (coverFromOpf != null) {
@@ -112,10 +110,8 @@ class EpubMetadataExtractor internal constructor(
             var opfPath = "EPUB/content.opf"
             
             if (containerEntry != null) {
-                zipFile.getInputStream(containerEntry).use { stream ->
-                    val factory = DocumentBuilderFactory.newInstance()
-                    factory.isNamespaceAware = true
-                    val doc = factory.newDocumentBuilder().parse(stream)
+                EpubArchiveSafety.readBytes(zipFile, containerEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+                    val doc = SecureXml.parse(stream)
                     val rootfiles = doc.getElementsByTagName("rootfile")
                     if (rootfiles.length > 0) {
                         opfPath = rootfiles.item(0).attributes.getNamedItem("full-path")?.nodeValue ?: opfPath
@@ -127,10 +123,8 @@ class EpubMetadataExtractor internal constructor(
             val opfBaseDir = opfPath.substringBeforeLast("/", "")
             
             // 解析 OPF 查找封面
-            zipFile.getInputStream(opfEntry).use { stream ->
-                val factory = DocumentBuilderFactory.newInstance()
-                factory.isNamespaceAware = true
-                val doc = factory.newDocumentBuilder().parse(stream)
+            EpubArchiveSafety.readBytes(zipFile, opfEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+                val doc = SecureXml.parse(stream)
                 
                 // 方法1: 查找 metadata 中的 cover meta 标签
                 val metaTags = doc.getElementsByTagName("meta")
@@ -195,8 +189,10 @@ class EpubMetadataExtractor internal constructor(
             val entry = zipFile.getEntry(entryPath) ?: return null
             
             val extension = entryPath.substringAfterLast(".").lowercase()
+            if (extension !in SUPPORTED_COVER_EXTENSIONS) return null
             
-            val coverPath = zipFile.getInputStream(entry).use { input ->
+            val coverBytes = EpubArchiveSafety.readBytes(zipFile, entry, EpubArchiveSafety.MAX_IMAGE_BYTES)
+            val coverPath = coverBytes.inputStream().use { input ->
                 coverStorage.saveCover(bookId, extension, input)
             }
             
@@ -249,6 +245,10 @@ class EpubMetadataExtractor internal constructor(
         
         logger.debug("Extracted ${tags.size} tags from EPUB: ${tags.joinToString(", ")}")
         return tags.distinct()
+    }
+
+    private companion object {
+        val SUPPORTED_COVER_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
     }
 }
 

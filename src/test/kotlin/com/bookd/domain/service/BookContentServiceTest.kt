@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class BookContentServiceTest {
 
@@ -233,6 +234,56 @@ class BookContentServiceTest {
         coVerify(exactly = 1) { bookRepository.updateParseStatusAsync(11, "failed", 0) }
         verify(exactly = 0) { cacheService.setBookParsed(11, true) }
         verify(exactly = 1) { cacheService.releaseParseLock(11) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given one chapter fails when parsing on demand then no partial result is published`() {
+        val file = File.createTempFile("bookd-partial-", ".txt").apply {
+            writeText("Chapter 1\nfirst\nChapter 2\nsecond")
+            deleteOnExit()
+        }
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val service = BookContentService(
+            bookRepository = bookRepository,
+            documentRepository = documentRepository,
+            readingProgressRepository = readingProgressRepository,
+            txtParser = txtParser,
+            imageStorage = imageStorage,
+            cacheService = cacheService
+        )
+        val chapters = listOf(
+            TxtParser.ChapterInfo(index = 0, title = "Chapter 1", startPos = 0, endPos = 16),
+            TxtParser.ChapterInfo(index = 1, title = "Chapter 2", startPos = 16, endPos = 32)
+        )
+        val structure = TxtParser.TxtStructure(chapters, file.readText())
+
+        every { cacheService.isBookParsed(12) } returns null
+        every { cacheService.tryAcquireParseLock(12) } returns true
+        coEvery { bookRepository.findByIdAsync(12) } returns Book(
+            id = 12,
+            title = "Partial",
+            author = null,
+            format = "txt",
+            filePath = file.path,
+            fileSize = file.length(),
+            chaptersParsed = false
+        )
+        coEvery { bookRepository.updateParseStatusAsync(12, "parsing", 0) } returns 1
+        coEvery { bookRepository.updateParseStatusAsync(12, "failed", 0) } returns 1
+        coEvery { txtParser.parseStructure(file) } returns structure
+        every { txtParser.extractChapterContent(structure.fullText, chapters[0]) } returns listOf(
+            ContentElement.Paragraph(listOf(TextSpan("first")))
+        )
+        every { txtParser.extractChapterContent(structure.fullText, chapters[1]) } throws
+            IllegalStateException("broken chapter")
+
+        val result = runBlocking { service.parseOnDemand(12, file.path) }
+
+        assertEquals(false, result)
+        coVerify(exactly = 1) { bookRepository.updateParseStatusAsync(12, "failed", 0) }
+        coVerify(exactly = 0) { documentRepository.replaceParsedBook(any(), any(), any()) }
+        verify(exactly = 0) { cacheService.setBookParsed(12, true) }
         service.shutdown()
     }
 

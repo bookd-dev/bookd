@@ -187,9 +187,17 @@ class BookImageStorage(
      */
     fun extractImageDimensions(imageData: ByteArray): Pair<Int, Int>? {
         return try {
-            val inputStream = imageData.inputStream()
-            val image: BufferedImage = ImageIO.read(inputStream) ?: return null
-            Pair(image.width, image.height)
+            ImageIO.createImageInputStream(imageData.inputStream()).use { input ->
+                val readers = ImageIO.getImageReaders(input)
+                if (!readers.hasNext()) return null
+                val reader = readers.next()
+                try {
+                    reader.input = input
+                    Pair(reader.getWidth(0), reader.getHeight(0))
+                } finally {
+                    reader.dispose()
+                }
+            }
         } catch (e: Exception) {
             logger.debug("Failed to extract image dimensions (possibly SVG or unsupported format)", e)
             null

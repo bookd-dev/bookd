@@ -3,8 +3,8 @@ package com.bookd.domain.service
 import com.bookd.data.repository.BookDocumentRepository
 import com.bookd.data.repository.BookDocumentDraft
 import com.bookd.data.repository.BookRepository
-import com.bookd.data.repository.DocumentContentDraft
 import com.bookd.data.repository.DocumentResourceDraft
+import com.bookd.data.repository.ParsedDocumentDraft
 import com.bookd.data.repository.ReadingProgressRepository
 import com.bookd.data.repository.ResourceInfo
 import com.bookd.domain.model.*
@@ -200,102 +200,82 @@ class BookContentService(
             return ContentParseResult.Failed("no_chapters")
         }
         
-        // 2. 清理旧数据并创建文档
-        try {
-            logger.info("Replacing ${structure.chapters.size} documents for book ID: $bookId")
-            val documentsByIndex = documentRepository.replaceDocumentsForBook(
-                bookId = bookId,
-                documents = structure.chapters.map { chapterInfo ->
-                    BookDocumentDraft(
-                        index = chapterInfo.index,
-                        href = chapterInfo.href,
-                        inToc = chapterInfo.inToc,
-                        title = chapterInfo.title,
-                        level = chapterInfo.level
-                    )
-                }
-            )
-            logger.info("Successfully created ${documentsByIndex.size} documents for book ID: $bookId")
-            
-            // 3. 解析并保存文档内容（在事务外，避免长事务）
-            val contentDrafts = mutableListOf<DocumentContentDraft>()
-            structure.chapters.forEach { chapterInfo ->
-                val document = documentsByIndex[chapterInfo.index]
-                if (document == null) {
-                    logger.error("Document not found after creation: bookId=$bookId, index=${chapterInfo.index}")
-                    return@forEach
-                }
-                parseDocumentContent(file, parser, chapterInfo, document.id)?.let { contentDrafts.add(it) }
-            }
-
-            if (contentDrafts.isEmpty()) {
-                logger.error("No chapter content parsed for book ID: $bookId")
-                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
-                return ContentParseResult.Failed("no_chapter_content")
-            }
-
-            documentRepository.replaceDocumentContentsAndStats(contentDrafts)
-            
-            // 4. 保存资源文件（如果有）
-            if (structure.resources.isNotEmpty()) {
-                saveResources(bookId, structure.resources)
-            }
-            
-            // 5. 更新书籍解析状态
-            bookRepository.updateChaptersParsedAsync(
-                id = bookId,
-                chaptersCount = structure.chapters.size,
-                tocChapterCount = structure.chapters.count { it.inToc },
-                totalWordCount = contentDrafts.sumOf { it.wordCount },
-                totalImageCount = contentDrafts.sumOf { it.imageCount }
-            )
-            
-            logger.info("Parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
-            return ContentParseResult.Success(documentCount = documentsByIndex.size)
-        } catch (e: Exception) {
-            logger.error("Failed to parse book content for book ID: $bookId", e)
+        val chapterIndexes = structure.chapters.map { it.index }
+        if (chapterIndexes.any { it < 0 } || chapterIndexes.distinct().size != chapterIndexes.size) {
+            logger.error("Parsed book structure has invalid or duplicate chapter indexes for book ID: $bookId")
             bookRepository.updateParseStatusAsync(bookId, "failed", 0)
-            return ContentParseResult.Failed("save_failed")
+            return ContentParseResult.Failed("invalid_chapter_indexes")
         }
-    }
-    
-    /**
-     * 解析并保存单个文档内容
-     */
-    private suspend fun parseDocumentContent(
-        file: File,
-        parser: BookParser,
-        chapterInfo: BookParser.ChapterInfo,
-        documentId: Int
-    ): DocumentContentDraft? {
-        return try {
-            // 解析文档内容
-            val elements = parser.parseChapterContent(file, chapterInfo)
-            
-            // 统计字数和图片数
+
+        // 先完整解析所有章节，任何一个 spine 文档失败都不得发布半成品。
+        val contentsByIndex = try {
+            parser.parseChapterContents(file, structure.chapters)
+        } catch (e: Exception) {
+            logger.error("Failed to parse one or more chapters for book ID: $bookId", e)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("chapter_parse_failed")
+        }
+
+        if (contentsByIndex.keys != chapterIndexes.toSet()) {
+            logger.error("Parsed chapter content set does not match structure for book ID: $bookId")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("incomplete_chapter_content")
+        }
+
+        val parsedDocuments = structure.chapters.map { chapter ->
+            val elements = requireNotNull(contentsByIndex[chapter.index])
             val wordCount = parser.countWords(elements)
             val imageCount = parser.countImages(elements)
-            
-            logger.debug("Parsed document ${chapterInfo.index}: ${chapterInfo.title} ($wordCount words, $imageCount images)")
-            DocumentContentDraft(
-                documentId = documentId,
+            logger.debug("Parsed document ${chapter.index}: ${chapter.title} ($wordCount words, $imageCount images)")
+            ParsedDocumentDraft(
+                document = BookDocumentDraft(
+                    index = chapter.index,
+                    href = chapter.href,
+                    inToc = chapter.inToc,
+                    title = chapter.title,
+                    level = chapter.level
+                ),
                 elements = elements,
                 wordCount = wordCount,
                 imageCount = imageCount
             )
+        }
+
+        if (parsedDocuments.all { it.elements.isEmpty() }) {
+            logger.error("No chapter content parsed for book ID: $bookId")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("no_chapter_content")
+        }
+
+        val resourceDrafts = try {
+            prepareResources(bookId, file, parser)
         } catch (e: Exception) {
-            logger.error("Failed to parse document ${chapterInfo.index}", e)
-            null
+            logger.error("Failed to prepare resources for book ID: $bookId", e)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("resource_save_failed")
+        }
+
+        return try {
+            val documentCount = documentRepository.replaceParsedBook(bookId, parsedDocuments, resourceDrafts)
+            logger.info("Parsing completed for book ID: $bookId - $documentCount chapters")
+            ContentParseResult.Success(documentCount = documentCount)
+        } catch (e: Exception) {
+            logger.error("Failed to atomically publish parsed content for book ID: $bookId", e)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            ContentParseResult.Failed("save_failed")
         }
     }
     
     /**
      * 保存资源文件（使用新的图片存储服务）
      */
-    private fun saveResources(bookId: Int, resources: Map<String, ByteArray>) {
-        val resourceDrafts = mutableListOf<DocumentResourceDraft>()
-        resources.forEach { (path, bytes) ->
-            try {
+    private suspend fun prepareResources(
+        bookId: Int,
+        file: File,
+        parser: BookParser
+    ): List<DocumentResourceDraft> {
+        val resources = mutableListOf<DocumentResourceDraft>()
+        parser.forEachResource(file) { path, bytes ->
                 // 使用 BookImageStorage 保存图片
                 val storedPath = imageStorage.saveImage(bookId, path, bytes)
                 val extension = path.substringAfterLast(".")
@@ -305,8 +285,7 @@ class BookContentService(
                 val dimensions = imageStorage.extractImageDimensions(bytes)
                 val (width, height) = dimensions ?: (null to null)
                 
-                resourceDrafts.add(
-                    DocumentResourceDraft(
+                resources += DocumentResourceDraft(
                     bookId = bookId,
                     path = path,
                     storedPath = storedPath,  // 存储相对路径，如 "14/abc123.jpg"
@@ -314,7 +293,6 @@ class BookContentService(
                     size = bytes.size.toLong(),
                     width = width,
                     height = height
-                    )
                 )
                 
                 if (width != null && height != null) {
@@ -322,11 +300,8 @@ class BookContentService(
                 } else {
                     logger.debug("Saved resource: $path -> $storedPath (no dimensions)")
                 }
-            } catch (e: Exception) {
-                logger.error("Failed to save resource: $path", e)
-            }
         }
-        documentRepository.saveResources(resourceDrafts)
+        return resources
     }
     
     /**

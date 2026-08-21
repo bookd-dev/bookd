@@ -50,7 +50,11 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Files
+import java.lang.management.ManagementFactory
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.LockSupport
 import kotlin.math.roundToLong
 import kotlin.time.measureTime
 
@@ -142,12 +146,17 @@ class LocalEbookBenchmarkTest {
             val allBooks = bookRepository.findAll(limit = files.size, offset = 0)
             val parseCandidates = allBooks.take(parseLimit.coerceAtMost(allBooks.size))
             var parsedCount = 0
-            val parseTime = measureTime {
-                parseCandidates.forEach { book ->
-                    if (contentService.parseOnDemand(book.id, book.filePath)) {
-                        parsedCount++
+            val heapMonitor = PeakHeapMonitor()
+            val parseTime = try {
+                measureTime {
+                    parseCandidates.forEach { book ->
+                        if (contentService.parseOnDemand(book.id, book.filePath)) {
+                            parsedCount++
+                        }
                     }
                 }
+            } finally {
+                heapMonitor.close()
             }
             val totalDocuments = transaction { BookDocuments.selectAll().count() }
             val totalDocumentContents = transaction { DocumentContents.selectAll().count() }
@@ -292,6 +301,7 @@ class LocalEbookBenchmarkTest {
                 |backfilled=$backfilled
                 |import_ms=${importTime.inWholeMilliseconds}
                 |parse_ms=${parseTime.inWholeMilliseconds}
+                |parse_peak_heap_mib=${heapMonitor.peakBytes / 1024.0 / 1024.0}
                 |${scenarios.joinToString(separator = "\n") { it.format() }}
                 """.trimMargin()
             )
@@ -385,6 +395,27 @@ class LocalEbookBenchmarkTest {
         private fun Double.round(decimals: Int): String {
             val scale = Math.pow(10.0, decimals.toDouble())
             return (this * scale).roundToLong().toDouble().div(scale).toString()
+        }
+    }
+
+    private class PeakHeapMonitor : AutoCloseable {
+        private val running = AtomicBoolean(true)
+        private val peak = AtomicLong(ManagementFactory.getMemoryMXBean().heapMemoryUsage.used)
+        private val monitor = Thread.ofPlatform().daemon().name("bookd-heap-monitor").start {
+            while (running.get()) {
+                val used = ManagementFactory.getMemoryMXBean().heapMemoryUsage.used
+                peak.accumulateAndGet(used, ::maxOf)
+                LockSupport.parkNanos(2_000_000L)
+            }
+        }
+
+        val peakBytes: Long
+            get() = peak.get()
+
+        override fun close() {
+            running.set(false)
+            monitor.join()
+            peak.accumulateAndGet(ManagementFactory.getMemoryMXBean().heapMemoryUsage.used, ::maxOf)
         }
     }
 

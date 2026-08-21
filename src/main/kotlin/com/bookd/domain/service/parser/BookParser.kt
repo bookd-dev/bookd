@@ -11,8 +11,7 @@ interface BookParser {
      * 书籍结构信息
      */
     data class BookStructure(
-        val chapters: List<ChapterInfo>,
-        val resources: Map<String, ByteArray> = emptyMap()
+        val chapters: List<ChapterInfo>
     )
     
     /**
@@ -37,6 +36,21 @@ interface BookParser {
      * 解析单个章节内容
      */
     suspend fun parseChapterContent(file: File, chapter: ChapterInfo): List<ContentElement>
+
+    /**
+     * 批量解析章节。默认实现保持兼容，容器格式可覆盖以复用一次打开的文件句柄。
+     */
+    suspend fun parseChapterContents(
+        file: File,
+        chapters: List<ChapterInfo>
+    ): Map<Int, List<ContentElement>> = chapters.associate { chapter ->
+        chapter.index to parseChapterContent(file, chapter)
+    }
+
+    /**
+     * 流式读取书内资源。默认格式没有资源；容器格式逐个回调，禁止聚合整本书的二进制数据。
+     */
+    suspend fun forEachResource(file: File, consumer: (path: String, bytes: ByteArray) -> Unit) = Unit
     
     /**
      * 统计字数

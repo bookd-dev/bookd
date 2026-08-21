@@ -7,7 +7,6 @@ import com.bookd.domain.service.parser.ContentAnchorGenerator
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.TextNode
-import org.slf4j.LoggerFactory
 
 /**
  * EPUB 内容解析器
@@ -16,7 +15,6 @@ import org.slf4j.LoggerFactory
 class EpubContentParser(
     private val inlineParser: InlineParser = InlineParser()
 ) {
-    private val logger = LoggerFactory.getLogger(EpubContentParser::class.java)
     
     /**
      * 将 HTML 解析为结构化内容元素
@@ -31,23 +29,19 @@ class EpubContentParser(
         // 每章开始时重置脚注计数器
         inlineParser.resetFootnoteCounter()
         
-        try {
-            val doc = Jsoup.parse(html)
-            val body = doc.body()
-            
-            body.children().forEach { element ->
-                parseElement(element, elements, chapterHref, anchorGenerator)
-            }
-            
-            // 获取所有脚注引用信息
-            val footnoteRefs = inlineParser.getFootnoteReferences()
-            
-            // 遍历 elements，找到所有 Footnote 并填充图片信息
-            enrichFootnotesWithImages(elements, footnoteRefs)
-        } catch (e: Exception) {
-            logger.error("Failed to parse HTML to elements", e)
+        val doc = Jsoup.parse(html)
+        val body = doc.body()
+
+        body.children().forEach { element ->
+            parseElement(element, elements, chapterHref, anchorGenerator)
         }
-        
+
+        // 获取所有脚注引用信息
+        val footnoteRefs = inlineParser.getFootnoteReferences()
+
+        // 遍历 elements，找到所有 Footnote 并填充图片信息
+        enrichFootnotesWithImages(elements, footnoteRefs)
+
         return elements
     }
     

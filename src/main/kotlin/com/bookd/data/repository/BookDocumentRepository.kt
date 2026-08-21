@@ -2,6 +2,7 @@ package com.bookd.data.repository
 
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.BookDocuments
+import com.bookd.data.entity.Books
 import com.bookd.data.entity.DocumentContents
 import com.bookd.data.entity.DocumentResources
 import com.bookd.domain.model.BookDocument
@@ -234,6 +235,83 @@ class BookDocumentRepository {
             )
         }
     }
+
+    /**
+     * 原子发布一次完整解析结果。解析和图片文件准备在事务外完成；文档、内容、资源以及书籍完成状态
+     * 在同一事务内切换，任何写入失败都会保留上一版可读数据。
+     */
+    suspend fun replaceParsedBook(
+        bookId: Int,
+        documents: List<ParsedDocumentDraft>,
+        resources: List<DocumentResourceDraft>
+    ): Int {
+        require(documents.isNotEmpty()) { "Parsed book must contain documents" }
+        require(documents.map { it.document.index }.distinct().size == documents.size) {
+            "Parsed document indexes must be unique"
+        }
+        require(resources.all { it.bookId == bookId }) { "Resource bookId does not match parsed book" }
+        // JSON 序列化可能较重，必须在数据库事务外完成。
+        val serializedDocuments = documents.map { parsed ->
+            parsed to json.encodeToString(parsed.elements)
+        }
+
+        return dbQuery {
+            DocumentResources.deleteWhere { DocumentResources.bookId eq bookId }
+            BookDocuments.deleteWhere { BookDocuments.bookId eq bookId }
+
+            val now = TimeProvider.now()
+            serializedDocuments.forEach { (parsed, contentJson) ->
+                val draft = parsed.document
+                val documentId = BookDocuments.insert {
+                    it[BookDocuments.bookId] = bookId
+                    it[BookDocuments.index] = draft.index
+                    it[BookDocuments.href] = draft.href
+                    it[BookDocuments.inToc] = draft.inToc
+                    it[BookDocuments.title] = draft.title
+                    it[BookDocuments.level] = draft.level
+                    it[BookDocuments.wordCount] = parsed.wordCount
+                    it[BookDocuments.imageCount] = parsed.imageCount
+                    it[BookDocuments.createdAt] = now
+                    it[BookDocuments.updatedAt] = now
+                }[BookDocuments.id]
+
+                DocumentContents.insert {
+                    it[DocumentContents.documentId] = documentId
+                    it[DocumentContents.content] = contentJson
+                }
+            }
+
+            resources.forEach { draft ->
+                DocumentResources.insert {
+                    it[DocumentResources.bookId] = bookId
+                    it[DocumentResources.path] = draft.path
+                    it[DocumentResources.storedPath] = draft.storedPath
+                    it[DocumentResources.mediaType] = draft.mediaType
+                    it[DocumentResources.size] = draft.size
+                    it[DocumentResources.width] = draft.width
+                    it[DocumentResources.height] = draft.height
+                }
+            }
+
+            val tocChapterCount = documents.count { it.document.inToc }
+            val totalWordCount = documents.sumOf { it.wordCount }
+            val totalImageCount = documents.sumOf { it.imageCount }
+            val updated = Books.update({ Books.id eq bookId }) {
+                it[Books.chaptersParsed] = true
+                it[Books.chaptersCount] = documents.size
+                it[Books.tocChapterCount] = tocChapterCount
+                it[Books.totalWordCount] = totalWordCount
+                it[Books.totalImageCount] = totalImageCount
+                it[Books.statsUpdatedAt] = now
+                it[Books.lastParsedAt] = now
+                it[Books.parseStatus] = "completed"
+                it[Books.parseProgress] = 100
+                it[Books.updatedAt] = now
+            }
+            check(updated == 1) { "Book not found while publishing parsed content: $bookId" }
+            documents.size
+        }
+    }
     
     fun updateStats(documentId: Int, wordCount: Int, imageCount: Int): Int = transaction {
         val now = TimeProvider.now()
@@ -416,6 +494,13 @@ data class BookDocumentDraft(
     val level: Int,
     val wordCount: Int = 0,
     val imageCount: Int = 0
+)
+
+data class ParsedDocumentDraft(
+    val document: BookDocumentDraft,
+    val elements: List<ContentElement>,
+    val wordCount: Int,
+    val imageCount: Int
 )
 
 data class DocumentContentDraft(

@@ -3,7 +3,6 @@ package com.bookd.domain.service.parser.epub
 import org.slf4j.LoggerFactory
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * EPUB 包结构读取器
@@ -53,10 +52,8 @@ class EpubPackageReader {
     private fun findOpfPath(zipFile: ZipFile): String? {
         val containerEntry = zipFile.getEntry("META-INF/container.xml") ?: return null
         
-        return zipFile.getInputStream(containerEntry).use { stream ->
-            val factory = DocumentBuilderFactory.newInstance()
-            factory.isNamespaceAware = true
-            val doc = factory.newDocumentBuilder().parse(stream)
+        return EpubArchiveSafety.readBytes(zipFile, containerEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+            val doc = SecureXml.parse(stream)
             val rootfiles = doc.getElementsByTagName("rootfile")
             
             if (rootfiles.length > 0) {
@@ -79,10 +76,8 @@ class EpubPackageReader {
         var tocHref: String? = null
         var navHref: String? = null
         
-        zipFile.getInputStream(opfEntry).use { stream ->
-            val factory = DocumentBuilderFactory.newInstance()
-            factory.isNamespaceAware = true
-            val doc = factory.newDocumentBuilder().parse(stream)
+        EpubArchiveSafety.readBytes(zipFile, opfEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+            val doc = SecureXml.parse(stream)
             
             // 获取 manifest 中的 id -> href 映射
             val manifestMap = mutableMapOf<String, String>()
