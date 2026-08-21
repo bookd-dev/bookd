@@ -128,6 +128,32 @@ class RepositoryDatabaseBoundaryTest {
         assertEquals("epub:chapter#p4", savedProgress?.anchorId)
         assertEquals(7, savedProgress?.paragraphIndex)
         assertEquals(12, savedProgress?.scrollOffset)
+
+        progressRepository.upsert(
+            userId = user.id,
+            bookId = book.id,
+            progress = 0.3,
+            currentPage = 5,
+            totalPages = 20,
+            cfiLocation = null,
+            documentId = null,
+            deviceId = null,
+            anchorId = null,
+            paragraphIndex = null,
+            scrollOffset = null,
+            chapterPageIndex = null,
+            chapterTotalPages = null,
+            chapterScrollPercent = null
+        )
+
+        val chapterTopProgress = progressRepository.findByUserAndBook(user.id, book.id)
+        assertEquals(5, chapterTopProgress?.chapterIndex)
+        assertEquals(null, chapterTopProgress?.anchorId)
+        assertEquals(null, chapterTopProgress?.paragraphIndex)
+        assertEquals(null, chapterTopProgress?.scrollOffset)
+        assertEquals(null, chapterTopProgress?.chapterPageIndex)
+        assertEquals(null, chapterTopProgress?.chapterTotalPages)
+        assertEquals(null, chapterTopProgress?.chapterScrollPercent)
         assertEquals(1, progressRepository.getReadingHistory(user.id).size)
         val savedBookmark = bookmarkRepository.findByUserAndBook(user.id, book.id).single()
         assertEquals(bookmark.id, savedBookmark.id)

@@ -41,12 +41,17 @@ The backend SHALL include EPUB spine document metadata in the book manifest so c
 - **THEN** existing manifest fields such as `toc`, `spine`, and `metadata` SHALL remain available and compatible.
 
 ### Requirement: Backend supports anchor-aware reader progress
-The backend SHALL accept and return anchor-aware reader progress while preserving existing index-based progress fields.
+The backend SHALL accept and return anchor-aware reader progress while preserving existing index-based progress fields, and SHALL treat a progress update as one coherent position snapshot.
 
 #### Scenario: Client saves anchored progress
 - **WHEN** the client saves reading progress with chapter index, anchor id, fallback index, and offset
 - **THEN** the backend SHALL persist those fields
 - **AND** it SHALL return them on subsequent progress reads.
+
+#### Scenario: Client replaces anchored progress with a chapter-top position
+- **WHEN** the client saves a new chapter position with an empty anchor and empty optional position details
+- **THEN** the backend SHALL clear the previously stored anchor and optional position details
+- **AND** it SHALL NOT combine the new chapter with fields left over from the previous snapshot.
 
 #### Scenario: Existing progress has no anchor
 - **WHEN** existing progress was saved before anchor fields existed
