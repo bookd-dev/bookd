@@ -70,8 +70,9 @@ class CoverGeneratorService(
     
     /**
      * Generate a text-based cover image for a book
+     * @return Pair of coverPath and dimensions (width, height), or null if failed
      */
-    fun generateCover(bookId: Int, title: String, author: String?): String? {
+    fun generateCover(bookId: Int, title: String, author: String?): Pair<String, Pair<Int, Int>>? {
         try {
             // Create a new buffered image
             val image = BufferedImage(coverWidth, coverHeight, BufferedImage.TYPE_INT_RGB)
@@ -134,8 +135,8 @@ class CoverGeneratorService(
             // Save using BookImageStorage
             val coverPath = imageStorage.saveCover(bookId, "cover.png", imageData, isGenerated = true)
             
-            logger.info("Generated cover for book ID $bookId: $coverPath")
-            return coverPath
+            logger.info("Generated cover for book ID $bookId: $coverPath (${coverWidth}x${coverHeight})")
+            return Pair(coverPath, Pair(coverWidth, coverHeight))
             
         } catch (e: Exception) {
             logger.error("Failed to generate cover for book ID $bookId: ${e.message}", e)

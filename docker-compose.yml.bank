@@ -68,6 +68,7 @@ volumes:
   postgres_data:
   redis_data:
   covers_data:
+  book_images_data:
 
 networks:
   bookd-network:

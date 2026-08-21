@@ -4,6 +4,8 @@ import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.model.ErrorResponse
 import com.bookd.domain.model.MessageResponse
 import com.bookd.domain.model.SuccessResponse
+import com.bookd.domain.model.User
+import com.bookd.domain.model.UserRole
 import com.bookd.domain.service.BookshelfException
 import com.bookd.domain.service.UserService
 import com.bookd.infrastructure.i18n.I18nException
@@ -216,21 +218,59 @@ suspend fun ApplicationCall.respondNoContent() {
  * 如果未认证则返回 null 并自动响应错误
  */
 suspend fun ApplicationCall.getAuthenticatedUserId(): Int? {
+    return getAuthenticatedUser()?.id
+}
+
+/**
+ * 获取当前认证用户。
+ * 如果未认证则返回 null 并自动响应错误。
+ */
+suspend fun ApplicationCall.getAuthenticatedUser(): User? {
     val userService = get<UserService>(UserService::class.java)
+    return getAuthenticatedUser(userService)
+}
+
+suspend fun ApplicationCall.getAuthenticatedUser(userService: UserService): User? {
     val token = request.header("Authorization")?.removePrefix("Bearer ")
-    
+
     if (token == null) {
         respondError(ErrorCode.AUTH_NO_TOKEN)
         return null
     }
-    
-    val user = userService.validateToken(token)
+
+    val user = userService.validateTokenAsync(token)
     if (user == null) {
         respondError(ErrorCode.AUTH_INVALID_TOKEN)
         return null
     }
-    
-    return user.id
+
+    return user
+}
+
+/**
+ * 获取当前管理员用户。
+ * 为兼容既有用户管理接口，token 无效和非管理员均返回 AUTH_ADMIN_REQUIRED。
+ */
+suspend fun ApplicationCall.requireAdminUser(): User? {
+    val userService = get<UserService>(UserService::class.java)
+    return requireAdminUser(userService)
+}
+
+suspend fun ApplicationCall.requireAdminUser(userService: UserService): User? {
+    val token = request.header("Authorization")?.removePrefix("Bearer ")
+
+    if (token == null) {
+        respondError(ErrorCode.AUTH_NO_TOKEN)
+        return null
+    }
+
+    val user = userService.validateTokenAsync(token)
+    if (user == null || user.role != UserRole.ADMIN.value) {
+        respondError(ErrorCode.AUTH_ADMIN_REQUIRED)
+        return null
+    }
+
+    return user
 }
 
 // ===== Result 处理 =====

@@ -19,8 +19,7 @@ class EpubParser(
     private val logger = LoggerFactory.getLogger(EpubParser::class.java)
     
     data class EpubStructure(
-        val chapters: List<DocumentInfo>,
-        val resources: Map<String, ByteArray>
+        val chapters: List<DocumentInfo>
     )
     
     /**
@@ -40,6 +39,7 @@ class EpubParser(
     fun parseStructure(file: File): EpubStructure? {
         try {
             ZipFile(file).use { zipFile ->
+                EpubArchiveSafety.validate(zipFile)
                 // 1. 读取包信息
                 val packageInfo = packageReader.readPackage(zipFile) ?: return null
                 
@@ -61,10 +61,7 @@ class EpubParser(
                     DocumentInfo(it.index, it.href, it.inToc, it.title, it.level)
                 }
                 
-                // 4. 提取资源
-                val resources = resourceExtractor.extractResources(zipFile, packageInfo.baseDir)
-                
-                return EpubStructure(chapters, resources)
+                return EpubStructure(chapters)
             }
         } catch (e: Exception) {
             logger.error("Failed to parse EPUB structure: ${file.name}", e)
@@ -76,20 +73,39 @@ class EpubParser(
      * 解析文档内容为结构化元素
      */
     fun parseChapterContent(file: File, href: String): List<ContentElement>? {
+        return parseChapterContents(file, listOf(href))?.get(href)
+    }
+
+    /**
+     * 批量解析章节：单次打开 EPUB 并只读取一次包信息，避免章节数增长时重复解析 OPF。
+     */
+    fun parseChapterContents(file: File, hrefs: List<String>): Map<String, List<ContentElement>>? {
         try {
             ZipFile(file).use { zipFile ->
+                EpubArchiveSafety.validate(zipFile)
                 // 读取包信息获取基础目录
                 val packageInfo = packageReader.readPackage(zipFile) ?: return null
-                val fullPath = EpubPathUtils.resolveFullPath(packageInfo.baseDir, href)
-                
-                val entry = zipFile.getEntry(fullPath) ?: return null
-                val html = zipFile.getInputStream(entry).bufferedReader().use { it.readText() }
-                
-                return contentParser.parseHtml(html, href)
+                return hrefs.associateWith { href ->
+                    val fullPath = EpubPathUtils.resolveFullPath(packageInfo.baseDir, href)
+                    val entry = zipFile.getEntry(fullPath)
+                        ?: throw EpubArchiveException("EPUB chapter entry not found: $href")
+                    val html = EpubArchiveSafety.readText(zipFile, entry, EpubArchiveSafety.MAX_CHAPTER_BYTES)
+                    contentParser.parseHtml(html, href)
+                }
             }
         } catch (e: Exception) {
-            logger.error("Failed to parse chapter content: $href", e)
+            logger.error("Failed to parse EPUB chapter content", e)
             return null
+        }
+    }
+
+    /** 逐个提取图片，避免大体积 EPUB 的全部资源同时驻留内存。 */
+    fun forEachResource(file: File, consumer: (path: String, bytes: ByteArray) -> Unit) {
+        ZipFile(file).use { zipFile ->
+            EpubArchiveSafety.validate(zipFile)
+            val packageInfo = packageReader.readPackage(zipFile)
+                ?: throw EpubArchiveException("Failed to read EPUB package")
+            resourceExtractor.forEachResource(zipFile, packageInfo.baseDir, consumer)
         }
     }
 }

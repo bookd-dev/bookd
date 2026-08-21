@@ -91,6 +91,55 @@ class TxtParseRuleService(
     suspend fun updatePriorities(priorities: Map<Int, Int>): Boolean {
         return repository.updatePriorities(priorities)
     }
+
+    suspend fun importRules(jsonContent: String?, useFile: Boolean): ImportRulesResult {
+        val content = if (useFile || jsonContent.isNullOrBlank()) {
+            val jsonFile = File("static/txt_toc_rules.json")
+            if (!jsonFile.exists()) {
+                return ImportRulesResult.FileNotFound(jsonFile.absolutePath)
+            }
+            jsonFile.readText()
+        } else {
+            jsonContent
+        }
+
+        @Serializable
+        data class JsonRule(
+            val name: String,
+            val rule: String,
+            val example: String
+        )
+
+        val jsonRules = Json.decodeFromString<List<JsonRule>>(content)
+        val existingNames = repository.getAllRules().map { it.name }.toMutableSet()
+
+        var imported = 0
+        var skipped = 0
+
+        jsonRules.forEachIndexed { index, jsonRule ->
+            try {
+                if (jsonRule.name in existingNames) {
+                    skipped++
+                    return@forEachIndexed
+                }
+
+                val dto = TxtParseRuleRepository.CreateTxtParseRuleDTO(
+                    name = jsonRule.name,
+                    rule = jsonRule.rule,
+                    example = jsonRule.example,
+                    enabled = true,
+                    priority = index
+                )
+                repository.createRule(dto)
+                existingNames.add(jsonRule.name)
+                imported++
+            } catch (e: Exception) {
+                logger.warn("Failed to import rule: ${jsonRule.name}", e)
+            }
+        }
+
+        return ImportRulesResult.Imported(imported = imported, skipped = skipped)
+    }
     
     /**
      * 初始化：从 JSON 字符串导入规则（如果数据库为空）
@@ -159,4 +208,9 @@ class TxtParseRuleService(
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString()
     )
+}
+
+sealed class ImportRulesResult {
+    data class Imported(val imported: Int, val skipped: Int) : ImportRulesResult()
+    data class FileNotFound(val path: String) : ImportRulesResult()
 }

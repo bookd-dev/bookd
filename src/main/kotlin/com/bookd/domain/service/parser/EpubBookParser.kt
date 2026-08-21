@@ -23,13 +23,33 @@ class EpubBookParser(
             )
         }
         
-        return BookParser.BookStructure(
-            chapters = chapters,
-            resources = structure.resources
-        )
+        return BookParser.BookStructure(chapters = chapters)
     }
     
     override suspend fun parseChapterContent(file: File, chapter: BookParser.ChapterInfo): List<ContentElement> {
-        return epubParser.parseChapterContent(file, chapter.href ?: "") ?: emptyList()
+        val href = chapter.href ?: throw IllegalArgumentException("EPUB chapter href is missing")
+        return epubParser.parseChapterContent(file, href)
+            ?: throw IllegalStateException("Failed to parse EPUB chapter: $href")
+    }
+
+    override suspend fun parseChapterContents(
+        file: File,
+        chapters: List<BookParser.ChapterInfo>
+    ): Map<Int, List<ContentElement>> {
+        val hrefs = chapters.map { chapter ->
+            chapter.href ?: throw IllegalArgumentException("EPUB chapter href is missing at index ${chapter.index}")
+        }
+        val contentsByHref = epubParser.parseChapterContents(file, hrefs)
+            ?: throw IllegalStateException("Failed to parse EPUB chapters")
+        return chapters.associate { chapter ->
+            val href = requireNotNull(chapter.href)
+            chapter.index to requireNotNull(contentsByHref[href]) {
+                "EPUB chapter content is missing: $href"
+            }
+        }
+    }
+
+    override suspend fun forEachResource(file: File, consumer: (path: String, bytes: ByteArray) -> Unit) {
+        epubParser.forEachResource(file, consumer)
     }
 }

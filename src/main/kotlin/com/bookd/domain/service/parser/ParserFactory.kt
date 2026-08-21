@@ -8,15 +8,14 @@ import java.io.File
 class ParserFactory(
     private val txtParser: TxtParser
 ) {
-    private val epubParser = EpubParser()
-    
     /**
      * 根据文件格式创建对应的解析器
      */
     fun createParser(file: File): BookParser? {
         val extension = file.extension.lowercase()
         return when (extension) {
-            "epub" -> EpubBookParser(epubParser)
+            // EpubContentParser/InlineParser 持有单次解析状态，每本书使用独立实例以避免并发串扰。
+            "epub" -> EpubBookParser(EpubParser())
             "txt" -> TxtBookParser(txtParser)
             else -> null
         }

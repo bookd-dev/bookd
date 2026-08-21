@@ -3,24 +3,19 @@ package com.bookd.data.repository
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.ReaderSettings
 import com.bookd.domain.model.ReaderSettingsResponse
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.transaction
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
 import java.math.BigDecimal
 
 class ReaderSettingsRepository {
     
-    fun findByUser(userId: Int): ReaderSettingsResponse? = transaction {
-        ReaderSettings.selectAll()
-            .where { ReaderSettings.userId eq userId }
-            .map { toResponse(it, userId) }
-            .singleOrNull()
+    suspend fun findByUser(userId: Int): ReaderSettingsResponse? = dbQuery {
+        findByUserInCurrentTransaction(userId)
     }
     
-    fun upsert(
+    suspend fun upsert(
         userId: Int,
         fontFamily: String?,
         fontSize: Int?,
@@ -29,14 +24,13 @@ class ReaderSettingsRepository {
         letterSpacing: Double?,
         paragraphSpacing: Int?,
         textAlign: String?,
-        theme: String?,
-        backgroundColor: String?,
-        textColor: String?,
         pageMode: String?,
         brightness: Int?,
         marginHorizontal: Int?,
-        marginVertical: Int?
-    ): ReaderSettingsResponse = transaction {
+        marginVertical: Int?,
+        firstLineIndent: Boolean?,
+        pageAnimationType: String?
+    ): ReaderSettingsResponse = dbQuery {
         val now = TimeProvider.now()
         
         val existing = ReaderSettings.selectAll()
@@ -52,13 +46,12 @@ class ReaderSettingsRepository {
                 if (letterSpacing != null) it[ReaderSettings.letterSpacing] = BigDecimal.valueOf(letterSpacing)
                 if (paragraphSpacing != null) it[ReaderSettings.paragraphSpacing] = paragraphSpacing
                 if (textAlign != null) it[ReaderSettings.textAlign] = textAlign
-                if (theme != null) it[ReaderSettings.theme] = theme
-                if (backgroundColor != null) it[ReaderSettings.backgroundColor] = backgroundColor
-                if (textColor != null) it[ReaderSettings.textColor] = textColor
                 if (pageMode != null) it[ReaderSettings.pageMode] = pageMode
                 if (brightness != null) it[ReaderSettings.brightness] = brightness
                 if (marginHorizontal != null) it[ReaderSettings.marginHorizontal] = marginHorizontal
                 if (marginVertical != null) it[ReaderSettings.marginVertical] = marginVertical
+                if (firstLineIndent != null) it[ReaderSettings.firstLineIndent] = firstLineIndent
+                if (pageAnimationType != null) it[ReaderSettings.pageAnimationType] = pageAnimationType
                 it[updatedAt] = now
             }
         } else {
@@ -71,18 +64,24 @@ class ReaderSettingsRepository {
                 it[ReaderSettings.letterSpacing] = BigDecimal.valueOf(letterSpacing ?: 0.0)
                 it[ReaderSettings.paragraphSpacing] = paragraphSpacing ?: 16
                 it[ReaderSettings.textAlign] = textAlign ?: "justify"
-                it[ReaderSettings.theme] = theme ?: "light"
-                it[ReaderSettings.backgroundColor] = backgroundColor ?: "#FFFFFF"
-                it[ReaderSettings.textColor] = textColor ?: "#333333"
                 it[ReaderSettings.pageMode] = pageMode ?: "scroll"
                 it[ReaderSettings.brightness] = brightness ?: 100
                 it[ReaderSettings.marginHorizontal] = marginHorizontal ?: 20
                 it[ReaderSettings.marginVertical] = marginVertical ?: 40
+                it[ReaderSettings.firstLineIndent] = firstLineIndent ?: true
+                it[ReaderSettings.pageAnimationType] = pageAnimationType ?: "native"
                 it[updatedAt] = now
             }
         }
         
-        findByUser(userId)!!
+        findByUserInCurrentTransaction(userId)!!
+    }
+
+    private fun findByUserInCurrentTransaction(userId: Int): ReaderSettingsResponse? {
+        return ReaderSettings.selectAll()
+            .where { ReaderSettings.userId eq userId }
+            .map { toResponse(it, userId) }
+            .singleOrNull()
     }
     
     private fun toResponse(row: ResultRow, userId: Int) = ReaderSettingsResponse(
@@ -95,13 +94,12 @@ class ReaderSettingsRepository {
         letterSpacing = row[ReaderSettings.letterSpacing].toDouble(),
         paragraphSpacing = row[ReaderSettings.paragraphSpacing],
         textAlign = row[ReaderSettings.textAlign],
-        theme = row[ReaderSettings.theme],
-        backgroundColor = row[ReaderSettings.backgroundColor],
-        textColor = row[ReaderSettings.textColor],
         pageMode = row[ReaderSettings.pageMode],
         brightness = row[ReaderSettings.brightness],
         marginHorizontal = row[ReaderSettings.marginHorizontal],
         marginVertical = row[ReaderSettings.marginVertical],
+        firstLineIndent = row[ReaderSettings.firstLineIndent],
+        pageAnimationType = row[ReaderSettings.pageAnimationType],
         updatedAt = row[ReaderSettings.updatedAt]
     )
 }

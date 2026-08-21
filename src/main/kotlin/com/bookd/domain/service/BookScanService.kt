@@ -139,13 +139,16 @@ class BookScanService(
         val scannedFilePaths = mutableSetOf<String>()
         
         try {
-            directory.walkTopDown()
+            val files = directory.walkTopDown()
                 .filter { it.isFile }
                 .filter { file ->
                     val extension = file.extension.lowercase()
                     supportedFormats.contains(extension)
                 }
-                .forEach { file ->
+                .toList()
+            val existingBooksByPath = bookRepository.findByFilePaths(files.map { it.absolutePath })
+
+            files.forEach { file ->
                     found++
                     val filePath = file.absolutePath
                     scannedFilePaths.add(filePath)
@@ -156,7 +159,13 @@ class BookScanService(
                     }
                     
                     try {
-                        val book = importBook(file, sourceId, fullScan)
+                        val book = importBook(
+                            file = file,
+                            sourceId = sourceId,
+                            fullScan = fullScan,
+                            knownExistingBook = existingBooksByPath[filePath],
+                            useKnownExistingBook = true
+                        )
                         if (book != null) {
                             imported++
                             // Update scan status
@@ -168,7 +177,7 @@ class BookScanService(
                     } catch (e: Exception) {
                         logger.error("Failed to import ${file.absolutePath}", e)
                     }
-                }
+            }
             
             // 全量扫描：删除文件已不存在的书籍
             if (fullScan && sourceId != null) {
@@ -200,11 +209,17 @@ class BookScanService(
      * 导入单个书籍文件
      * @param fullScan true=强制重新提取元数据, false=跳过已存在的书籍
      */
-    private fun importBook(file: File, sourceId: Int? = null, fullScan: Boolean = false): Book? {
+    private fun importBook(
+        file: File,
+        sourceId: Int? = null,
+        fullScan: Boolean = false,
+        knownExistingBook: Book? = null,
+        useKnownExistingBook: Boolean = false
+    ): Book? {
         val filePath = file.absolutePath
         
         // 检查是否已存在
-        val existing = bookRepository.findByFilePath(filePath)
+        val existing = if (useKnownExistingBook) knownExistingBook else bookRepository.findByFilePath(filePath)
         if (existing != null) {
             if (fullScan) {
                 // 全量扫描模式：强制重新提取元数据

@@ -1,8 +1,8 @@
 package com.bookd.data.entity
 
-import org.jetbrains.exposed.dao.id.IntIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.kotlin.datetime.datetime
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.datetime.datetime
 
 /**
  * 书架-书籍关联表
@@ -22,5 +22,7 @@ object BookshelfItems : IntIdTable("bookshelf_items") {
     init {
         // 确保同一本书在同一个书架中只能出现一次
         uniqueIndex(bookshelfId, bookId)
+        index(false, bookshelfId, addedAt)
+        index(false, bookId)
     }
 }

@@ -2,9 +2,12 @@ package com.bookd.config
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
+import java.util.concurrent.atomic.AtomicReference
 
-object DatabaseConfig {
+object DatabaseConfig : AutoCloseable {
+    private val currentDataSource = AtomicReference<HikariDataSource?>(null)
+
     fun init(
         jdbcUrl: String,
         driver: String,
@@ -21,7 +24,18 @@ object DatabaseConfig {
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
             validate()
         }
-        
-        Database.connect(HikariDataSource(config))
+
+        val dataSource = HikariDataSource(config)
+        try {
+            Database.connect(dataSource)
+            currentDataSource.getAndSet(dataSource)?.close()
+        } catch (e: Exception) {
+            dataSource.close()
+            throw e
+        }
+    }
+
+    override fun close() {
+        currentDataSource.getAndSet(null)?.close()
     }
 }

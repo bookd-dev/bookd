@@ -14,20 +14,21 @@ import kotlin.concurrent.timer
  */
 class BackgroundParseService(
     private val bookRepository: BookRepository,
-    private val contentService: BookContentService
+    private val contentService: BookContentService,
+    private val environment: (String) -> String? = System::getenv
 ) {
     private val logger = LoggerFactory.getLogger(BackgroundParseService::class.java)
     
     private val isRunning = AtomicBoolean(false)
-    private val parseDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    private val scope = CoroutineScope(parseDispatcher + SupervisorJob())
+    private var parseDispatcher: ExecutorCoroutineDispatcher? = null
+    private var scope: CoroutineScope? = null
     
     private var scheduledTimer: java.util.Timer? = null
     
     // 配置参数
-    private val intervalSeconds = System.getenv("BACKGROUND_PARSE_INTERVAL")?.toLongOrNull() ?: 60L
-    private val batchSize = System.getenv("BACKGROUND_PARSE_BATCH_SIZE")?.toIntOrNull() ?: 5
-    private val enabled = System.getenv("BACKGROUND_PARSE_ENABLED")?.toBoolean() ?: true
+    private val intervalSeconds = readLongConfig("PARSE_BACKGROUND_INTERVAL", "BACKGROUND_PARSE_INTERVAL", 60L)
+    private val batchSize = readIntConfig("PARSE_BACKGROUND_BATCH_SIZE", "BACKGROUND_PARSE_BATCH_SIZE", 5)
+    private val enabled = readBooleanConfig("PARSE_BACKGROUND_ENABLED", "BACKGROUND_PARSE_ENABLED", true)
     
     /**
      * 启动后台解析服务
@@ -43,6 +44,7 @@ class BackgroundParseService(
             return
         }
         
+        ensureScope()
         isRunning.set(true)
         logger.info("Starting background parse service (interval: ${intervalSeconds}s, batch: $batchSize)")
         
@@ -63,18 +65,26 @@ class BackgroundParseService(
      * 停止后台解析服务
      */
     fun stop() {
-        if (!isRunning.get()) {
-            logger.warn("Background parse service is not running")
+        val hadResources = scheduledTimer != null || scope != null || parseDispatcher != null
+        val wasRunning = isRunning.getAndSet(false)
+        if (!wasRunning && !hadResources) {
+            logger.debug("Background parse service is already stopped")
             return
         }
-        
+
         logger.info("Stopping background parse service...")
-        isRunning.set(false)
-        scheduledTimer?.cancel()
+        val timer = scheduledTimer
         scheduledTimer = null
-        
-        // 取消所有正在进行的任务
-        scope.cancel()
+
+        val currentScope = scope
+        scope = null
+
+        val dispatcher = parseDispatcher
+        parseDispatcher = null
+
+        timer?.cancel()
+        currentScope?.cancel()
+        dispatcher?.close()
         
         logger.info("Background parse service stopped")
     }
@@ -83,7 +93,8 @@ class BackgroundParseService(
      * 处理未解析的书籍
      */
     private fun processUnparsedBooks() {
-        scope.launch {
+        val currentScope = scope ?: ensureScope()
+        currentScope.launch {
             try {
                 // 从数据库获取未解析的书籍
                 val unparsedBooks = bookRepository.findUnparsedBooks(batchSize)
@@ -118,13 +129,48 @@ class BackgroundParseService(
             }
         }
     }
+
+    private fun ensureScope(): CoroutineScope {
+        val existing = scope
+        if (existing != null && existing.isActive) {
+            return existing
+        }
+
+        val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        parseDispatcher = dispatcher
+        return CoroutineScope(dispatcher + SupervisorJob()).also { scope = it }
+    }
+
+    private fun readLongConfig(primaryName: String, fallbackName: String, defaultValue: Long): Long {
+        return environment(primaryName)?.toLongOrNull()
+            ?: environment(fallbackName)?.toLongOrNull()
+            ?: defaultValue
+    }
+
+    private fun readIntConfig(primaryName: String, fallbackName: String, defaultValue: Int): Int {
+        return environment(primaryName)?.toIntOrNull()
+            ?: environment(fallbackName)?.toIntOrNull()
+            ?: defaultValue
+    }
+
+    private fun readBooleanConfig(primaryName: String, fallbackName: String, defaultValue: Boolean): Boolean {
+        return environment(primaryName)?.parseBoolean()
+            ?: environment(fallbackName)?.parseBoolean()
+            ?: defaultValue
+    }
+
+    private fun String.parseBoolean(): Boolean? = when (lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> null
+    }
     
     /**
      * 获取服务状态
      */
-    fun getStatus(): BackgroundParseStatus {
+    suspend fun getStatus(): BackgroundParseStatus {
         val unparsedCount = try {
-            bookRepository.findUnparsedBooks(1000).size
+            bookRepository.findUnparsedBooksAsync(1000).size
         } catch (e: Exception) {
             -1
         }

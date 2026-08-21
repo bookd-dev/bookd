@@ -1,65 +1,59 @@
 package com.bookd.domain.service
 
 import com.bookd.data.repository.BookDocumentRepository
+import com.bookd.data.repository.BookDocumentDraft
 import com.bookd.data.repository.BookRepository
+import com.bookd.data.repository.DocumentResourceDraft
+import com.bookd.data.repository.ParsedDocumentDraft
+import com.bookd.data.repository.ReadingProgressRepository
+import com.bookd.data.repository.ResourceInfo
 import com.bookd.domain.model.*
 import com.bookd.domain.service.parser.*
 import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
 import kotlinx.coroutines.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.UUID
-import java.util.concurrent.Executors
 
 class BookContentService(
     private val bookRepository: BookRepository,
     private val documentRepository: BookDocumentRepository,
+    private val readingProgressRepository: ReadingProgressRepository,
     private val txtParser: TxtParser,
     private val imageStorage: BookImageStorage,
-    private val cacheService: BookCacheService?
+    private val cacheService: BookCacheService?,
+    private val taskCoordinator: BookTaskCoordinator = BookTaskCoordinator()
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
     // 解析器工厂
     private val parserFactory = ParserFactory(txtParser)
     
-    // 专用的内容解析线程池
-    private val contentDispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
-    private val scope = CoroutineScope(contentDispatcher + SupervisorJob())
-    
-    // 跟踪正在解析的书籍，避免重复解析
-    private val parsingBooks = mutableSetOf<Int>()
-    
     /**
      * 异步解析书籍内容
      */
     fun parseBookContentAsync(bookId: Int, filePath: String) {
-        synchronized(parsingBooks) {
-            if (parsingBooks.contains(bookId)) {
-                logger.warn("Book ID $bookId is already being parsed, skipping")
-                return
-            }
-            parsingBooks.add(bookId)
-        }
-        
-        scope.launch {
-            delay(1000) // 延迟以避免影响扫描流程
+        val launched = taskCoordinator.launchContentParse(bookId) {
             try {
                 logger.info("Starting content parsing for book ID: $bookId")
                 // 更新状态为正在解析
-                bookRepository.updateParseStatus(bookId, "parsing", 0)
-                parseBookContent(bookId, filePath)
-                logger.info("Completed content parsing for book ID: $bookId")
+                bookRepository.updateParseStatusAsync(bookId, "parsing", 0)
+                when (val result = parseBookContent(bookId, filePath)) {
+                    is ContentParseResult.Success -> {
+                        logger.info("Completed content parsing for book ID: $bookId, documents: ${result.documentCount}")
+                    }
+                    is ContentParseResult.Failed -> {
+                        logger.warn("Content parsing did not complete for book ID: $bookId: ${result.reason}")
+                    }
+                }
             } catch (e: Exception) {
                 logger.error("Failed to parse book content for ID: $bookId", e)
-                bookRepository.updateParseStatus(bookId, "failed", 0)
-            } finally {
-                synchronized(parsingBooks) {
-                    parsingBooks.remove(bookId)
-                }
+                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             }
+        }
+
+        if (!launched) {
+            logger.warn("Book ID $bookId is already being parsed or coordinator is closed, skipping")
         }
     }
     
@@ -76,7 +70,7 @@ class BookContentService(
         }
         
         // 2. 检查数据库状态
-        val book = bookRepository.findById(bookId)
+        val book = bookRepository.findByIdAsync(bookId)
         if (book == null) {
             logger.warn("Book not found: $bookId")
             return false
@@ -95,7 +89,7 @@ class BookContentService(
             logger.info("Book $bookId is being parsed by another process, waiting...")
             // 等待一段时间后重新检查
             delay(2000)
-            val recheckBook = bookRepository.findById(bookId)
+            val recheckBook = bookRepository.findByIdAsync(bookId)
             return recheckBook?.chaptersParsed ?: false
         }
         
@@ -103,20 +97,23 @@ class BookContentService(
             logger.info("Parsing book on-demand: $bookId")
             
             // 4. 更新状态为正在解析
-            bookRepository.updateParseStatus(bookId, "parsing", 0)
+            bookRepository.updateParseStatusAsync(bookId, "parsing", 0)
             
             // 5. 同步解析（用户等待）
-            parseBookContent(bookId, filePath)
-            
-            // 6. 更新数据库和缓存（这里可能不需要，因为解析方法内部已经更新了）
-            val documentCount = documentRepository.countByBookId(bookId)
-            cacheService?.setBookParsed(bookId, true)
-            
-            logger.info("Book $bookId parsed successfully, documents: $documentCount")
-            true
+            when (val result = parseBookContent(bookId, filePath)) {
+                is ContentParseResult.Success -> {
+                    cacheService?.setBookParsed(bookId, true)
+                    logger.info("Book $bookId parsed successfully, documents: ${result.documentCount}")
+                    true
+                }
+                is ContentParseResult.Failed -> {
+                    logger.warn("Book $bookId parse failed: ${result.reason}")
+                    false
+                }
+            }
         } catch (e: Exception) {
             logger.error("Failed to parse book on-demand: $bookId", e)
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
             false
         } finally {
             // 7. 释放锁
@@ -128,27 +125,24 @@ class BookContentService(
      * 强制重新解析：清除缓存和现有数据，重新解析书籍内容
      * 用于用户手动触发重新解析
      */
-    fun queueForReparse(bookId: Int): Boolean {
-        val book = bookRepository.findById(bookId)
+    suspend fun queueForReparse(bookId: Int): Boolean {
+        val book = bookRepository.findByIdAsync(bookId)
         if (book == null) {
             logger.warn("Book not found for reparse: $bookId")
             return false
         }
         
         // 检查是否正在解析
-        synchronized(parsingBooks) {
-            if (parsingBooks.contains(bookId)) {
-                logger.info("Book $bookId is already being parsed")
-                return false
-            }
+        if (taskCoordinator.isContentParseInProgress(bookId)) {
+            logger.info("Book $bookId is already being parsed")
+            return false
         }
         
         // 清除所有相关缓存
         cacheService?.clearBookCache(bookId)
         
         // 重置解析状态
-        bookRepository.updateParseStatus(bookId, "pending", 0)
-        bookRepository.updateChaptersParsed(bookId, 0)
+        bookRepository.resetChaptersParsedAsync(bookId)
         
         // 异步开始解析
         parseBookContentAsync(bookId, book.filePath)
@@ -160,27 +154,29 @@ class BookContentService(
     /**
      * 解析书籍内容（同步）- 使用工厂模式统一处理
      */
-    private suspend fun parseBookContent(bookId: Int, filePath: String) {
+    private suspend fun parseBookContent(bookId: Int, filePath: String): ContentParseResult {
         val file = File(filePath)
         if (!file.exists() || !file.isFile) {
             logger.warn("File does not exist: $filePath")
-            return
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("file_missing")
         }
         
         // 使用工厂创建对应格式的解析器
         val parser = parserFactory.createParser(file)
         if (parser == null) {
             logger.warn("Unsupported format: ${file.extension}")
-            bookRepository.updateParseStatus(bookId, "failed", 0)
-            return
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("unsupported_format")
         }
         
-        withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
             try {
                 parseWithParser(bookId, file, parser)
             } catch (e: Exception) {
                 logger.error("Error parsing book content: ${file.name}", e)
-                bookRepository.updateParseStatus(bookId, "failed", 0)
+                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+                ContentParseResult.Failed("unexpected_error")
             }
         }
     }
@@ -188,132 +184,132 @@ class BookContentService(
     /**
      * 使用解析器解析书籍内容（统一流程）
      */
-    private suspend fun parseWithParser(bookId: Int, file: File, parser: BookParser) {
+    private suspend fun parseWithParser(bookId: Int, file: File, parser: BookParser): ContentParseResult {
         logger.info("Parsing ${file.extension.uppercase()} content for book ID: $bookId")
         
         // 1. 解析书籍结构
         val structure = parser.parseStructure(file) ?: run {
             logger.error("Failed to parse book structure")
-            bookRepository.updateParseStatus(bookId, "failed", 0)
-            return
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("structure_parse_failed")
+        }
+
+        if (structure.chapters.isEmpty()) {
+            logger.error("Parsed book structure has no chapters for book ID: $bookId")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("no_chapters")
         }
         
-        // 2. 清理旧数据并创建文档
-        try {
-            // 在独立事务中清理旧文档数据
-            transaction {
-                logger.info("Deleting old documents for book ID: $bookId")
-                val count = documentRepository.deleteByBookId(bookId)
-                logger.info("Deleted $count old documents for book ID: $bookId")
-                documentRepository.deleteResourcesByBookId(bookId)
-            }
-            
-            // 批量保存文档信息（在新事务中）
-            val createdCount = transaction {
-                logger.info("Creating ${structure.chapters.size} documents for book ID: $bookId")
-                var successCount = 0
-                structure.chapters.forEach { chapterInfo ->
-                    documentRepository.create(
-                        bookId = bookId,
-                        index = chapterInfo.index,
-                        href = chapterInfo.href,
-                        inToc = chapterInfo.inToc,
-                        title = chapterInfo.title,
-                        level = chapterInfo.level
-                    )
-                    successCount++
-                }
-                successCount
-            }
-            
-            logger.info("Successfully created $createdCount documents for book ID: $bookId")
-            
-            // 3. 解析并保存文档内容（在事务外，避免长事务）
-            structure.chapters.forEach { chapterInfo ->
-                parseAndSaveDocumentContent(bookId, file, parser, chapterInfo)
-            }
-            
-            // 4. 保存资源文件（如果有）
-            if (structure.resources.isNotEmpty()) {
-                saveResources(bookId, structure.resources)
-            }
-            
-            // 5. 更新书籍解析状态
-            bookRepository.updateChaptersParsed(bookId, structure.chapters.size)
-            
-            logger.info("Parsing completed for book ID: $bookId - ${structure.chapters.size} chapters")
-        } catch (e: Exception) {
-            logger.error("Failed to parse book content for book ID: $bookId", e)
-            bookRepository.updateParseStatus(bookId, "failed", 0)
+        val chapterIndexes = structure.chapters.map { it.index }
+        if (chapterIndexes.any { it < 0 } || chapterIndexes.distinct().size != chapterIndexes.size) {
+            logger.error("Parsed book structure has invalid or duplicate chapter indexes for book ID: $bookId")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("invalid_chapter_indexes")
         }
-    }
-    
-    /**
-     * 解析并保存单个文档内容
-     */
-    private suspend fun parseAndSaveDocumentContent(
-        bookId: Int,
-        file: File,
-        parser: BookParser,
-        chapterInfo: BookParser.ChapterInfo
-    ) {
-        try {
-            val document = documentRepository.findByBookIdAndIndex(bookId, chapterInfo.index)
-            if (document == null) {
-                logger.error("Document not found after creation: bookId=$bookId, index=${chapterInfo.index}")
-                return
-            }
-            
-            // 解析文档内容
-            val elements = parser.parseChapterContent(file, chapterInfo)
-            
-            // 统计字数和图片数
+
+        // 先完整解析所有章节，任何一个 spine 文档失败都不得发布半成品。
+        val contentsByIndex = try {
+            parser.parseChapterContents(file, structure.chapters)
+        } catch (e: Exception) {
+            logger.error("Failed to parse one or more chapters for book ID: $bookId", e)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("chapter_parse_failed")
+        }
+
+        if (contentsByIndex.keys != chapterIndexes.toSet()) {
+            logger.error("Parsed chapter content set does not match structure for book ID: $bookId")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("incomplete_chapter_content")
+        }
+
+        val parsedDocuments = structure.chapters.map { chapter ->
+            val elements = requireNotNull(contentsByIndex[chapter.index])
             val wordCount = parser.countWords(elements)
             val imageCount = parser.countImages(elements)
-            
-            // 保存内容和统计信息
-            documentRepository.saveDocumentContent(document.id, elements)
-            documentRepository.updateStats(document.id, wordCount, imageCount)
-            
-            logger.debug("Saved document ${document.index}: ${document.title} ($wordCount words, $imageCount images)")
+            logger.debug("Parsed document ${chapter.index}: ${chapter.title} ($wordCount words, $imageCount images)")
+            ParsedDocumentDraft(
+                document = BookDocumentDraft(
+                    index = chapter.index,
+                    href = chapter.href,
+                    inToc = chapter.inToc,
+                    title = chapter.title,
+                    level = chapter.level
+                ),
+                elements = elements,
+                wordCount = wordCount,
+                imageCount = imageCount
+            )
+        }
+
+        if (parsedDocuments.all { it.elements.isEmpty() }) {
+            logger.error("No chapter content parsed for book ID: $bookId")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("no_chapter_content")
+        }
+
+        val resourceDrafts = try {
+            prepareResources(bookId, file, parser)
         } catch (e: Exception) {
-            logger.error("Failed to parse document ${chapterInfo.index}", e)
+            logger.error("Failed to prepare resources for book ID: $bookId", e)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed("resource_save_failed")
+        }
+
+        return try {
+            val documentCount = documentRepository.replaceParsedBook(bookId, parsedDocuments, resourceDrafts)
+            logger.info("Parsing completed for book ID: $bookId - $documentCount chapters")
+            ContentParseResult.Success(documentCount = documentCount)
+        } catch (e: Exception) {
+            logger.error("Failed to atomically publish parsed content for book ID: $bookId", e)
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            ContentParseResult.Failed("save_failed")
         }
     }
     
     /**
      * 保存资源文件（使用新的图片存储服务）
      */
-    private fun saveResources(bookId: Int, resources: Map<String, ByteArray>) {
-        resources.forEach { (path, bytes) ->
-            try {
+    private suspend fun prepareResources(
+        bookId: Int,
+        file: File,
+        parser: BookParser
+    ): List<DocumentResourceDraft> {
+        val resources = mutableListOf<DocumentResourceDraft>()
+        parser.forEachResource(file) { path, bytes ->
                 // 使用 BookImageStorage 保存图片
                 val storedPath = imageStorage.saveImage(bookId, path, bytes)
                 val extension = path.substringAfterLast(".")
                 val mediaType = imageStorage.detectMediaType(extension)
                 
-                // 保存到数据库，记录原始路径和存储路径的映射
-                documentRepository.saveResource(
+                // 提取图片尺寸
+                val dimensions = imageStorage.extractImageDimensions(bytes)
+                val (width, height) = dimensions ?: (null to null)
+                
+                resources += DocumentResourceDraft(
                     bookId = bookId,
                     path = path,
                     storedPath = storedPath,  // 存储相对路径，如 "14/abc123.jpg"
                     mediaType = mediaType,
-                    size = bytes.size.toLong()
+                    size = bytes.size.toLong(),
+                    width = width,
+                    height = height
                 )
                 
-                logger.debug("Saved resource: $path -> $storedPath")
-            } catch (e: Exception) {
-                logger.error("Failed to save resource: $path", e)
-            }
+                if (width != null && height != null) {
+                    logger.debug("Saved resource: $path -> $storedPath (${width}x${height})")
+                } else {
+                    logger.debug("Saved resource: $path -> $storedPath (no dimensions)")
+                }
         }
+        return resources
     }
     
     /**
      * 获取书籍清单
      */
-    fun getBookManifest(bookId: Int): BookManifest? {
-        val book = bookRepository.findById(bookId) ?: return null
-        val allDocuments = documentRepository.findByBookId(bookId)
+    suspend fun getBookManifest(bookId: Int): BookManifest? {
+        val book = bookRepository.findByIdAsync(bookId) ?: return null
+        val allDocuments = documentRepository.findByBookIdAsync(bookId)
         
         if (allDocuments.isEmpty()) {
             logger.warn("No documents found for book ID: $bookId")
@@ -340,88 +336,261 @@ class BookContentService(
                 publishDate = null,
                 description = book.description,
                 isbn = book.isbn
-            )
+            ),
+            documents = allDocuments.map { document ->
+                BookManifestDocument(
+                    index = document.index,
+                    href = document.href,
+                    title = document.title,
+                    inToc = document.inToc,
+                    anchorPrefix = document.href?.let { href ->
+                        ContentAnchorGenerator.sourceAnchorPrefix(book.format.lowercase(), href)
+                    }
+                )
+            }
         )
+    }
+    
+    /**
+     * 获取带阅读进度的书籍清单
+     * 根据用户的阅读进度，为每个目录项填充 readStatus 和 readProgress
+     * 
+     * @param bookId 书籍ID
+     * @param userId 用户ID
+     * @return 带阅读进度的 BookManifest，如果书籍不存在则返回 null
+     */
+    suspend fun getBookManifestWithProgress(bookId: Int, userId: Int): BookManifest? {
+        val manifest = getBookManifest(bookId) ?: return null
+        val progress = readingProgressRepository.findByUserAndBook(userId, bookId)
+        
+        // 如果没有阅读进度，直接返回原始清单
+        if (progress == null) {
+            return manifest
+        }
+        
+        val enrichedToc = enrichTocWithProgress(manifest.toc, progress)
+        return manifest.copy(toc = enrichedToc)
+    }
+    
+    /**
+     * 为目录项填充阅读状态和进度
+     * 
+     * 逻辑：
+     * - 当前阅读的章节 (currentPage == index)：状态为 "reading"，进度根据 chapterPageIndex/chapterScrollPercent 计算
+     * - 已跳过的章节 (index < currentPage)：状态为 "read"，进度 100%
+     * - 未读章节 (index > currentPage)：状态为 "unread"，进度 0%
+     */
+    private fun enrichTocWithProgress(
+        toc: List<TocItem>,
+        progress: ReadingProgressResponse
+    ): List<TocItem> {
+        val currentChapterIndex = progress.currentPage // currentPage 存储的是当前章节 index
+        
+        return toc.map { item ->
+            // 递归处理子目录
+            val enrichedChildren = enrichTocWithProgress(item.children, progress)
+            
+            when {
+                item.index == currentChapterIndex -> {
+                    // 当前正在阅读的章节
+                    val chapterProgress = calculateChapterProgress(progress)
+                    item.copy(
+                        readStatus = "reading",
+                        readProgress = chapterProgress,
+                        children = enrichedChildren
+                    )
+                }
+                item.index < currentChapterIndex -> {
+                    // 已经读过（或跳过）的章节
+                    item.copy(
+                        readStatus = "read",
+                        readProgress = 1.0,
+                        children = enrichedChildren
+                    )
+                }
+                else -> {
+                    // 还未读的章节
+                    item.copy(
+                        readStatus = "unread",
+                        readProgress = 0.0,
+                        children = enrichedChildren
+                    )
+                }
+            }
+        }
+    }
+    
+    /**
+     * 计算章节内的阅读进度
+     * 
+     * 优先使用页面模式的进度（chapterPageIndex / chapterTotalPages）
+     * 如果没有则使用滚动模式的进度（chapterScrollPercent）
+     * 
+     * @return 0.0-1.0 的进度值
+     */
+    private fun calculateChapterProgress(progress: ReadingProgressResponse): Double {
+        // 页面模式：使用 chapterPageIndex / chapterTotalPages
+        val totalPages = progress.chapterTotalPages
+        if (totalPages != null && totalPages > 0) {
+            val pageIndex = progress.chapterPageIndex ?: 0
+            // pageIndex 从 0 开始，当前页为 pageIndex，已读完 pageIndex 页
+            // 进度 = (pageIndex + 1) / totalPages
+            return ((pageIndex + 1).toDouble() / totalPages).coerceIn(0.0, 1.0)
+        }
+        
+        // 滚动模式：直接使用 chapterScrollPercent
+        val scrollPercent = progress.chapterScrollPercent
+        if (scrollPercent != null) {
+            return scrollPercent.coerceIn(0.0, 1.0)
+        }
+        
+        // 如果都没有，返回 0
+        return 0.0
     }
     
     /**
      * 获取文档内容
      * @param baseUrl 可选的基础 URL，用于构建完整的图片 URL
      */
-    fun getChapterContent(bookId: Int, index: Int, baseUrl: String? = null): ChapterContent? {
-        val document = documentRepository.findByBookIdAndIndex(bookId, index) ?: return null
-        val elements = documentRepository.getDocumentContent(document.id) ?: emptyList()
+    suspend fun getChapterContent(bookId: Int, index: Int, baseUrl: String? = null): ChapterContent? {
+        val document = documentRepository.findByBookIdAndIndexAsync(bookId, index) ?: return null
+        val elements = documentRepository.getDocumentContentAsync(document.id) ?: emptyList()
+        val resourcesByPath = documentRepository.findResourcesByBookIdAndPaths(bookId, collectImagePaths(elements))
         
         // 转换图片路径为可访问的URL
         val transformedElements = elements.map { element ->
-            transformElement(element, bookId, baseUrl)
+            transformElement(element, resourcesByPath, baseUrl)
         }
         
-        // 使用所有文档（spine）计算前后导航
-        val allDocuments = documentRepository.findByBookId(bookId)
-        val currentIdx = allDocuments.indexOfFirst { it.index == index }
-        val prevIndex = if (currentIdx > 0) allDocuments[currentIdx - 1].index else null
-        val nextIndex = if (currentIdx < allDocuments.size - 1) allDocuments[currentIdx + 1].index else null
+        val adjacentIndexes = documentRepository.findAdjacentIndexes(bookId, index)
         
         return ChapterContent(
             index = index,
             title = document.title,
             elements = transformedElements,
-            prevIndex = prevIndex,
-            nextIndex = nextIndex
+            prevIndex = adjacentIndexes.prevIndex,
+            nextIndex = adjacentIndexes.nextIndex
         )
+    }
+
+    suspend fun getChapterList(bookId: Int): ChapterListResult {
+        val book = bookRepository.findByIdAsync(bookId) ?: return ChapterListResult.NotFound
+        if (!book.chaptersParsed) {
+            val parsed = try {
+                parseOnDemand(bookId, book.filePath)
+            } catch (e: Exception) {
+                logger.error("Failed to parse chapters for book ID: $bookId", e)
+                false
+            }
+            if (!parsed) return ChapterListResult.ParseFailed
+        }
+
+        return ChapterListResult.Success(documentRepository.findTocByBookIdAsync(bookId))
     }
     
     /**
      * 转换 ContentElement 中的图片路径
      */
-    private fun transformElement(element: ContentElement, bookId: Int, baseUrl: String?): ContentElement {
+    private fun transformElement(
+        element: ContentElement,
+        resourcesByPath: Map<String, ResourceInfo>,
+        baseUrl: String?
+    ): ContentElement {
         return when (element) {
             is ContentElement.Image -> {
-                val resource = documentRepository.findResource(bookId, element.src)
-                if (resource != null) {
-                    val (storedPath, _) = resource
-                    val imagePath = "/book_images/$storedPath"
-                    val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-                    element.copy(src = fullPath)
+                val transformedImage = transformImageReference(element.src, resourcesByPath, baseUrl)
+                if (transformedImage != null) {
+                    element.copy(
+                        src = transformedImage.src,
+                        width = transformedImage.width,
+                        height = transformedImage.height,
+                        aspectRatio = transformedImage.aspectRatio
+                    )
                 } else {
                     element
                 }
             }
             is ContentElement.Paragraph -> {
-                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+                element.copy(spans = element.spans.map { transformSpan(it) })
             }
             is ContentElement.Quote -> {
-                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+                element.copy(spans = element.spans.map { transformSpan(it) })
             }
             is ContentElement.ListBlock -> {
                 element.copy(items = element.items.map { item ->
-                    ListItem(item.spans.map { transformSpan(it, bookId, baseUrl) })
+                    ListItem(item.spans.map { transformSpan(it) })
                 })
             }
             is ContentElement.Footnote -> {
-                element.copy(spans = element.spans.map { transformSpan(it, bookId, baseUrl) })
+                // 转换脚注内容文本
+                val transformedContentSpans = element.contentSpans.map { transformSpan(it) }
+                
+                // 转换脚注图片路径和尺寸
+                val transformedImage = transformImageReference(element.footnoteImage, resourcesByPath, baseUrl)
+                if (transformedImage != null) {
+                    element.copy(
+                        footnoteImage = transformedImage.src,
+                        width = transformedImage.width,
+                        height = transformedImage.height,
+                        aspectRatio = transformedImage.aspectRatio,
+                        contentSpans = transformedContentSpans
+                    )
+                } else {
+                    element.copy(contentSpans = transformedContentSpans)
+                }
             }
             else -> element
         }
     }
+
+    private fun transformImageReference(
+        imagePath: String?,
+        resourcesByPath: Map<String, ResourceInfo>,
+        baseUrl: String?
+    ): TransformedImageReference? {
+        val resource = imagePath?.let { resourcesByPath[it] } ?: return null
+        val publicPath = "/book_images/${resource.storedPath}"
+        val fullPath = if (baseUrl != null) "$baseUrl$publicPath" else publicPath
+        val aspectRatio = if (resource.width != null && resource.height != null && resource.height > 0) {
+            resource.width.toDouble() / resource.height
+        } else {
+            null
+        }
+
+        return TransformedImageReference(
+            src = fullPath,
+            width = resource.width,
+            height = resource.height,
+            aspectRatio = aspectRatio
+        )
+    }
     
     /**
-     * 转换 TextSpan 中的 footnoteImage 路径为完整 URL
+     * 转换 TextSpan（目前只是占位符，未来可能需要转换其他属性）
      */
-    private fun transformSpan(span: TextSpan, bookId: Int, baseUrl: String?): TextSpan {
-        if (span.footnoteImage == null) return span
-        
-        val resource = documentRepository.findResource(bookId, span.footnoteImage)
-        return if (resource != null) {
-            val (storedPath, _) = resource
-            val imagePath = "/book_images/$storedPath"
-            val fullPath = if (baseUrl != null) "$baseUrl$imagePath" else imagePath
-            span.copy(footnoteImage = fullPath)
-        } else {
-            span
-        }
+    private fun transformSpan(span: TextSpan): TextSpan {
+        // TextSpan 不再包含 footnoteImage，直接返回
+        return span
     }
+
+    private fun collectImagePaths(elements: List<ContentElement>): Set<String> {
+        val paths = linkedSetOf<String>()
+        elements.forEach { element ->
+            when (element) {
+                is ContentElement.Image -> paths.add(element.src)
+                is ContentElement.Footnote -> element.footnoteImage?.let { paths.add(it) }
+                else -> Unit
+            }
+        }
+        return paths
+    }
+
+    private data class TransformedImageReference(
+        val src: String,
+        val width: Int?,
+        val height: Int?,
+        val aspectRatio: Double?
+    )
     
     /**
      * 构建目录树
@@ -470,7 +639,17 @@ class BookContentService(
      * 关闭服务
      */
     fun shutdown() {
-        scope.cancel()
-        contentDispatcher.close()
+        taskCoordinator.close()
     }
+}
+
+sealed class ChapterListResult {
+    data class Success(val documents: List<BookDocument>) : ChapterListResult()
+    data object NotFound : ChapterListResult()
+    data object ParseFailed : ChapterListResult()
+}
+
+private sealed class ContentParseResult {
+    data class Success(val documentCount: Int) : ContentParseResult()
+    data class Failed(val reason: String) : ContentParseResult()
 }

@@ -115,3 +115,8 @@ data class BooksInBookshelfResponse(
     val offset: Long,
     val hasMore: Boolean
 )
+
+data class BookshelfMembershipSummary(
+    val bookshelves: List<Bookshelf>,
+    val inDefaultBookshelf: Boolean
+)

@@ -40,7 +40,7 @@ class TagService(
             
             return tags
         } catch (e: Exception) {
-            println("❌ Failed to extract tags from filename: $filename - ${e.message}")
+            logger.warn("Failed to extract tags from filename: $filename - ${e.message}")
             return emptyList()
         }
     }
@@ -54,19 +54,18 @@ class TagService(
         val tagNames = extractTagsFromFilename(filename)
         
         if (tagNames.isEmpty()) return emptyList()
-        
-        val tags = mutableListOf<Tag>()
-        for (tagName in tagNames) {
-            try {
-                val tag = tagRepository.findOrCreateTag(tagName)
-                tagRepository.addTagToBook(bookId, tag.id)
-                tags.add(tag)
-            } catch (e: Exception) {
-                logger.warn("Failed to add tag '$tagName' to book $bookId: ${e.message}")
-            }
-        }
-        
-        return tags
+
+        return addTagsToBook(bookId, tagNames)
+    }
+
+    suspend fun autoTagBookFromFilenameAsync(bookId: Int): List<Tag> {
+        val book = bookRepository.findByIdAsync(bookId) ?: return emptyList()
+        val filename = File(book.filePath).name
+        val tagNames = extractTagsFromFilename(filename)
+
+        if (tagNames.isEmpty()) return emptyList()
+
+        return addTagsToBookAsync(bookId, tagNames)
     }
     
     /**
@@ -95,29 +94,45 @@ class TagService(
             
             logger.info("Extracting ${metadata.tags.size} tags from metadata for book $bookId: ${metadata.tags.joinToString(", ")}")
             
-            val tags = mutableListOf<Tag>()
-            var addedCount = 0
-            
-            for (tagName in metadata.tags) {
-                try {
-                    // 查找或创建标签
-                    val tag = tagRepository.findOrCreateTag(tagName)
-                    
-                    // 添加标签到书籍 (如果已存在会被忽略)
-                    val added = tagRepository.addTagToBook(bookId, tag.id)
-                    if (added) {
-                        addedCount++
-                        tags.add(tag)
-                    }
-                } catch (e: Exception) {
-                    logger.warn("Failed to add tag '$tagName' to book $bookId: ${e.message}")
-                }
-            }
+            val tags = addTagsToBook(bookId, metadata.tags)
+            val addedCount = tags.size
             
             if (addedCount > 0) {
                 logger.info("Successfully added $addedCount tags to book ID: $bookId")
             }
-            
+            tags
+        } catch (e: Exception) {
+            logger.error("Failed to extract tags from metadata for book $bookId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun autoTagBookAsync(bookId: Int): List<Tag> {
+        val book = bookRepository.findByIdAsync(bookId) ?: return emptyList()
+        val file = File(book.filePath)
+
+        if (!file.exists() || !file.isFile) {
+            logger.warn("File does not exist: ${book.filePath}")
+            return emptyList()
+        }
+
+        return try {
+            val extractor = extractorFactory.createExtractor(file)
+            val metadata = extractor.extractMetadata(file)
+
+            if (metadata == null || metadata.tags.isEmpty()) {
+                logger.debug("No tags found in metadata for book $bookId (${file.name})")
+                return emptyList()
+            }
+
+            logger.info("Extracting ${metadata.tags.size} tags from metadata for book $bookId: ${metadata.tags.joinToString(", ")}")
+
+            val tags = addTagsToBookAsync(bookId, metadata.tags)
+            val addedCount = tags.size
+
+            if (addedCount > 0) {
+                logger.info("Successfully added $addedCount tags to book ID: $bookId")
+            }
             tags
         } catch (e: Exception) {
             logger.error("Failed to extract tags from metadata for book $bookId: ${e.message}")
@@ -159,6 +174,37 @@ class TagService(
             "totalBooks" to books.size
         )
     }
+
+    suspend fun autoTagAllBooksAsync(): Map<String, Int> {
+        val books = bookRepository.findAllAsync()
+        var booksTagged = 0
+        val initialTagCount = tagRepository.getAllTagsAsync().size
+
+        logger.info("Starting auto-tagging for ${books.size} books from metadata")
+
+        for (book in books) {
+            try {
+                val tags = autoTagBookAsync(book.id)
+                if (tags.isNotEmpty()) {
+                    booksTagged++
+                    logger.debug("Tagged book ${book.id} (${book.title}) with ${tags.size} tags")
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to auto-tag book ${book.id}: ${e.message}")
+            }
+        }
+
+        val finalTagCount = tagRepository.getAllTagsAsync().size
+        val tagsCreated = finalTagCount - initialTagCount
+
+        logger.info("Auto-tagging completed: $booksTagged books tagged, $tagsCreated new tags created")
+
+        return mapOf(
+            "booksTagged" to booksTagged,
+            "tagsCreated" to tagsCreated,
+            "totalBooks" to books.size
+        )
+    }
     
     /**
      * Get all tags
@@ -166,12 +212,20 @@ class TagService(
     fun getAllTags(): List<Tag> {
         return tagRepository.getAllTags()
     }
+
+    suspend fun getAllTagsAsync(): List<Tag> {
+        return tagRepository.getAllTagsAsync()
+    }
     
     /**
      * Get tags for a book
      */
     fun getTagsForBook(bookId: Int): List<Tag> {
         return tagRepository.getTagsByBookId(bookId)
+    }
+
+    suspend fun getTagsForBookAsync(bookId: Int): List<Tag> {
+        return tagRepository.getTagsByBookIdAsync(bookId)
     }
     
     /**
@@ -182,6 +236,12 @@ class TagService(
         tagRepository.addTagToBook(bookId, tag.id)
         return tag
     }
+
+    suspend fun addTagToBookAsync(bookId: Int, tagName: String): Tag {
+        val tag = tagRepository.findOrCreateTagAsync(tagName)
+        tagRepository.addTagToBookAsync(bookId, tag.id)
+        return tag
+    }
     
     /**
      * Remove tag from book
@@ -189,12 +249,20 @@ class TagService(
     fun removeTagFromBook(bookId: Int, tagId: Int): Boolean {
         return tagRepository.removeTagFromBook(bookId, tagId)
     }
+
+    suspend fun removeTagFromBookAsync(bookId: Int, tagId: Int): Boolean {
+        return tagRepository.removeTagFromBookAsync(bookId, tagId)
+    }
     
     /**
      * Delete a tag (and remove from all books)
      */
     fun deleteTag(tagId: Int): Boolean {
         return tagRepository.deleteTag(tagId)
+    }
+
+    suspend fun deleteTagAsync(tagId: Int): Boolean {
+        return tagRepository.deleteTagAsync(tagId)
     }
     
     /**
@@ -205,6 +273,12 @@ class TagService(
         val tags = tagRepository.getAllTags()
         return tags.associateWith { stats[it.id] ?: 0 }
     }
+
+    suspend fun getTagStatsAsync(): Map<Tag, Int> {
+        val stats = tagRepository.getTagStatsAsync()
+        val tags = tagRepository.getAllTagsAsync()
+        return tags.associateWith { stats[it.id] ?: 0 }
+    }
     
     /**
      * Get books by tag
@@ -212,12 +286,20 @@ class TagService(
     fun getBooksByTagId(tagId: Int): List<Int> {
         return tagRepository.getBookIdsByTagId(tagId)
     }
+
+    suspend fun getBooksByTagIdAsync(tagId: Int): List<Int> {
+        return tagRepository.getBookIdsByTagIdAsync(tagId)
+    }
     
     /**
      * Create a new tag manually
      */
     fun createTag(tagName: String): Tag {
         return tagRepository.findOrCreateTag(tagName)
+    }
+
+    suspend fun createTagAsync(tagName: String): Tag {
+        return tagRepository.findOrCreateTagAsync(tagName)
     }
     
     /**
@@ -238,14 +320,44 @@ class TagService(
             val bookIds = tagRepository.getBookIdsByTagId(sourceTagId)
             
             // Add target tag to all these books
-            for (bookId in bookIds) {
-                tagRepository.addTagToBook(bookId, targetTag.id)
-            }
+            tagRepository.addTagToBooks(bookIds, targetTag.id)
             
             // Delete the source tag
             tagRepository.deleteTag(sourceTagId)
         }
         
         return targetTag
+    }
+
+    suspend fun mergeTagsAsync(sourceTagIds: List<Int>, targetTagName: String): Tag {
+        val targetTag = tagRepository.findOrCreateTagAsync(targetTagName)
+
+        for (sourceTagId in sourceTagIds) {
+            if (sourceTagId == targetTag.id) continue
+
+            val bookIds = tagRepository.getBookIdsByTagIdAsync(sourceTagId)
+            tagRepository.addTagToBooksAsync(bookIds, targetTag.id)
+            tagRepository.deleteTagAsync(sourceTagId)
+        }
+
+        return targetTag
+    }
+
+    private fun addTagsToBook(bookId: Int, tagNames: Collection<String>): List<Tag> {
+        val tagsByName = tagRepository.findOrCreateTags(tagNames)
+        if (tagsByName.isEmpty()) return emptyList()
+
+        val tagsById = tagsByName.values.associateBy { it.id }
+        val addedTagIds = tagRepository.addTagsToBook(bookId, tagsById.keys)
+        return addedTagIds.mapNotNull { tagsById[it] }
+    }
+
+    private suspend fun addTagsToBookAsync(bookId: Int, tagNames: Collection<String>): List<Tag> {
+        val tagsByName = tagRepository.findOrCreateTagsAsync(tagNames)
+        if (tagsByName.isEmpty()) return emptyList()
+
+        val tagsById = tagsByName.values.associateBy { it.id }
+        val addedTagIds = tagRepository.addTagsToBookAsync(bookId, tagsById.keys)
+        return addedTagIds.mapNotNull { tagsById[it] }
     }
 }

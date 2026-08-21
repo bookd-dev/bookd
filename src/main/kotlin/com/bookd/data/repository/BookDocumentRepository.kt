@@ -2,19 +2,66 @@ package com.bookd.data.repository
 
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.BookDocuments
+import com.bookd.data.entity.Books
 import com.bookd.data.entity.DocumentContents
 import com.bookd.data.entity.DocumentResources
 import com.bookd.domain.model.BookDocument
 import com.bookd.domain.model.ContentElement
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 class BookDocumentRepository {
     
     private val json = Json { ignoreUnknownKeys = true }
+    
+    // 旧类型名称到新类型名称的映射
+    private val typeNameMigrations = mapOf(
+        "com.bookd.domain.model.ContentElement.Paragraph" to "paragraph",
+        "com.bookd.domain.model.ContentElement.Heading" to "heading",
+        "com.bookd.domain.model.ContentElement.Image" to "image",
+        "com.bookd.domain.model.ContentElement.Quote" to "quote",
+        "com.bookd.domain.model.ContentElement.Code" to "code",
+        "com.bookd.domain.model.ContentElement.ListBlock" to "listBlock",
+        "com.bookd.domain.model.ContentElement.Divider" to "divider",
+        "com.bookd.domain.model.ContentElement.Footnote" to "footnote"
+    )
+    
+    /**
+     * 迁移旧的 ContentElement type 格式
+     * 将完整类名替换为简短名称
+     * @return 迁移的记录数
+     */
+    fun migrateContentElementTypes(): Int = transaction {
+        var migratedCount = 0
+        
+        DocumentContents.selectAll().forEach { row ->
+            val documentId = row[DocumentContents.documentId]
+            var content = row[DocumentContents.content]
+            var needsUpdate = false
+            
+            // 检查并替换所有旧类型名称
+            for ((oldName, newName) in typeNameMigrations) {
+                if (content.contains(oldName)) {
+                    content = content.replace("\"type\":\"$oldName\"", "\"type\":\"$newName\"")
+                    needsUpdate = true
+                }
+            }
+            
+            if (needsUpdate) {
+                DocumentContents.update({ DocumentContents.documentId eq documentId }) {
+                    it[DocumentContents.content] = content
+                }
+                migratedCount++
+            }
+        }
+        
+        migratedCount
+    }
     
     /**
      * 获取书籍的所有文档（spine 顺序）
@@ -24,6 +71,35 @@ class BookDocumentRepository {
             .where { BookDocuments.bookId eq bookId }
             .orderBy(BookDocuments.index to SortOrder.ASC)
             .map { toBookDocument(it) }
+    }
+
+    suspend fun findByBookIdAsync(bookId: Int): List<BookDocument> = dbQuery {
+        BookDocuments.selectAll()
+            .where { BookDocuments.bookId eq bookId }
+            .orderBy(BookDocuments.index to SortOrder.ASC)
+            .map { toBookDocument(it) }
+    }
+
+    suspend fun findStatsByBookIds(bookIds: List<Int>): Map<Int, BookDocumentStats> = dbQuery {
+        if (bookIds.isEmpty()) {
+            emptyMap()
+        } else {
+            BookDocuments.select(
+                BookDocuments.bookId,
+                BookDocuments.inToc,
+                BookDocuments.wordCount,
+                BookDocuments.imageCount
+            )
+                .where { BookDocuments.bookId inList bookIds }
+                .groupBy { it[BookDocuments.bookId].value }
+                .mapValues { (_, rows) ->
+                    BookDocumentStats(
+                        chapterCount = rows.count { it[BookDocuments.inToc] },
+                        totalWordCount = rows.sumOf { it[BookDocuments.wordCount] },
+                        totalImageCount = rows.sumOf { it[BookDocuments.imageCount] }
+                    )
+                }
+        }
     }
     
     /**
@@ -35,12 +111,38 @@ class BookDocumentRepository {
             .orderBy(BookDocuments.index to SortOrder.ASC)
             .map { toBookDocument(it) }
     }
+
+    suspend fun findTocByBookIdAsync(bookId: Int): List<BookDocument> = dbQuery {
+        BookDocuments.selectAll()
+            .where { (BookDocuments.bookId eq bookId) and (BookDocuments.inToc eq true) }
+            .orderBy(BookDocuments.index to SortOrder.ASC)
+            .map { toBookDocument(it) }
+    }
     
     fun findByBookIdAndIndex(bookId: Int, index: Int): BookDocument? = transaction {
         BookDocuments.selectAll()
             .where { (BookDocuments.bookId eq bookId) and (BookDocuments.index eq index) }
             .map { toBookDocument(it) }
             .singleOrNull()
+    }
+
+    suspend fun findByBookIdAndIndexAsync(bookId: Int, index: Int): BookDocument? = dbQuery {
+        BookDocuments.selectAll()
+            .where { (BookDocuments.bookId eq bookId) and (BookDocuments.index eq index) }
+            .map { toBookDocument(it) }
+            .singleOrNull()
+    }
+
+    suspend fun findAdjacentIndexes(bookId: Int, index: Int): AdjacentDocumentIndexes = dbQuery {
+        val indexes = BookDocuments.select(BookDocuments.index)
+            .where { BookDocuments.bookId eq bookId }
+            .orderBy(BookDocuments.index to SortOrder.ASC)
+            .map { it[BookDocuments.index] }
+        val currentPosition = indexes.indexOf(index)
+        AdjacentDocumentIndexes(
+            prevIndex = if (currentPosition > 0) indexes[currentPosition - 1] else null,
+            nextIndex = if (currentPosition >= 0 && currentPosition < indexes.size - 1) indexes[currentPosition + 1] else null
+        )
     }
     
     fun countByBookId(bookId: Int): Int = transaction {
@@ -98,6 +200,118 @@ class BookDocumentRepository {
             updatedAt = now
         )
     }
+
+    fun replaceDocumentsForBook(bookId: Int, documents: List<BookDocumentDraft>): Map<Int, BookDocument> = transaction {
+        DocumentResources.deleteWhere { DocumentResources.bookId eq bookId }
+        BookDocuments.deleteWhere { BookDocuments.bookId eq bookId }
+
+        val now = TimeProvider.now()
+        documents.associate { draft ->
+            val id = BookDocuments.insert {
+                it[BookDocuments.bookId] = bookId
+                it[BookDocuments.index] = draft.index
+                it[BookDocuments.href] = draft.href
+                it[BookDocuments.inToc] = draft.inToc
+                it[BookDocuments.title] = draft.title
+                it[BookDocuments.level] = draft.level
+                it[BookDocuments.wordCount] = draft.wordCount
+                it[BookDocuments.imageCount] = draft.imageCount
+                it[createdAt] = now
+                it[updatedAt] = now
+            }[BookDocuments.id]
+
+            draft.index to BookDocument(
+                id = id.value,
+                bookId = bookId,
+                index = draft.index,
+                href = draft.href,
+                inToc = draft.inToc,
+                title = draft.title,
+                level = draft.level,
+                wordCount = draft.wordCount,
+                imageCount = draft.imageCount,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+    }
+
+    /**
+     * 原子发布一次完整解析结果。解析和图片文件准备在事务外完成；文档、内容、资源以及书籍完成状态
+     * 在同一事务内切换，任何写入失败都会保留上一版可读数据。
+     */
+    suspend fun replaceParsedBook(
+        bookId: Int,
+        documents: List<ParsedDocumentDraft>,
+        resources: List<DocumentResourceDraft>
+    ): Int {
+        require(documents.isNotEmpty()) { "Parsed book must contain documents" }
+        require(documents.map { it.document.index }.distinct().size == documents.size) {
+            "Parsed document indexes must be unique"
+        }
+        require(resources.all { it.bookId == bookId }) { "Resource bookId does not match parsed book" }
+        // JSON 序列化可能较重，必须在数据库事务外完成。
+        val serializedDocuments = documents.map { parsed ->
+            parsed to json.encodeToString(parsed.elements)
+        }
+
+        return dbQuery {
+            DocumentResources.deleteWhere { DocumentResources.bookId eq bookId }
+            BookDocuments.deleteWhere { BookDocuments.bookId eq bookId }
+
+            val now = TimeProvider.now()
+            serializedDocuments.forEach { (parsed, contentJson) ->
+                val draft = parsed.document
+                val documentId = BookDocuments.insert {
+                    it[BookDocuments.bookId] = bookId
+                    it[BookDocuments.index] = draft.index
+                    it[BookDocuments.href] = draft.href
+                    it[BookDocuments.inToc] = draft.inToc
+                    it[BookDocuments.title] = draft.title
+                    it[BookDocuments.level] = draft.level
+                    it[BookDocuments.wordCount] = parsed.wordCount
+                    it[BookDocuments.imageCount] = parsed.imageCount
+                    it[BookDocuments.createdAt] = now
+                    it[BookDocuments.updatedAt] = now
+                }[BookDocuments.id]
+
+                DocumentContents.insert {
+                    it[DocumentContents.documentId] = documentId
+                    it[DocumentContents.content] = contentJson
+                }
+            }
+
+            resources.forEach { draft ->
+                DocumentResources.insert {
+                    it[DocumentResources.bookId] = bookId
+                    it[DocumentResources.path] = draft.path
+                    it[DocumentResources.storedPath] = draft.storedPath
+                    it[DocumentResources.mediaType] = draft.mediaType
+                    it[DocumentResources.size] = draft.size
+                    it[DocumentResources.width] = draft.width
+                    it[DocumentResources.height] = draft.height
+                }
+            }
+
+            val tocChapterCount = documents.count { it.document.inToc }
+            val totalWordCount = documents.sumOf { it.wordCount }
+            val totalImageCount = documents.sumOf { it.imageCount }
+            val updated = Books.update({ Books.id eq bookId }) {
+                it[Books.chaptersParsed] = true
+                it[Books.chaptersCount] = documents.size
+                it[Books.tocChapterCount] = tocChapterCount
+                it[Books.totalWordCount] = totalWordCount
+                it[Books.totalImageCount] = totalImageCount
+                it[Books.statsUpdatedAt] = now
+                it[Books.lastParsedAt] = now
+                it[Books.parseStatus] = "completed"
+                it[Books.parseProgress] = 100
+                it[Books.updatedAt] = now
+            }
+            check(updated == 1) { "Book not found while publishing parsed content: $bookId" }
+            documents.size
+        }
+    }
     
     fun updateStats(documentId: Int, wordCount: Int, imageCount: Int): Int = transaction {
         val now = TimeProvider.now()
@@ -123,8 +337,33 @@ class BookDocumentRepository {
             it[content] = contentJson
         }
     }
+
+    fun replaceDocumentContentsAndStats(contents: List<DocumentContentDraft>) = transaction {
+        if (contents.isEmpty()) return@transaction
+
+        val now = TimeProvider.now()
+        contents.forEach { draft ->
+            DocumentContents.deleteWhere { DocumentContents.documentId eq draft.documentId }
+            DocumentContents.insert {
+                it[DocumentContents.documentId] = draft.documentId
+                it[DocumentContents.content] = json.encodeToString(draft.elements)
+            }
+            BookDocuments.update({ BookDocuments.id eq draft.documentId }) {
+                it[wordCount] = draft.wordCount
+                it[imageCount] = draft.imageCount
+                it[updatedAt] = now
+            }
+        }
+    }
     
     fun getDocumentContent(documentId: Int): List<ContentElement>? = transaction {
+        DocumentContents.selectAll()
+            .where { DocumentContents.documentId eq documentId }
+            .map { json.decodeFromString<List<ContentElement>>(it[DocumentContents.content]) }
+            .singleOrNull()
+    }
+
+    suspend fun getDocumentContentAsync(documentId: Int): List<ContentElement>? = dbQuery {
         DocumentContents.selectAll()
             .where { DocumentContents.documentId eq documentId }
             .map { json.decodeFromString<List<ContentElement>>(it[DocumentContents.content]) }
@@ -133,12 +372,17 @@ class BookDocumentRepository {
     
     // === Resource Operations ===
     
+    /**
+     * 保存书籍资源（图片），包含宽高信息
+     */
     fun saveResource(
         bookId: Int,
         path: String,
         storedPath: String,
         mediaType: String,
-        size: Long
+        size: Long,
+        width: Int? = null,
+        height: Int? = null
     ) = transaction {
         DocumentResources.insert {
             it[DocumentResources.bookId] = bookId
@@ -146,14 +390,60 @@ class BookDocumentRepository {
             it[DocumentResources.storedPath] = storedPath
             it[DocumentResources.mediaType] = mediaType
             it[DocumentResources.size] = size
+            it[DocumentResources.width] = width
+            it[DocumentResources.height] = height
+        }
+    }
+
+    fun saveResources(resources: List<DocumentResourceDraft>) = transaction {
+        if (resources.isEmpty()) return@transaction
+
+        resources.forEach { draft ->
+            DocumentResources.insert {
+                it[DocumentResources.bookId] = draft.bookId
+                it[DocumentResources.path] = draft.path
+                it[DocumentResources.storedPath] = draft.storedPath
+                it[DocumentResources.mediaType] = draft.mediaType
+                it[DocumentResources.size] = draft.size
+                it[DocumentResources.width] = draft.width
+                it[DocumentResources.height] = draft.height
+            }
         }
     }
     
-    fun findResource(bookId: Int, path: String): Pair<String, String>? = transaction {
+    /**
+     * 查找资源，返回包含宽高的信息
+     * @return ResourceInfo 或 null
+     */
+    fun findResource(bookId: Int, path: String): ResourceInfo? = transaction {
         DocumentResources.selectAll()
             .where { (DocumentResources.bookId eq bookId) and (DocumentResources.path eq path) }
-            .map { it[DocumentResources.storedPath] to it[DocumentResources.mediaType] }
+            .map { 
+                ResourceInfo(
+                    storedPath = it[DocumentResources.storedPath],
+                    mediaType = it[DocumentResources.mediaType],
+                    width = it[DocumentResources.width],
+                    height = it[DocumentResources.height]
+                )
+            }
             .singleOrNull()
+    }
+
+    suspend fun findResourcesByBookIdAndPaths(bookId: Int, paths: Set<String>): Map<String, ResourceInfo> = dbQuery {
+        if (paths.isEmpty()) {
+            emptyMap()
+        } else {
+            DocumentResources.selectAll()
+                .where { (DocumentResources.bookId eq bookId) and (DocumentResources.path inList paths.toList()) }
+                .associate {
+                    it[DocumentResources.path] to ResourceInfo(
+                        storedPath = it[DocumentResources.storedPath],
+                        mediaType = it[DocumentResources.mediaType],
+                        width = it[DocumentResources.width],
+                        height = it[DocumentResources.height]
+                    )
+                }
+        }
     }
     
     fun deleteResourcesByBookId(bookId: Int): Int = transaction {
@@ -174,3 +464,58 @@ class BookDocumentRepository {
         updatedAt = row[BookDocuments.updatedAt]
     )
 }
+
+/**
+ * 资源信息数据类
+ */
+data class ResourceInfo(
+    val storedPath: String,
+    val mediaType: String,
+    val width: Int?,
+    val height: Int?
+)
+
+data class BookDocumentStats(
+    val chapterCount: Int,
+    val totalWordCount: Int,
+    val totalImageCount: Int
+)
+
+data class AdjacentDocumentIndexes(
+    val prevIndex: Int?,
+    val nextIndex: Int?
+)
+
+data class BookDocumentDraft(
+    val index: Int,
+    val href: String?,
+    val inToc: Boolean,
+    val title: String?,
+    val level: Int,
+    val wordCount: Int = 0,
+    val imageCount: Int = 0
+)
+
+data class ParsedDocumentDraft(
+    val document: BookDocumentDraft,
+    val elements: List<ContentElement>,
+    val wordCount: Int,
+    val imageCount: Int
+)
+
+data class DocumentContentDraft(
+    val documentId: Int,
+    val elements: List<ContentElement>,
+    val wordCount: Int,
+    val imageCount: Int
+)
+
+data class DocumentResourceDraft(
+    val bookId: Int,
+    val path: String,
+    val storedPath: String,
+    val mediaType: String,
+    val size: Long,
+    val width: Int?,
+    val height: Int?
+)

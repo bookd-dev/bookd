@@ -1,6 +1,5 @@
 package com.bookd.routes
 
-import com.bookd.com.bookd.extension.buildBaseUrl
 import com.bookd.domain.model.*
 import com.bookd.domain.service.BookshelfException
 import com.bookd.domain.service.BookshelfService
@@ -27,7 +26,7 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@get
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookshelves = bookshelfService.getUserBookshelves(userId)
+            val bookshelves = bookshelfService.getUserBookshelvesAsync(userId)
             call.respondSuccess(bookshelves)
         }
         
@@ -37,7 +36,7 @@ fun Route.bookshelfRoutes() {
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
             val request = call.receive<CreateBookshelfRequest>()
-            val result = bookshelfService.createBookshelf(userId, request)
+            val result = bookshelfService.createBookshelfAsync(userId, request)
             
             call.handleResult(result) { bookshelf ->
                 respondSuccess(HttpStatusCode.Created, bookshelf)
@@ -50,7 +49,7 @@ fun Route.bookshelfRoutes() {
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
             val request = call.receive<ReorderBookshelvesRequest>()
-            val result = bookshelfService.reorderBookshelves(userId, request)
+            val result = bookshelfService.reorderBookshelvesAsync(userId, request)
             
             call.handleResult(result) {
                 respondNoContent()
@@ -62,14 +61,10 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@put
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookshelfId = call.parameters["id"]?.toIntOrNull()
-            if (bookshelfId == null) {
-                call.respondError(ErrorCode.SHELF_INVALID_ID)
-                return@put
-            }
+            val bookshelfId = call.requiredIntParameter("id", ErrorCode.SHELF_INVALID_ID) ?: return@put
             
             val request = call.receive<UpdateBookshelfRequest>()
-            val result = bookshelfService.updateBookshelf(userId, bookshelfId, request)
+            val result = bookshelfService.updateBookshelfAsync(userId, bookshelfId, request)
             
             call.handleResult(result) { bookshelf ->
                 respondSuccess(bookshelf)
@@ -81,13 +76,9 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@delete
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookshelfId = call.parameters["id"]?.toIntOrNull()
-            if (bookshelfId == null) {
-                call.respondError(ErrorCode.SHELF_INVALID_ID)
-                return@delete
-            }
+            val bookshelfId = call.requiredIntParameter("id", ErrorCode.SHELF_INVALID_ID) ?: return@delete
             
-            val result = bookshelfService.deleteBookshelf(userId, bookshelfId)
+            val result = bookshelfService.deleteBookshelfAsync(userId, bookshelfId)
             
             call.handleResult(result) {
                 respondNoContent()
@@ -99,29 +90,17 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@get
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookshelfId = call.parameters["id"]?.toIntOrNull()
-            if (bookshelfId == null) {
-                call.respondError(ErrorCode.SHELF_INVALID_ID)
-                return@get
-            }
+            val bookshelfId = call.requiredIntParameter("id", ErrorCode.SHELF_INVALID_ID) ?: return@get
             
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
-            val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
+            val limit = call.intQueryParameter("limit", 20)
+            val offset = call.longQueryParameter("offset", 0)
             
-            val result = bookshelfService.getBooksInBookshelf(userId, bookshelfId, limit, offset)
+            val result = bookshelfService.getBooksInBookshelfAsync(userId, bookshelfId, limit, offset)
             
             call.handleResult(result) { response ->
                 // 拼接完整封面 URL
                 val baseUrl = buildBaseUrl()
-                val booksWithFullCoverUrl = response.books.map { bookWithProgress ->
-                    val book = bookWithProgress.book
-                    val fullCoverPath = book.coverPath?.let { path ->
-                        if (path.startsWith("http")) path else "$baseUrl$path"
-                    }
-                    bookWithProgress.copy(
-                        book = book.copy(coverPath = fullCoverPath)
-                    )
-                }
+                val booksWithFullCoverUrl = response.books.map { it.withPublicCoverUrl(baseUrl) }
                 respondSuccess(response.copy(books = booksWithFullCoverUrl))
             }
         }
@@ -131,14 +110,10 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@post
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookshelfId = call.parameters["id"]?.toIntOrNull()
-            if (bookshelfId == null) {
-                call.respondError(ErrorCode.SHELF_INVALID_ID)
-                return@post
-            }
+            val bookshelfId = call.requiredIntParameter("id", ErrorCode.SHELF_INVALID_ID) ?: return@post
             
             val request = call.receive<AddBookToBookshelfRequest>()
-            val result = bookshelfService.addBookToBookshelf(userId, bookshelfId, request.bookId)
+            val result = bookshelfService.addBookToBookshelfAsync(userId, bookshelfId, request.bookId)
             
             call.handleResult(result) {
                 respondNoContent()
@@ -150,20 +125,10 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@delete
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookshelfId = call.parameters["id"]?.toIntOrNull()
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
+            val bookshelfId = call.requiredIntParameter("id", ErrorCode.SHELF_INVALID_ID) ?: return@delete
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@delete
             
-            if (bookshelfId == null) {
-                call.respondError(ErrorCode.SHELF_INVALID_ID)
-                return@delete
-            }
-            
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@delete
-            }
-            
-            val result = bookshelfService.removeBookFromBookshelf(userId, bookshelfId, bookId)
+            val result = bookshelfService.removeBookFromBookshelfAsync(userId, bookshelfId, bookId)
             
             call.handleResult(result) {
                 respondNoContent()
@@ -178,13 +143,9 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@get
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@get
             
-            val bookshelves = bookshelfService.getBookshelvesForBook(userId, bookId)
+            val bookshelves = bookshelfService.getBookshelvesForBookAsync(userId, bookId)
             call.respondSuccess(bookshelves)
         }
         
@@ -193,14 +154,10 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@post
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@post
             
             val request = call.receive<BatchAddToBookshelvesRequest>()
-            val result = bookshelfService.addBookToBookshelves(userId, bookId, request.bookshelfIds)
+            val result = bookshelfService.addBookToBookshelvesAsync(userId, bookId, request.bookshelfIds)
             
             call.handleResult(result) {
                 respondNoContent()
@@ -212,14 +169,10 @@ fun Route.bookshelfRoutes() {
             val userId = call.getAuthenticatedUserId() ?: return@delete
             val bookshelfService = get<BookshelfService>(BookshelfService::class.java)
             
-            val bookId = call.parameters["bookId"]?.toIntOrNull()
-            if (bookId == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@delete
-            }
+            val bookId = call.requiredIntParameter("bookId", ErrorCode.BOOK_INVALID_ID) ?: return@delete
             
             val request = call.receive<BatchRemoveFromBookshelvesRequest>()
-            val result = bookshelfService.batchRemoveBookFromBookshelves(userId, bookId, request.bookshelfIds)
+            val result = bookshelfService.batchRemoveBookFromBookshelvesAsync(userId, bookId, request.bookshelfIds)
             
             call.handleResult(result) {
                 respondNoContent()

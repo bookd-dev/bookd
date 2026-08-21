@@ -4,7 +4,6 @@ import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 import org.w3c.dom.Node.ELEMENT_NODE
 import java.util.zip.ZipFile
-import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element as DomElement
 
 /**
@@ -115,8 +114,8 @@ class EpubTocParser {
         }
         
         return try {
-            zipFile.getInputStream(navEntry).use { stream ->
-                val html = stream.bufferedReader().use { it.readText() }
+            EpubArchiveSafety.readBytes(zipFile, navEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+                val html = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                 val doc = Jsoup.parse(html)
                 
                 // 查找 epub:type="toc" 的 nav 元素
@@ -203,10 +202,8 @@ class EpubTocParser {
         }
         
         return try {
-            zipFile.getInputStream(ncxEntry).use { stream ->
-                val factory = DocumentBuilderFactory.newInstance()
-                factory.isNamespaceAware = true
-                val doc = factory.newDocumentBuilder().parse(stream)
+            EpubArchiveSafety.readBytes(zipFile, ncxEntry, EpubArchiveSafety.MAX_XML_BYTES).inputStream().use { stream ->
+                val doc = SecureXml.parse(stream)
                 
                 val hrefToIndex = spineItems.withIndex().associate { it.value to it.index }
                 

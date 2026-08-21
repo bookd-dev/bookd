@@ -4,28 +4,23 @@ import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.Books
 import com.bookd.data.entity.ReadingProgress
 import com.bookd.domain.model.ReadingProgressResponse
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.transaction
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
 import java.math.BigDecimal
 
 class ReadingProgressRepository {
     
-    fun findByUserAndBook(userId: Int, bookId: Int): ReadingProgressResponse? = transaction {
-        ReadingProgress.selectAll()
-            .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) }
-            .map { toResponse(it) }
-            .singleOrNull()
+    suspend fun findByUserAndBook(userId: Int, bookId: Int): ReadingProgressResponse? = dbQuery {
+        findByUserAndBookInCurrentTransaction(userId, bookId)
     }
     
-    fun findByUser(userId: Int, limit: Int = 50, offset: Long = 0): List<ReadingProgressResponse> = transaction {
+    suspend fun findByUser(userId: Int, limit: Int = 50, offset: Long = 0): List<ReadingProgressResponse> = dbQuery {
         ReadingProgress.selectAll()
             .where { ReadingProgress.userId eq userId }
             .orderBy(ReadingProgress.lastReadAt, SortOrder.DESC)
-            .limit(limit, offset)
+            .limit(limit).offset(offset)
             .map { toResponse(it) }
     }
     
@@ -37,8 +32,8 @@ class ReadingProgressRepository {
      * @param bookIds 书籍ID列表
      * @return Map<bookId, ReadingProgressResponse>
      */
-    fun findByUserAndBooks(userId: Int, bookIds: List<Int>): Map<Int, ReadingProgressResponse> = transaction {
-        if (bookIds.isEmpty()) return@transaction emptyMap()
+    suspend fun findByUserAndBooks(userId: Int, bookIds: List<Int>): Map<Int, ReadingProgressResponse> = dbQuery {
+        if (bookIds.isEmpty()) return@dbQuery emptyMap()
         
         ReadingProgress.selectAll()
             .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId inList bookIds) }
@@ -47,7 +42,7 @@ class ReadingProgressRepository {
             }
     }
     
-    fun upsert(
+    suspend fun upsert(
         userId: Int,
         bookId: Int,
         progress: Double,
@@ -55,8 +50,14 @@ class ReadingProgressRepository {
         totalPages: Int?,
         cfiLocation: String?,
         documentId: String?,
-        deviceId: String?
-    ): ReadingProgressResponse = transaction {
+        deviceId: String?,
+        anchorId: String? = null,
+        paragraphIndex: Int? = null,
+        scrollOffset: Int? = null,
+        chapterPageIndex: Int? = null,
+        chapterTotalPages: Int? = null,
+        chapterScrollPercent: Double? = null
+    ): ReadingProgressResponse = dbQuery {
         val now = TimeProvider.now()
         
         val existing = ReadingProgress.selectAll()
@@ -71,6 +72,12 @@ class ReadingProgressRepository {
                 if (cfiLocation != null) it[ReadingProgress.cfiLocation] = cfiLocation
                 if (documentId != null) it[ReadingProgress.documentId] = documentId
                 if (deviceId != null) it[ReadingProgress.deviceId] = deviceId
+                if (anchorId != null) it[ReadingProgress.anchorId] = anchorId
+                if (paragraphIndex != null) it[ReadingProgress.paragraphIndex] = paragraphIndex
+                if (scrollOffset != null) it[ReadingProgress.scrollOffset] = scrollOffset
+                if (chapterPageIndex != null) it[ReadingProgress.chapterPageIndex] = chapterPageIndex
+                if (chapterTotalPages != null) it[ReadingProgress.chapterTotalPages] = chapterTotalPages
+                if (chapterScrollPercent != null) it[ReadingProgress.chapterScrollPercent] = BigDecimal.valueOf(chapterScrollPercent)
                 it[lastReadAt] = now
             }
         } else {
@@ -83,14 +90,20 @@ class ReadingProgressRepository {
                 it[ReadingProgress.cfiLocation] = cfiLocation
                 it[ReadingProgress.documentId] = documentId
                 it[ReadingProgress.deviceId] = deviceId
+                it[ReadingProgress.anchorId] = anchorId
+                it[ReadingProgress.paragraphIndex] = paragraphIndex
+                it[ReadingProgress.scrollOffset] = scrollOffset
+                it[ReadingProgress.chapterPageIndex] = chapterPageIndex
+                it[ReadingProgress.chapterTotalPages] = chapterTotalPages
+                it[ReadingProgress.chapterScrollPercent] = chapterScrollPercent?.let { BigDecimal.valueOf(it) }
                 it[lastReadAt] = now
             }
         }
         
-        findByUserAndBook(userId, bookId)!!
+        findByUserAndBookInCurrentTransaction(userId, bookId)!!
     }
     
-    fun deleteByUserAndBook(userId: Int, bookId: Int): Int = transaction {
+    suspend fun deleteByUserAndBook(userId: Int, bookId: Int): Int = dbQuery {
         ReadingProgress.deleteWhere { 
             (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) 
         }
@@ -104,7 +117,7 @@ class ReadingProgressRepository {
         val bookFormat: String
     )
     
-    fun getReadingHistory(userId: Int, limit: Int = 20): List<ReadingHistoryItem> = transaction {
+    suspend fun getReadingHistory(userId: Int, limit: Int = 20): List<ReadingHistoryItem> = dbQuery {
         (ReadingProgress innerJoin Books)
             .selectAll()
             .where { ReadingProgress.userId eq userId }
@@ -120,6 +133,13 @@ class ReadingProgressRepository {
                 )
             }
     }
+
+    private fun findByUserAndBookInCurrentTransaction(userId: Int, bookId: Int): ReadingProgressResponse? {
+        return ReadingProgress.selectAll()
+            .where { (ReadingProgress.userId eq userId) and (ReadingProgress.bookId eq bookId) }
+            .map { toResponse(it) }
+            .singleOrNull()
+    }
     
     private fun toResponse(row: ResultRow) = ReadingProgressResponse(
         id = row[ReadingProgress.id].value,
@@ -130,6 +150,13 @@ class ReadingProgressRepository {
         cfiLocation = row[ReadingProgress.cfiLocation],
         documentId = row[ReadingProgress.documentId],
         deviceId = row[ReadingProgress.deviceId],
-        lastReadAt = row[ReadingProgress.lastReadAt]
+        lastReadAt = row[ReadingProgress.lastReadAt],
+        chapterIndex = row[ReadingProgress.currentPage],
+        anchorId = row[ReadingProgress.anchorId],
+        paragraphIndex = row[ReadingProgress.paragraphIndex],
+        scrollOffset = row[ReadingProgress.scrollOffset],
+        chapterPageIndex = row[ReadingProgress.chapterPageIndex],
+        chapterTotalPages = row[ReadingProgress.chapterTotalPages],
+        chapterScrollPercent = row[ReadingProgress.chapterScrollPercent]?.toDouble()
     )
 }

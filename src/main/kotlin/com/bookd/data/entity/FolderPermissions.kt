@@ -1,6 +1,6 @@
 package com.bookd.data.entity
 
-import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 
 object FolderPermissions : IntIdTable("folder_permissions") {
     val userId = reference("user_id", Users)

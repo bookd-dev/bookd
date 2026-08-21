@@ -2,10 +2,12 @@ package com.bookd.data.repository
 
 import com.bookd.infrastructure.time.TimeProvider
 import com.bookd.data.entity.TxtParseRules
-import kotlinx.datetime.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import com.bookd.infrastructure.database.DatabaseExecutor.dbQuery
+import kotlinx.datetime.toInstant
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.core.eq
+import kotlin.time.Instant
 
 class TxtParseRuleRepository {
     
@@ -29,28 +31,28 @@ class TxtParseRuleRepository {
     )
     
     suspend fun getAllRules(): List<TxtParseRuleDTO> = 
-        newSuspendedTransaction {
+        dbQuery {
             TxtParseRules.selectAll()
                 .orderBy(TxtParseRules.priority to SortOrder.ASC)
                 .map { it.toDTO() }
         }
     
     suspend fun getEnabledRules(): List<TxtParseRuleDTO> =
-        newSuspendedTransaction {
+        dbQuery {
             TxtParseRules.selectAll().where { TxtParseRules.enabled eq true }
                 .orderBy(TxtParseRules.priority to SortOrder.ASC)
                 .map { it.toDTO() }
         }
     
     suspend fun getRuleById(id: Int): TxtParseRuleDTO? =
-        newSuspendedTransaction {
+        dbQuery {
             TxtParseRules.selectAll().where { TxtParseRules.id eq id }
                 .map { it.toDTO() }
                 .firstOrNull()
         }
     
     suspend fun createRule(dto: CreateTxtParseRuleDTO): TxtParseRuleDTO =
-        newSuspendedTransaction {
+        dbQuery {
             val now = TimeProvider.now()
             val id = TxtParseRules.insertAndGetId {
                 it[name] = dto.name
@@ -67,7 +69,7 @@ class TxtParseRuleRepository {
         }
     
     suspend fun updateRule(id: Int, dto: CreateTxtParseRuleDTO): Boolean =
-        newSuspendedTransaction {
+        dbQuery {
             TxtParseRules.update({ TxtParseRules.id eq id }) {
                 it[name] = dto.name
                 it[rule] = dto.rule
@@ -79,15 +81,15 @@ class TxtParseRuleRepository {
         }
     
     suspend fun deleteRule(id: Int): Boolean =
-        newSuspendedTransaction {
+        dbQuery {
             TxtParseRules.deleteWhere { TxtParseRules.id eq id } > 0
         }
     
     suspend fun toggleRuleEnabled(id: Int): Boolean =
-        newSuspendedTransaction {
+        dbQuery {
             val currentEnabled = TxtParseRules.selectAll().where { TxtParseRules.id eq id }
                 .map { it[TxtParseRules.enabled] }
-                .firstOrNull() ?: return@newSuspendedTransaction false
+                .firstOrNull() ?: return@dbQuery false
             
             TxtParseRules.update({ TxtParseRules.id eq id }) {
                 it[enabled] = !currentEnabled
@@ -96,7 +98,7 @@ class TxtParseRuleRepository {
         }
     
     suspend fun updatePriorities(priorities: Map<Int, Int>): Boolean =
-        newSuspendedTransaction {
+        dbQuery {
             priorities.forEach { (id, priority) ->
                 TxtParseRules.update({ TxtParseRules.id eq id }) {
                     it[TxtParseRules.priority] = priority

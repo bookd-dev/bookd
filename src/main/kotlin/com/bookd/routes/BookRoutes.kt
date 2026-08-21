@@ -1,13 +1,13 @@
 package com.bookd.routes
 
-import com.bookd.com.bookd.extension.buildBaseUrl
-import com.bookd.data.repository.BookDocumentRepository
+import com.bookd.domain.model.BookDocument
 import com.bookd.domain.model.ErrorCode
 import com.bookd.domain.service.BookService
-import com.bookd.domain.service.CoverGeneratorService
 import com.bookd.domain.service.BookDetailService
-import com.bookd.data.repository.BookRepository
 import com.bookd.domain.service.BookContentService
+import com.bookd.domain.service.ChapterListResult
+import com.bookd.domain.service.CoverGenerateResult
+import com.bookd.domain.service.CoverUploadResult
 import com.bookd.extension.*
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -46,6 +46,7 @@ data class ChaptersResponse(
 
 @Serializable
 data class UpdateMetadataRequest(
+    val title: String? = null,
     val author: String? = null,
     val coverPath: String? = null,
     val isbn: String? = null,
@@ -80,9 +81,9 @@ fun Route.bookRoutes() {
     route("/api/books") {
         get {
             val bookService = get<BookService>(BookService::class.java)
-            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
-            val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0
-            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
+            val limit = call.intQueryParameter("limit", 100)
+            val offset = call.longQueryParameter("offset", 0)
+            val sourceId = call.optionalIntQueryParameter("sourceId")
 
             val books = if (sourceId != null) {
                 bookService.getBooksBySourceId(sourceId)
@@ -96,12 +97,13 @@ fun Route.bookRoutes() {
                 bookService.getTotalCount().toInt()
             }
 
-            call.respondSuccess(BooksResponse(books, total))
+            val baseUrl = call.buildBaseUrl()
+            call.respondSuccess(BooksResponse(books.map { it.withPublicCoverUrl(baseUrl) }, total))
         }
 
         get("/count") {
             val bookService = get<BookService>(BookService::class.java)
-            val sourceId = call.request.queryParameters["sourceId"]?.toIntOrNull()
+            val sourceId = call.optionalIntQueryParameter("sourceId")
 
             val count = if (sourceId != null) {
                 bookService.getCountBySourceId(sourceId)
@@ -114,11 +116,7 @@ fun Route.bookRoutes() {
 
         get("/{id}") {
             val bookService = get<BookService>(BookService::class.java)
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
             val book = bookService.getBookById(id)
             if (book == null) {
@@ -126,12 +124,7 @@ fun Route.bookRoutes() {
             } else {
                 // 构建完整的 URL
                 val baseUrl = call.buildBaseUrl()
-                val bookWithFullUrls = book.copy(
-                    coverPath = book.coverPath?.let { path ->
-                        if (path.startsWith("http")) path else "$baseUrl$path"
-                    }
-                )
-                call.respondSuccess(bookWithFullUrls)
+                call.respondSuccess(book.withPublicCoverUrl(baseUrl))
             }
         }
 
@@ -139,11 +132,7 @@ fun Route.bookRoutes() {
         get("/{id}/detail") {
             val bookDetailService = get<BookDetailService>(BookDetailService::class.java)
             
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
             
             // 获取当前用户
             val userId = call.getAuthenticatedUserId() ?: return@get
@@ -156,81 +145,48 @@ fun Route.bookRoutes() {
             
             // 构建完整的封面 URL
             val baseUrl = call.buildBaseUrl()
-            val bookWithFullUrls = bookDetail.book.copy(
-                coverPath = bookDetail.book.coverPath?.let { path ->
-                    if (path.startsWith("http")) path else "$baseUrl$path"
-                }
-            )
+            val bookWithFullUrls = bookDetail.book.withPublicCoverUrl(baseUrl)
             
             call.respondSuccess(bookDetail.copy(book = bookWithFullUrls))
         }
 
         // 获取书籍章节列表（仅目录项）
         get("/{id}/chapters") {
-            val bookRepository = get<BookRepository>(BookRepository::class.java)
-            val documentRepository = get<BookDocumentRepository>(BookDocumentRepository::class.java)
             val contentService = get<BookContentService>(BookContentService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@get
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@get
 
-            // 1. 获取书籍信息
-            val book = bookRepository.findById(id)
-            if (book == null) {
-                call.respondError(ErrorCode.BOOK_NOT_FOUND)
-                return@get
-            }
-
-            // 2. 如果未解析，触发按需解析
-            if (!book.chaptersParsed) {
-                try {
-                    val parsed = contentService.parseOnDemand(id, book.filePath)
-                    if (!parsed) {
-                        call.respondError(ErrorCode.BOOK_PARSE_CHAPTERS_FAILED)
-                        return@get
-                    }
-                } catch (e: Exception) {
-                    call.respondError(ErrorCode.BOOK_PARSE_CHAPTERS_FAILED, e.message)
-                    return@get
+            when (val result = contentService.getChapterList(id)) {
+                ChapterListResult.NotFound -> call.respondError(ErrorCode.BOOK_NOT_FOUND)
+                ChapterListResult.ParseFailed -> call.respondError(ErrorCode.BOOK_PARSE_CHAPTERS_FAILED)
+                is ChapterListResult.Success -> {
+                    val tocDocuments = result.documents
+                    call.respondSuccess(
+                        ChaptersResponse(
+                            bookId = id,
+                            total = tocDocuments.size,
+                            chapters = tocDocuments.map { it.toChapterInfo() }
+                        )
+                    )
                 }
             }
-
-            // 3. 从数据库获取目录项（仅 inToc=true）
-            val tocDocuments = documentRepository.findTocByBookId(id)
-
-            call.respondSuccess(
-                ChaptersResponse(
-                    bookId = id,
-                    total = tocDocuments.size,
-                    chapters = tocDocuments.map { doc ->
-                        ChapterInfo(
-                            index = doc.index,
-                            title = doc.title ?: "第${doc.index + 1}章",
-                            wordCount = doc.wordCount,
-                            imageCount = doc.imageCount,
-                            level = doc.level
-                        )
-                    }
-                )
-            )
         }
 
         put("/{id}/metadata") {
-            val bookRepository = get<BookRepository>(BookRepository::class.java)
+            call.requireAdminUser() ?: return@put
+            val bookService = get<BookService>(BookService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@put
+
+            val request = call.receive<UpdateMetadataRequest>()
+            if (request.title != null && request.title.isBlank()) {
+                call.respondError(ErrorCode.BOOK_INVALID_PARAMS)
                 return@put
             }
 
-            val request = call.receive<UpdateMetadataRequest>()
-
-            val updated = bookRepository.updateMetadata(
+            val book = bookService.updateMetadata(
                 id = id,
+                title = request.title?.trim(),
                 author = request.author,
                 coverPath = request.coverPath,
                 isbn = request.isbn,
@@ -238,8 +194,7 @@ fun Route.bookRoutes() {
                 description = request.description
             )
 
-            if (updated > 0) {
-                val book = bookRepository.findById(id)
+            if (book != null) {
                 call.respondSuccess(UpdateMetadataResponse(success = true, book = book))
             } else {
                 call.respondError(ErrorCode.BOOK_NOT_FOUND)
@@ -247,22 +202,10 @@ fun Route.bookRoutes() {
         }
 
         post("/{id}/cover") {
-            val bookRepository = get<BookRepository>(BookRepository::class.java)
-            val imageStorage = get<com.bookd.infrastructure.storage.BookImageStorage>(
-                com.bookd.infrastructure.storage.BookImageStorage::class.java
-            )
+            call.requireAdminUser() ?: return@post
+            val bookService = get<BookService>(BookService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
-
-            val book = bookRepository.findById(id)
-            if (book == null) {
-                call.respondError(ErrorCode.BOOK_NOT_FOUND)
-                return@post
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
             var coverPath: String? = null
             var uploadError: String? = null
@@ -273,23 +216,26 @@ fun Route.bookRoutes() {
                     when (part) {
                         is PartData.FileItem -> {
                             if (part.name == "cover") {
-                                try {
-                                    val fileBytes = part.provider().toInputStream().readBytes()
-                                    val ext = part.originalFileName?.substringAfterLast('.') ?: "jpg"
-
-                                    // 使用 BookImageStorage 保存封面
-                                    coverPath = imageStorage.saveCover(id, "cover.$ext", fileBytes, isGenerated = false)
-
-                                    logger.info("Uploaded cover for book $id: $coverPath")
-                                } catch (e: Exception) {
-                                    uploadError = e.message
-                                    logger.error("Error saving cover for book $id", e)
+                                val fileBytes = part.provider().toInputStream().readBytes()
+                                when (val result = bookService.uploadCover(id, part.originalFileName, fileBytes)) {
+                                    CoverUploadResult.BookNotFound -> {
+                                        uploadError = ErrorCode.BOOK_NOT_FOUND.code
+                                    }
+                                    is CoverUploadResult.SaveFailed -> {
+                                        uploadError = result.details
+                                    }
+                                    is CoverUploadResult.Saved -> {
+                                        coverPath = result.coverPath
+                                        logger.info(
+                                            "Uploaded cover for book $id: ${result.coverPath} (${result.width}x${result.height})"
+                                        )
+                                    }
                                 }
                             }
                         }
                         else -> {}
                     }
-                    part.dispose()
+                    part.release()
                 }
             } catch (e: Exception) {
                 uploadError = e.message
@@ -298,10 +244,11 @@ fun Route.bookRoutes() {
 
             val finalCoverPath = coverPath
             if (finalCoverPath != null) {
-                bookRepository.updateMetadata(id, coverPath = finalCoverPath)
                 call.respondSuccess(CoverUploadResponse(success = true, coverPath = finalCoverPath))
             } else {
-                if (uploadError != null) {
+                if (uploadError == ErrorCode.BOOK_NOT_FOUND.code) {
+                    call.respondError(ErrorCode.BOOK_NOT_FOUND)
+                } else if (uploadError != null) {
                     call.respondError(ErrorCode.BOOK_FILE_SAVE_FAILED, uploadError)
                 } else {
                     call.respondError(ErrorCode.BOOK_NO_COVER_FILE)
@@ -310,29 +257,26 @@ fun Route.bookRoutes() {
         }
 
         post("/{id}/generate-cover") {
-            val coverGenerator = get<CoverGeneratorService>(CoverGeneratorService::class.java)
-            val bookRepository = get<BookRepository>(BookRepository::class.java)
+            call.requireAdminUser() ?: return@post
+            val bookService = get<BookService>(BookService::class.java)
 
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respondError(ErrorCode.BOOK_INVALID_ID)
-                return@post
-            }
+            val id = call.requiredIntParameter("id", ErrorCode.BOOK_INVALID_ID) ?: return@post
 
-            val book = bookRepository.findById(id)
-            if (book == null) {
-                call.respondError(ErrorCode.BOOK_NOT_FOUND)
-                return@post
-            }
-
-            val generatedCoverPath = coverGenerator.generateCover(id, book.title, book.author)
-            if (generatedCoverPath != null) {
-                // Update book with generated cover path
-                bookRepository.updateMetadata(id, coverPath = generatedCoverPath)
-                call.respondSuccess(CoverGenerateResponse(success = true, coverPath = generatedCoverPath))
-            } else {
-                call.respondError(ErrorCode.BOOK_COVER_GENERATION_FAILED)
+            when (val result = bookService.generateCover(id)) {
+                CoverGenerateResult.BookNotFound -> call.respondError(ErrorCode.BOOK_NOT_FOUND)
+                CoverGenerateResult.GenerationFailed -> call.respondError(ErrorCode.BOOK_COVER_GENERATION_FAILED)
+                is CoverGenerateResult.Generated -> {
+                    call.respondSuccess(CoverGenerateResponse(success = true, coverPath = result.coverPath))
+                }
             }
         }
     }
 }
+
+private fun BookDocument.toChapterInfo(): ChapterInfo = ChapterInfo(
+    index = index,
+    title = title ?: "第${index + 1}章",
+    wordCount = wordCount,
+    imageCount = imageCount,
+    level = level
+)

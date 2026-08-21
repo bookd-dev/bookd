@@ -1,16 +1,19 @@
 package com.bookd
 
 import com.bookd.config.DatabaseConfig
+import com.bookd.data.repository.BookRepository
 import com.bookd.domain.service.BackgroundParseService
+import com.bookd.domain.service.PersonalizationSettingsService
 import com.bookd.domain.service.TxtParseRuleService
+import com.bookd.infrastructure.database.SchemaMigrationRunner
 import com.bookd.plugins.*
 import io.ktor.server.application.*
-import io.ktor.server.netty.EngineMain
+import io.ktor.server.netty.*
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
 import org.koin.ktor.ext.inject
-import java.io.File
+import org.slf4j.LoggerFactory
+
+private val applicationLogger = LoggerFactory.getLogger("Application")
 
 fun main(args: Array<String>) {
     EngineMain.main(args)
@@ -28,37 +31,31 @@ fun Application.module() {
         ?: "bookd"
     
     DatabaseConfig.init(dbUrl, dbDriver, dbUser, dbPassword)
-    
-    // Create tables and add missing columns
-    transaction {
-        SchemaUtils.createMissingTablesAndColumns(
-            com.bookd.data.entity.Users,
-            com.bookd.data.entity.Books,
-            com.bookd.data.entity.BookSources,
-            com.bookd.data.entity.Tags,
-            com.bookd.data.entity.BookTags,
-            com.bookd.data.entity.ReadingProgress,
-            com.bookd.data.entity.FolderPermissions,
-            com.bookd.data.entity.Sessions,
-            com.bookd.data.entity.InviteTokens,
-            com.bookd.data.entity.Bookmarks,
-            com.bookd.data.entity.ReaderSettings,
-            com.bookd.data.entity.BookDocuments,
-            com.bookd.data.entity.DocumentContents,
-            com.bookd.data.entity.DocumentResources,
-            com.bookd.data.entity.TxtParseRules,
-            com.bookd.data.entity.Bookshelves,
-            com.bookd.data.entity.BookshelfItems
-        )
+
+    val appliedMigrations = SchemaMigrationRunner().migrate()
+    if (appliedMigrations.isNotEmpty()) {
+        applicationLogger.info("Applied schema migrations: ${appliedMigrations.joinToString(", ")}")
+    }
+
+    val backfilledBookStats = BookRepository().backfillMissingStatistics()
+    if (backfilledBookStats > 0) {
+        applicationLogger.info("Backfilled book statistics for $backfilledBookStats books")
     }
     
     // Note: First-time setup will be handled via /setup page
     
     // Configure plugins
     configureDependencyInjection()
+    configureLifecycleCleanup()
     configureSerialization()
     configureMonitoring()
     configureStatusPages()
+
+    val personalizationSettingsService by inject<PersonalizationSettingsService>()
+    runBlocking {
+        personalizationSettingsService.initializeTimeZone()
+    }
+
     configureRouting()
     
     // Initialize TXT parse rules from JSON file if database is empty

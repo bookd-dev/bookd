@@ -16,29 +16,33 @@ class EpubResourceExtractor {
     }
     
     /**
-     * 提取所有图片资源
+     * 逐个提取图片资源
      * @param zipFile EPUB 压缩文件
      * @param baseDir OPF 文件所在目录
-     * @return 资源路径到字节数组的映射
      */
-    fun extractResources(zipFile: ZipFile, baseDir: String): Map<String, ByteArray> {
-        val resources = mutableMapOf<String, ByteArray>()
+    fun forEachResource(
+        zipFile: ZipFile,
+        baseDir: String,
+        consumer: (path: String, bytes: ByteArray) -> Unit
+    ) {
+        var resourceCount = 0
+        var totalBytes = 0L
         
         zipFile.entries().asSequence()
             .filter { !it.isDirectory }
             .filter { entry -> isImageFile(entry.name) }
             .forEach { entry ->
-                try {
-                    val bytes = zipFile.getInputStream(entry).readBytes()
-                    val relativePath = EpubPathUtils.getRelativePath(entry.name, baseDir)
-                    resources[relativePath] = bytes
-                } catch (e: Exception) {
-                    logger.warn("Failed to extract resource: ${entry.name}", e)
+                val bytes = EpubArchiveSafety.readBytes(zipFile, entry, EpubArchiveSafety.MAX_IMAGE_BYTES)
+                totalBytes += bytes.size
+                if (totalBytes > EpubArchiveSafety.MAX_TOTAL_IMAGE_BYTES) {
+                    throw EpubArchiveException("EPUB image resources exceed total limit")
                 }
+                val relativePath = EpubPathUtils.getRelativePath(entry.name, baseDir)
+                consumer(relativePath, bytes)
+                resourceCount++
             }
         
-        logger.info("Extracted ${resources.size} resources from EPUB")
-        return resources
+        logger.info("Extracted $resourceCount resources from EPUB")
     }
     
     /**

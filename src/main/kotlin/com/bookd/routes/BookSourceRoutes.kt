@@ -14,12 +14,14 @@ import org.koin.java.KoinJavaComponent.get
 fun Route.bookSourceRoutes() {
     route("/api/sources") {
         get {
+            call.requireAdminUser() ?: return@get
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val sources = bookSourceService.getAllSources()
             call.respondSuccess(sources)
         }
 
         post {
+            call.requireAdminUser() ?: return@post
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val request = call.receive<CreateBookSourceRequest>()
             val source = bookSourceService.createSource(request.name, request.path)
@@ -27,6 +29,7 @@ fun Route.bookSourceRoutes() {
         }
 
         delete("/{id}") {
+            call.requireAdminUser() ?: return@delete
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
@@ -43,6 +46,7 @@ fun Route.bookSourceRoutes() {
         }
 
         post("/{id}/toggle") {
+            call.requireAdminUser() ?: return@post
             val bookSourceService = get<BookSourceService>(BookSourceService::class.java)
             val id = call.parameters["id"]?.toIntOrNull()
             if (id == null) {
