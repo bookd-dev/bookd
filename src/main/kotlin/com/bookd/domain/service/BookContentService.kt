@@ -12,6 +12,8 @@ import com.bookd.domain.service.parser.*
 import com.bookd.infrastructure.cache.BookCacheService
 import com.bookd.infrastructure.storage.BookImageStorage
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -22,12 +24,12 @@ class BookContentService(
     private val txtParser: TxtParser,
     private val imageStorage: BookImageStorage,
     private val cacheService: BookCacheService?,
-    private val taskCoordinator: BookTaskCoordinator = BookTaskCoordinator()
+    private val taskCoordinator: BookTaskCoordinator = BookTaskCoordinator(),
+    private val parserFactory: ParserFactory = ParserFactory(txtParser)
 ) {
     private val logger = LoggerFactory.getLogger(BookContentService::class.java)
     
-    // 解析器工厂
-    private val parserFactory = ParserFactory(txtParser)
+    private val complexFormatSemaphore = Semaphore(2)
     
     /**
      * 异步解析书籍内容
@@ -61,26 +63,29 @@ class BookContentService(
      * 按需解析：检查缓存和数据库，如果需要则同步解析
      * 用于用户打开书籍时
      */
-    suspend fun parseOnDemand(bookId: Int, filePath: String): Boolean {
+    suspend fun parseOnDemand(bookId: Int, filePath: String): Boolean =
+        parseOnDemandWithReason(bookId, filePath) is OnDemandParseResult.Success
+
+    private suspend fun parseOnDemandWithReason(bookId: Int, filePath: String): OnDemandParseResult {
         // 1. 先检查 Redis 缓存
         val cachedParsed = cacheService?.isBookParsed(bookId)
         if (cachedParsed == true) {
             logger.debug("Book $bookId already parsed (from cache)")
-            return true
+            return OnDemandParseResult.Success
         }
         
         // 2. 检查数据库状态
         val book = bookRepository.findByIdAsync(bookId)
         if (book == null) {
             logger.warn("Book not found: $bookId")
-            return false
+            return OnDemandParseResult.Failed("book_not_found")
         }
         
         if (book.chaptersParsed) {
             // 更新缓存
             cacheService?.setBookParsed(bookId, true)
             logger.debug("Book $bookId already parsed (from database)")
-            return true
+            return OnDemandParseResult.Success
         }
         
         // 3. 尝试获取分布式锁
@@ -90,7 +95,11 @@ class BookContentService(
             // 等待一段时间后重新检查
             delay(2000)
             val recheckBook = bookRepository.findByIdAsync(bookId)
-            return recheckBook?.chaptersParsed ?: false
+            return if (recheckBook?.chaptersParsed == true) {
+                OnDemandParseResult.Success
+            } else {
+                OnDemandParseResult.Failed("parse_in_progress")
+            }
         }
         
         return try {
@@ -104,17 +113,17 @@ class BookContentService(
                 is ContentParseResult.Success -> {
                     cacheService?.setBookParsed(bookId, true)
                     logger.info("Book $bookId parsed successfully, documents: ${result.documentCount}")
-                    true
+                    OnDemandParseResult.Success
                 }
                 is ContentParseResult.Failed -> {
                     logger.warn("Book $bookId parse failed: ${result.reason}")
-                    false
+                    OnDemandParseResult.Failed(result.reason)
                 }
             }
         } catch (e: Exception) {
             logger.error("Failed to parse book on-demand: $bookId", e)
             bookRepository.updateParseStatusAsync(bookId, "failed", 0)
-            false
+            OnDemandParseResult.Failed("unexpected_error")
         } finally {
             // 7. 释放锁
             cacheService?.releaseParseLock(bookId)
@@ -163,6 +172,12 @@ class BookContentService(
         }
         
         // 使用工厂创建对应格式的解析器
+        val declaredFormat = EbookFormatRegistry.fromExtension(file.extension)
+        if (declaredFormat != null && !EbookFormatRegistry.matchesSignature(file, declaredFormat)) {
+            logger.warn("Rejected ebook with invalid signature: ${file.name}")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed(EbookParseFailureReason.INVALID_SIGNATURE)
+        }
         val parser = parserFactory.createParser(file)
         if (parser == null) {
             logger.warn("Unsupported format: ${file.extension}")
@@ -172,7 +187,15 @@ class BookContentService(
         
         return withContext(Dispatchers.IO) {
             try {
-                parseWithParser(bookId, file, parser)
+                if (declaredFormat == EbookFormat.PDF || declaredFormat == EbookFormat.MOBI) {
+                    complexFormatSemaphore.withPermit { parseWithParser(bookId, file, parser) }
+                } else {
+                    parseWithParser(bookId, file, parser)
+                }
+            } catch (e: EbookParseException) {
+                logger.warn("Book content parsing failed for ID $bookId: ${e.reason}")
+                bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+                ContentParseResult.Failed(e.reason)
             } catch (e: Exception) {
                 logger.error("Error parsing book content: ${file.name}", e)
                 bookRepository.updateParseStatusAsync(bookId, "failed", 0)
@@ -210,6 +233,10 @@ class BookContentService(
         // 先完整解析所有章节，任何一个 spine 文档失败都不得发布半成品。
         val contentsByIndex = try {
             parser.parseChapterContents(file, structure.chapters)
+        } catch (e: EbookParseException) {
+            logger.warn("Chapter parsing failed for book ID $bookId: ${e.reason}")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed(e.reason)
         } catch (e: Exception) {
             logger.error("Failed to parse one or more chapters for book ID: $bookId", e)
             bookRepository.updateParseStatusAsync(bookId, "failed", 0)
@@ -249,6 +276,10 @@ class BookContentService(
 
         val resourceDrafts = try {
             prepareResources(bookId, file, parser)
+        } catch (e: EbookParseException) {
+            logger.warn("Resource parsing failed for book ID $bookId: ${e.reason}")
+            bookRepository.updateParseStatusAsync(bookId, "failed", 0)
+            return ContentParseResult.Failed(e.reason)
         } catch (e: Exception) {
             logger.error("Failed to prepare resources for book ID: $bookId", e)
             bookRepository.updateParseStatusAsync(bookId, "failed", 0)
@@ -476,13 +507,15 @@ class BookContentService(
     suspend fun getChapterList(bookId: Int): ChapterListResult {
         val book = bookRepository.findByIdAsync(bookId) ?: return ChapterListResult.NotFound
         if (!book.chaptersParsed) {
-            val parsed = try {
-                parseOnDemand(bookId, book.filePath)
+            val parseResult = try {
+                parseOnDemandWithReason(bookId, book.filePath)
             } catch (e: Exception) {
                 logger.error("Failed to parse chapters for book ID: $bookId", e)
-                false
+                OnDemandParseResult.Failed("unexpected_error")
             }
-            if (!parsed) return ChapterListResult.ParseFailed
+            if (parseResult is OnDemandParseResult.Failed) {
+                return ChapterListResult.ParseFailed(parseResult.reason)
+            }
         }
 
         return ChapterListResult.Success(documentRepository.findTocByBookIdAsync(bookId))
@@ -646,7 +679,12 @@ class BookContentService(
 sealed class ChapterListResult {
     data class Success(val documents: List<BookDocument>) : ChapterListResult()
     data object NotFound : ChapterListResult()
-    data object ParseFailed : ChapterListResult()
+    data class ParseFailed(val reason: String) : ChapterListResult()
+}
+
+private sealed class OnDemandParseResult {
+    data object Success : OnDemandParseResult()
+    data class Failed(val reason: String) : OnDemandParseResult()
 }
 
 private sealed class ContentParseResult {

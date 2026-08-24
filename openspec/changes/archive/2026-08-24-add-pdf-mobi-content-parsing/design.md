@@ -63,6 +63,8 @@ Extend the shared parser limits with conservative initial boundaries, adjusted o
 
 The service records stable internal reasons for invalid signature, unsupported image-only PDF, protected PDF, protected MOBI, limit violation, normalization failure, and missing normalizer. Existing public error envelopes remain unchanged. Unlimited parsing and relying solely on the 4 GiB container limit were rejected because malformed files could starve unrelated requests.
 
+On-demand chapter loading preserves the stable parser failure reason through the service result. A protected PDF maps to a dedicated localized `BOOK_012` error with HTTP 422, because the request is valid but the source content cannot be processed under its effective permissions; unexpected parser or persistence faults continue to use the existing HTTP 500 error. The response envelope shape remains unchanged.
+
 ### Keep private books conditional and add synthetic focused fixtures
 
 Unit tests generate small PDFs for outline, no-outline, blank-page, protection, and bounds behavior. MOBI unit tests cover header/EXTH parsing and process-adapter behavior with deterministic small fixtures or fake normalizer output; any distributable MOBI fixture must have explicit compatible licensing. The supplied private corpus is referenced only through the existing conditional benchmark setting extended to PDF/MOBI, and is never copied into the repository.

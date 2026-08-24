@@ -3,6 +3,7 @@ package com.bookd.domain.service
 import com.bookd.data.repository.BookRepository
 import com.bookd.data.repository.BookSourceRepository
 import com.bookd.domain.model.Book
+import com.bookd.domain.service.parser.EbookFormatRegistry
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -15,8 +16,6 @@ class BookScanService(
     private val contentService: BookContentService
 ) {
     private val logger = LoggerFactory.getLogger(BookScanService::class.java)
-    private val supportedFormats = setOf("txt", "epub")
-    
     // Track scanning status
     private val scanningInProgress = AtomicBoolean(false)
     private val sourceScanStatus = ConcurrentHashMap<Int, ScanStatus>()
@@ -141,10 +140,7 @@ class BookScanService(
         try {
             val files = directory.walkTopDown()
                 .filter { it.isFile }
-                .filter { file ->
-                    val extension = file.extension.lowercase()
-                    supportedFormats.contains(extension)
-                }
+                .filter { EbookFormatRegistry.detect(it) != null }
                 .toList()
             val existingBooksByPath = bookRepository.findByFilePaths(files.map { it.absolutePath })
 

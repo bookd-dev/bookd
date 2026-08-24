@@ -11,7 +11,17 @@ import com.bookd.domain.model.ChapterContent
 import com.bookd.domain.model.ContentElement
 import com.bookd.domain.model.TextSpan
 import com.bookd.domain.service.parser.TxtParser
+import com.bookd.domain.service.parser.ParserFactory
+import com.bookd.domain.service.parser.BookParser
+import com.bookd.domain.service.parser.EbookParseException
+import com.bookd.domain.service.parser.EbookParseFailureReason
+import com.bookd.domain.service.parser.mobi.MobiTestFixtures
 import com.bookd.infrastructure.cache.BookCacheService
+import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.PDPage
+import org.apache.pdfbox.pdmodel.PDPageContentStream
+import org.apache.pdfbox.pdmodel.font.PDType1Font
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts
 import com.bookd.infrastructure.storage.BookImageStorage
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -25,9 +35,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.nio.file.Path
 
 class BookContentServiceTest {
+
+    @TempDir
+    lateinit var tempDir: Path
 
     private lateinit var bookRepository: BookRepository
     private lateinit var documentRepository: BookDocumentRepository
@@ -284,6 +299,202 @@ class BookContentServiceTest {
         coVerify(exactly = 1) { bookRepository.updateParseStatusAsync(12, "failed", 0) }
         coVerify(exactly = 0) { documentRepository.replaceParsedBook(any(), any(), any()) }
         verify(exactly = 0) { cacheService.setBookParsed(12, true) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given supported extension with spoofed signature when parsing then no content or parsed cache is published`() {
+        val file = tempDir.resolve("spoofed.pdf").toFile().apply { writeText("not a pdf") }
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val service = BookContentService(
+            bookRepository = bookRepository,
+            documentRepository = documentRepository,
+            readingProgressRepository = readingProgressRepository,
+            txtParser = txtParser,
+            imageStorage = imageStorage,
+            cacheService = cacheService
+        )
+        every { cacheService.isBookParsed(13) } returns null
+        every { cacheService.tryAcquireParseLock(13) } returns true
+        coEvery { bookRepository.findByIdAsync(13) } returns Book(
+            id = 13,
+            title = "Spoofed",
+            author = null,
+            format = "pdf",
+            filePath = file.path,
+            fileSize = file.length(),
+            chaptersParsed = false
+        )
+        coEvery { bookRepository.updateParseStatusAsync(13, any(), any()) } returns 1
+
+        val result = runBlocking { service.parseOnDemand(13, file.path) }
+
+        assertEquals(false, result)
+        coVerify(exactly = 0) { documentRepository.replaceParsedBook(any(), any(), any()) }
+        verify(exactly = 0) { cacheService.setBookParsed(13, true) }
+        verify(exactly = 1) { cacheService.releaseParseLock(13) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given text PDF when parsing succeeds then complete content is published before parsed cache`() {
+        val file = tempDir.resolve("text.pdf").toFile()
+        PDDocument().use { document ->
+            val page = PDPage()
+            document.addPage(page)
+            PDPageContentStream(document, page).use { stream ->
+                stream.beginText()
+                stream.setFont(PDType1Font(Standard14Fonts.FontName.HELVETICA), 12f)
+                stream.newLineAtOffset(72f, 720f)
+                stream.showText("PDF service content")
+                stream.endText()
+            }
+            document.save(file)
+        }
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val service = BookContentService(
+            bookRepository, documentRepository, readingProgressRepository, txtParser, imageStorage, cacheService
+        )
+        every { cacheService.isBookParsed(14) } returns null
+        every { cacheService.tryAcquireParseLock(14) } returns true
+        coEvery { bookRepository.findByIdAsync(14) } returns Book(
+            id = 14, title = "PDF", author = null, format = "pdf", filePath = file.path,
+            fileSize = file.length(), chaptersParsed = false
+        )
+        coEvery { bookRepository.updateParseStatusAsync(14, any(), any()) } returns 1
+        coEvery { documentRepository.replaceParsedBook(14, any(), emptyList()) } returns 1
+
+        val result = runBlocking { service.parseOnDemand(14, file.path) }
+
+        assertTrue(result)
+        coVerify(exactly = 1) {
+            documentRepository.replaceParsedBook(
+                14,
+                match { drafts -> drafts.single().elements.any { it is ContentElement.Paragraph } },
+                emptyList()
+            )
+        }
+        verify(exactly = 1) { cacheService.setBookParsed(14, true) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given normalized MOBI when parsing succeeds then EPUB content and resources are atomically published`() {
+        val mobi = MobiTestFixtures.createMobi(tempDir.resolve("service.mobi")).toFile()
+        val epub = MobiTestFixtures.createEpub(tempDir.resolve("service.epub")).toFile()
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val parserFactory = ParserFactory(txtParser, mobiNormalizer = { epub })
+        val service = BookContentService(
+            bookRepository, documentRepository, readingProgressRepository, txtParser, imageStorage, cacheService,
+            parserFactory = parserFactory
+        )
+        every { cacheService.isBookParsed(15) } returns null
+        every { cacheService.tryAcquireParseLock(15) } returns true
+        coEvery { bookRepository.findByIdAsync(15) } returns Book(
+            id = 15, title = "MOBI", author = null, format = "mobi", filePath = mobi.path,
+            fileSize = mobi.length(), chaptersParsed = false
+        )
+        coEvery { bookRepository.updateParseStatusAsync(15, any(), any()) } returns 1
+        every { imageStorage.saveImage(15, any(), any()) } returns "15/image.png"
+        every { imageStorage.detectMediaType(any()) } returns "image/png"
+        every { imageStorage.extractImageDimensions(any()) } returns null
+        coEvery { documentRepository.replaceParsedBook(15, any(), any()) } returns 1
+
+        val result = runBlocking { service.parseOnDemand(15, mobi.path) }
+
+        assertTrue(result)
+        coVerify(exactly = 1) {
+            documentRepository.replaceParsedBook(
+                15,
+                match { drafts -> drafts.single().elements.any { it is ContentElement.Heading } },
+                match { resources -> resources.single().path == "image.png" }
+            )
+        }
+        verify(exactly = 1) { cacheService.setBookParsed(15, true) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given image only PDF when parsing fails then no partial content or success cache is published`() {
+        val file = tempDir.resolve("image-only.pdf").toFile()
+        PDDocument().use { document ->
+            document.addPage(PDPage())
+            document.save(file)
+        }
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val service = BookContentService(
+            bookRepository, documentRepository, readingProgressRepository, txtParser, imageStorage, cacheService
+        )
+        every { cacheService.isBookParsed(16) } returns null
+        every { cacheService.tryAcquireParseLock(16) } returns true
+        coEvery { bookRepository.findByIdAsync(16) } returns Book(
+            id = 16, title = "Image only", author = null, format = "pdf", filePath = file.path,
+            fileSize = file.length(), chaptersParsed = false
+        )
+        coEvery { bookRepository.updateParseStatusAsync(16, any(), any()) } returns 1
+
+        val result = runBlocking { service.parseOnDemand(16, file.path) }
+
+        assertEquals(false, result)
+        coVerify(exactly = 0) { documentRepository.replaceParsedBook(any(), any(), any()) }
+        verify(exactly = 0) { cacheService.setBookParsed(16, true) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given protected PDF when chapter list is requested then protected reason is preserved`() {
+        val file = tempDir.resolve("protected.pdf").toFile().apply { writeText("%PDF-1.7") }
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val pdfParser = mockk<BookParser>()
+        val service = BookContentService(
+            bookRepository, documentRepository, readingProgressRepository, txtParser, imageStorage, cacheService,
+            parserFactory = ParserFactory(txtParser, pdfParser = pdfParser)
+        )
+        val book = Book(
+            id = 18, title = "Protected PDF", author = null, format = "pdf", filePath = file.path,
+            fileSize = file.length(), chaptersParsed = false
+        )
+        every { cacheService.isBookParsed(18) } returns null
+        every { cacheService.tryAcquireParseLock(18) } returns true
+        coEvery { bookRepository.findByIdAsync(18) } returns book
+        coEvery { bookRepository.updateParseStatusAsync(18, any(), any()) } returns 1
+        coEvery { pdfParser.parseStructure(file) } throws EbookParseException(
+            EbookParseFailureReason.PDF_PROTECTED,
+            "PDF content extraction is not permitted"
+        )
+
+        val result = runBlocking { service.getChapterList(18) }
+
+        assertEquals(ChapterListResult.ParseFailed(EbookParseFailureReason.PDF_PROTECTED), result)
+        coVerify(exactly = 0) { documentRepository.replaceParsedBook(any(), any(), any()) }
+        verify(exactly = 1) { cacheService.releaseParseLock(18) }
+        service.shutdown()
+    }
+
+    @Test
+    fun `given MOBI normalization failure when parsing then no partial content or success cache is published`() {
+        val mobi = MobiTestFixtures.createMobi(tempDir.resolve("failed-service.mobi")).toFile()
+        val cacheService = mockk<BookCacheService>(relaxed = true)
+        val parserFactory = ParserFactory(txtParser, mobiNormalizer = {
+            throw EbookParseException(EbookParseFailureReason.MOBI_NORMALIZATION_FAILED, "failed")
+        })
+        val service = BookContentService(
+            bookRepository, documentRepository, readingProgressRepository, txtParser, imageStorage, cacheService,
+            parserFactory = parserFactory
+        )
+        every { cacheService.isBookParsed(17) } returns null
+        every { cacheService.tryAcquireParseLock(17) } returns true
+        coEvery { bookRepository.findByIdAsync(17) } returns Book(
+            id = 17, title = "Failed MOBI", author = null, format = "mobi", filePath = mobi.path,
+            fileSize = mobi.length(), chaptersParsed = false
+        )
+        coEvery { bookRepository.updateParseStatusAsync(17, any(), any()) } returns 1
+
+        val result = runBlocking { service.parseOnDemand(17, mobi.path) }
+
+        assertEquals(false, result)
+        coVerify(exactly = 0) { documentRepository.replaceParsedBook(any(), any(), any()) }
+        verify(exactly = 0) { cacheService.setBookParsed(17, true) }
         service.shutdown()
     }
 

@@ -46,6 +46,11 @@ The backend SHALL extract readable PDF text into deterministic chapters and text
 - **THEN** parsing SHALL fail explicitly as protected PDF content
 - **AND** the backend SHALL NOT attempt to bypass the protection.
 
+#### Scenario: A client requests chapters from a protected PDF
+- **WHEN** on-demand parsing identifies a PDF as password-required or extraction-prohibited
+- **THEN** the chapter-list endpoint SHALL return the existing error envelope with a dedicated protected-PDF error code and HTTP 422
+- **AND** it SHALL NOT report the expected content restriction as a generic HTTP 500 failure.
+
 #### Scenario: PDF content is reparsed
 - **WHEN** the same unchanged PDF is parsed again
 - **THEN** chapter identities, page-derived anchors, ordering, and synthetic fallback ranges SHALL remain stable.
