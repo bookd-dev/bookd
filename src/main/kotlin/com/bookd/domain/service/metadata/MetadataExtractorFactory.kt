@@ -1,5 +1,8 @@
 package com.bookd.domain.service.metadata
 
+import com.bookd.domain.service.parser.EbookFormat
+import com.bookd.domain.service.parser.EbookFormatRegistry
+import com.bookd.domain.service.parser.mobi.ProcessMobiNormalizer
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -14,6 +17,8 @@ class MetadataExtractorFactory {
     private val tikaExtractor = TikaMetadataExtractor()
     private val epubExtractor = EpubMetadataExtractor()
     private val txtExtractor = TxtMetadataExtractor()
+    private val pdfExtractor = PdfMetadataExtractor()
+    private val mobiExtractor = MobiMetadataExtractor(ProcessMobiNormalizer())
     
     /**
      * 根据文件格式创建对应的元数据提取器
@@ -22,15 +27,26 @@ class MetadataExtractorFactory {
      * 2. TXT: 返回null,使用文件名(等待刮削器)
      */
     fun createExtractor(file: File): MetadataExtractor {
-        return when (val format = file.extension.lowercase()) {
-            "epub" -> CompositeMetadataExtractor(listOf(epubExtractor, tikaExtractor))
-            "txt" -> txtExtractor
+        return when (val format = EbookFormatRegistry.detect(file)) {
+            EbookFormat.EPUB -> CompositeMetadataExtractor(listOf(epubExtractor, tikaExtractor))
+            EbookFormat.TXT -> txtExtractor
+            EbookFormat.PDF -> pdfExtractor
+            EbookFormat.MOBI -> mobiExtractor
             else -> {
-                logger.warn("Unsupported format: $format, using Tika as fallback")
-                tikaExtractor
+                logger.warn("Unsupported or invalid ebook format: ${file.extension.lowercase()}")
+                if (EbookFormatRegistry.fromExtension(file.extension) != null) {
+                    NullMetadataExtractor
+                } else {
+                    tikaExtractor
+                }
             }
         }
     }
+}
+
+private object NullMetadataExtractor : MetadataExtractor {
+    override fun extractMetadata(file: File): BookMetadata? = null
+    override fun extractCover(file: File, bookId: Int): String? = null
 }
 
 /**

@@ -8,6 +8,7 @@ import com.bookd.domain.service.BookContentService
 import com.bookd.domain.service.ChapterListResult
 import com.bookd.domain.service.CoverGenerateResult
 import com.bookd.domain.service.CoverUploadResult
+import com.bookd.domain.service.parser.EbookParseFailureReason
 import com.bookd.extension.*
 import io.ktor.http.*
 import io.ktor.http.content.*
@@ -158,7 +159,7 @@ fun Route.bookRoutes() {
 
             when (val result = contentService.getChapterList(id)) {
                 ChapterListResult.NotFound -> call.respondError(ErrorCode.BOOK_NOT_FOUND)
-                ChapterListResult.ParseFailed -> call.respondError(ErrorCode.BOOK_PARSE_CHAPTERS_FAILED)
+                is ChapterListResult.ParseFailed -> call.respondError(result.toErrorCode())
                 is ChapterListResult.Success -> {
                     val tocDocuments = result.documents
                     call.respondSuccess(
@@ -271,6 +272,11 @@ fun Route.bookRoutes() {
             }
         }
     }
+}
+
+private fun ChapterListResult.ParseFailed.toErrorCode(): ErrorCode = when (reason) {
+    EbookParseFailureReason.PDF_PROTECTED -> ErrorCode.BOOK_PDF_PROTECTED
+    else -> ErrorCode.BOOK_PARSE_CHAPTERS_FAILED
 }
 
 private fun BookDocument.toChapterInfo(): ChapterInfo = ChapterInfo(

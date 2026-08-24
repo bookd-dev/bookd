@@ -121,6 +121,10 @@ enum class ErrorCode(
         "BOOK_011", HttpStatusCode.NotFound,
         "章节未找到", "Chapter not found"
     ),
+    BOOK_PDF_PROTECTED(
+        "BOOK_012", HttpStatusCode.UnprocessableEntity,
+        "PDF 受保护，不允许提取内容", "PDF content extraction is not permitted"
+    ),
 
     // ===== Tag Errors (TAG_xxx) =====
     TAG_NAME_EMPTY(

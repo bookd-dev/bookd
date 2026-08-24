@@ -63,6 +63,7 @@ dependencies {
     // E-book parsing
     implementation("org.apache.tika:tika-core:3.3.0")
     implementation("org.apache.tika:tika-parsers-standard-package:3.3.0")
+    implementation("org.apache.pdfbox:pdfbox:3.0.7")
     implementation("org.jsoup:jsoup:1.22.2")
     
     // Redis

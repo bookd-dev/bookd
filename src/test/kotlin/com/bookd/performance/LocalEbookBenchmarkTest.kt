@@ -39,6 +39,7 @@ import com.bookd.domain.service.TagService
 import com.bookd.domain.service.TxtParseRuleService
 import com.bookd.domain.service.UserService
 import com.bookd.domain.service.parser.TxtParser
+import com.bookd.domain.service.parser.EbookFormatRegistry
 import com.bookd.infrastructure.storage.BookImageStorage
 import com.bookd.infrastructure.time.TimeProvider
 import kotlinx.coroutines.runBlocking
@@ -72,10 +73,10 @@ class LocalEbookBenchmarkTest {
 
         val parseLimit = benchmarkSetting("bookd.benchmark.parseLimit", "BOOKD_BENCHMARK_PARSE_LIMIT")?.toIntOrNull() ?: 60
         val files = ebookDir.walkTopDown()
-            .filter { it.isFile && it.extension.lowercase() in setOf("epub", "txt") }
+            .filter { EbookFormatRegistry.detect(it) != null }
             .sortedBy { it.absolutePath }
             .toList()
-        require(files.isNotEmpty()) { "No EPUB/TXT files found under ${ebookDir.absolutePath}" }
+        require(files.isNotEmpty()) { "No supported ebook files found in the configured benchmark directory" }
 
         Database.connect(
             url = "jdbc:h2:mem:local_ebook_benchmark_${UUID.randomUUID()};MODE=PostgreSQL;DB_CLOSE_DELAY=-1;",
@@ -144,19 +145,39 @@ class LocalEbookBenchmarkTest {
                 }
             }
             val allBooks = bookRepository.findAll(limit = files.size, offset = 0)
-            val parseCandidates = allBooks.take(parseLimit.coerceAtMost(allBooks.size))
+            val booksByFormat = allBooks.groupBy { it.format }
+            val requiredCorpusSamples = listOf("pdf", "mobi", "epub", "txt").flatMap { format ->
+                booksByFormat[format].orEmpty().take(if (format == "pdf") 2 else 1)
+            }
+            val parseCandidates = (requiredCorpusSamples + allBooks)
+                .distinctBy { it.id }
+                .take(parseLimit.coerceAtMost(allBooks.size))
             var parsedCount = 0
-            val heapMonitor = PeakHeapMonitor()
-            val parseTime = try {
-                measureTime {
-                    parseCandidates.forEach { book ->
-                        if (contentService.parseOnDemand(book.id, book.filePath)) {
-                            parsedCount++
+            var parsePeakBytes = 0L
+            val formatEvidence = linkedMapOf<String, FormatParseEvidence>()
+            val parseTime = measureTime {
+                parseCandidates.forEach { book ->
+                    val heapMonitor = PeakHeapMonitor()
+                    var success = false
+                    val elapsed = try {
+                        measureTime {
+                            success = contentService.parseOnDemand(book.id, book.filePath)
                         }
+                    } finally {
+                        heapMonitor.close()
                     }
+                    parsePeakBytes = maxOf(parsePeakBytes, heapMonitor.peakBytes)
+                    if (success) parsedCount++
+                    val documents = documentRepository.findByBookId(book.id)
+                    val contentDocuments = documents.count { documentRepository.getDocumentContent(it.id) != null }
+                    formatEvidence.getOrPut(book.format, ::FormatParseEvidence).record(
+                        success = success,
+                        documents = documents.size,
+                        contentDocuments = contentDocuments,
+                        elapsedMillis = elapsed.inWholeMilliseconds,
+                        peakBytes = heapMonitor.peakBytes
+                    )
                 }
-            } finally {
-                heapMonitor.close()
             }
             val totalDocuments = transaction { BookDocuments.selectAll().count() }
             val totalDocumentContents = transaction { DocumentContents.selectAll().count() }
@@ -290,7 +311,7 @@ class LocalEbookBenchmarkTest {
             println(
                 """
                 |LOCAL_EBOOK_BENCHMARK
-                |path=${ebookDir.absolutePath}
+                |corpus=${ebookDir.name}
                 |files=${files.size}
                 |books=${allBooks.size}
                 |bookshelves=${shelves.size}
@@ -301,7 +322,8 @@ class LocalEbookBenchmarkTest {
                 |backfilled=$backfilled
                 |import_ms=${importTime.inWholeMilliseconds}
                 |parse_ms=${parseTime.inWholeMilliseconds}
-                |parse_peak_heap_mib=${heapMonitor.peakBytes / 1024.0 / 1024.0}
+                |parse_peak_heap_mib=${parsePeakBytes / 1024.0 / 1024.0}
+                |${formatEvidence.entries.joinToString(separator = "\n") { (format, evidence) -> evidence.format(format) }}
                 |${scenarios.joinToString(separator = "\n") { it.format() }}
                 """.trimMargin()
             )
@@ -396,6 +418,30 @@ class LocalEbookBenchmarkTest {
             val scale = Math.pow(10.0, decimals.toDouble())
             return (this * scale).roundToLong().toDouble().div(scale).toString()
         }
+    }
+
+    private class FormatParseEvidence {
+        private var attempted = 0
+        private var succeeded = 0
+        private var failed = 0
+        private var documents = 0
+        private var contentDocuments = 0
+        private var elapsedMillis = 0L
+        private var peakBytes = 0L
+
+        fun record(success: Boolean, documents: Int, contentDocuments: Int, elapsedMillis: Long, peakBytes: Long) {
+            attempted++
+            if (success) succeeded++ else failed++
+            this.documents += documents
+            this.contentDocuments += contentDocuments
+            this.elapsedMillis += elapsedMillis
+            this.peakBytes = maxOf(this.peakBytes, peakBytes)
+        }
+
+        fun format(format: String): String =
+            "format=$format attempted=$attempted succeeded=$succeeded expected_or_actual_failures=$failed " +
+                "documents=$documents content_documents=$contentDocuments parity=${documents == contentDocuments} " +
+                "elapsed_ms=$elapsedMillis peak_heap_mib=${peakBytes / 1024.0 / 1024.0}"
     }
 
     private class PeakHeapMonitor : AutoCloseable {
